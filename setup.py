@@ -1,8 +1,5 @@
-rom setuptools import setup, find_packages
+from setuptools import setup
 
-setup(
-    name="mlelec",
-    version="0.0.0",
-    packages=find_packages(include=["mlelec", "mlelec.*"]),
-)
 
+if __name__ == "__main__":
+    setup()

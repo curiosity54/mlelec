@@ -1,12 +1,12 @@
-# Dataset class  - to load and pass around structures, targets and
-# required auxillary data wherever necessary
+from typing import Dict, List
 
-from typing import List, Dict
-import torch
 import ase
+import torch
 from metatensor import TensorMap
 
 
+# Dataset class  - to load and pass around structures, targets and
+# required auxillary data wherever necessary
 class Dataset:
     def __init__(
         self,

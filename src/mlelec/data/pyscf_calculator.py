@@ -1,5 +1,5 @@
 # write a functionality to take input structures, calculate desired target
-import pyscf
+# import pyscf
 
 
 class calculator:
