@@ -1,0 +1,43 @@
+[project]
+name = "mlelec"
+version = "0.0.0"
+authors = [
+    # TODO
+]
+readme = "README.md"
+# license = TODO
+description = "TODO"
+
+requires-python = ">=3.7"
+dependencies = [
+    # TODO
+]
+
+keywords = [] # TODO
+classifiers = [
+    # TODO
+]
+
+[project.urls]
+# homepage = TODO
+# documentation = TODO
+# repository = TODO
+# changelog = TODO
+
+### ======================================================================== ###
+
+[build-system]
+requires = [
+    "setuptools",
+]
+build-backend = "setuptools.build_meta"
+
+### ======================================================================== ###
+
+[tool.isort]
+profile = "black"
+line_length = 88
+indent = 4
+include_trailing_comma = true
+lines_after_imports = 2
+known_first_party = "mlelec"
