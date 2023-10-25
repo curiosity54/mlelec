@@ -61,7 +61,7 @@ class calculator:
         mol_name: str = "water",
         frame_slice=":",
         dft: bool = False,
-        target: str = "fock",
+        target: List[str] = ["fock"],
     ):  # self.kwargs:Dict[str, Any]
         self.path = path
         self.structures = structures
@@ -74,8 +74,8 @@ class calculator:
             self.pbc = True
         self.nframes = len(self.structures)
         print("Number of frames: ", self.nframes)
-        self.target = [target]
-        if target == "fock":
+        self.target = target
+        if "fock" in self.target:
             self.target.append("overlap")
         self.results = {t: [] for t in self.target}
         # self.results = {str(target): []}
@@ -141,7 +141,7 @@ class calculator:
         self.mol.symmetry = symmetry
 
         for frame in self.structures:
-            tar = self.single_calc(
+            self.single_calc(
                 frame,
             )
 
