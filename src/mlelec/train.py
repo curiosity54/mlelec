@@ -8,29 +8,29 @@ from mlelec.train_setup import Trainer
 from mlelec.models import get_model
 from mlelec.datasets.dataset_utils import get_dataset
 
-from mlelec.data.dataset import precomputer_molecules
+from mlelec.data.dataset import precomputed_molecules
 
-all_molecules = [mol.name.lower() for mol in precomputer_molecules]
+all_ds = [mol.name.lower() for mol in precomputed_molecules]
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
-    "--mol",
+    "--dataset",
     type=str,
     default="water",
-    help="u, choose from (case insensitive)",
+    help="name of molecule/dataset to train ",
 )
 parser.add_argument("--basis", type=str, default="sto-3g", help="basis set")
 parser.add_argument(
     "--data_folder",
     type=str,
     default="./data",
-    help="directory root to save simulation data",
+    help="path to data",
 )
 parser.add_argument(
-    "--results_folder",
+    "--save_path",
     type=str,
-    default="./results",
-    help="directory root to save model checkpoints and samples",
+    default="./logdir",
+    help=" path to save model checkpoints and predictions",
 )
 
 parser.add_argument(
@@ -59,32 +59,20 @@ parser.add_argument(
 
 
 parser.add_argument(
-    "--scale_data",
-    type=eval,
-    default=True,
-    help="set True to scale data points by dividing by the dataset's std. This should be disabled when training with energy priors, because otherwise the bond distances are perturbed.",
-)
-parser.add_argument(
-    "--pick_checkpoint",
-    type=str,
-    default="best",
-    help="last to evaluate on the last saved model. Best to evaluate on the best crossvalidated model (which can be noisy sometimes)",
-)
-parser.add_argument(
-    "--start_from_last_saved",
-    type=eval,
+    "--from_last_check",
+    type=bool,
     default=False,
     help="Load last saved checkpoint and start from there...",
 )
 
 parser.add_argument(
-    "--backbone_network",
+    "--model_type",
     type=str,
-    default="gnn",
-    help="gnn, cgnet, graph-transformer",
+    default="linear",
+    help="linear, kernel, nonlinear, se3-transformer",
 )
 parser.add_argument(
-    "--save_all_checkpoints",
+    "--save_checkpoints",
     type=eval,
     default=False,
     help="set True to do save all checkpoints not only the best crossvalidated one",
