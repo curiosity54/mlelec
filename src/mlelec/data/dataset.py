@@ -3,18 +3,58 @@ from typing import Dict, List, Optional
 import ase
 import torch
 from torch.utils.data import Dataset, DataLoader
+from enum import Enum
+from ase.io import read
+import hickle
 
 
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
-class MLDataset(Dataset):
+class precomputer_molecules(Enum):
+    water = "water"
+    ethane = "ethane"
+
+
+class MoleculeDataset(Dataset):
+    def __init__(
+        self,
+        data_path: str,
+        mol_name: str,
+        frame_slice: str = ":",
+        target: str = "fock",
+    ):
+        self.path = data_path
+        self.structures = None
+        self.mol_name = mol_name
+        self.frame_slice = frame_slice
+        self.target = target
+        self.load_structures()
+        self.load_target()
+
+    def load_structures(self):
+        try:
+            print("Loading structures")
+            self.structures = read(
+                self.path + "/{}.xyz".format(self.mol_name), index=self.frame_slice
+            )
+        except:
+            raise FileNotFoundError("No structures found at the given path")
+
+    def load_target(self):
+        if self.target == "fock":
+            # also load overlap
+            pass
+
+
+class MLDataset(MoleculeDataset, Dataset):
     def __init__(
         self,
         structures: List[ase.Atoms],
         target: torch.tensor,
         aux_data: Optional[Dict] = None,
     ):
-        # aux_data could be overlaps for H-learning, Lattice translations etc.
+        super().__init__()
+        # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.structures = structures
         self.target = target
         self.nstructs = len(structures)
