@@ -6,8 +6,8 @@ import datetime
 from pathlib import Path
 from tqdm.auto import tqdm
 from torch.utils import data
-from torch.utils.tensorboard import SummaryWriter
-from multiprocessing import cpu_count
+
+# from torch.utils.tensorboard import SummaryWriter
 import torch.optim as optim  # Adam, AdamW, SGD
 import hickle
 from typing import Optional
@@ -15,6 +15,26 @@ import mlelec.metrics as metrics
 
 
 # from data.dataset import Dataset
+
+# ---data---
+# attempt to read data ( structures, targets)
+# if not found, calculate them with pyscf
+# generate a dataset object
+
+# ---model---
+# ---features--- (if necessary)
+# attempt to read features if required for prescribed model
+# calculate them if necessary
+
+# instantiate model
+# Check for a checkpoint
+
+# Train
+
+
+# save model
+
+
 class Trainer:
     def __init__(
         self,
@@ -57,7 +77,7 @@ class Trainer:
         self.save_path = Path(
             save_path + "/" + datetime.datetime.now(timezone).strftime("%Y%m%d-%H%M%S")
         )
-        self.writer = SummaryWriter(self.save_path + "/" + "_trn")
+        # self.writer = SummaryWriter(self.save_path + "/" + "_trn")
 
         self.best_val_loss = 10**10
         if optimizer is not None:
@@ -130,34 +150,15 @@ class Trainer:
                     loss = self.model(data, loss_fn)
                     loss.backward()
                     self.optimizer.step()
-                    self.writer.add_scalar("Loss train", loss.item(), self.epoch)
+                    # self.writer.add_scalar("Loss train", loss.item(), self.epoch)
                     if batch_idx % self.log_interval == 0:
                         print(
                             f"Train Epoch: {self.epoch} [{batch_idx * len(data)}/{len(dataloader.dataset)} ({100. * batch_idx / len(dataloader):.0f}%)]\tLoss: {loss.item():.6f}"
                         )
-                        self.writer.add_scalar("Loss train", loss.item(), self.epoch)
+                        # self.writer.add_scalar("Loss train", loss.item(), self.epoch)
                     self.epoch += 1
                     pbar.update(1)
                     if self.epoch % self.save_interval == 0:
                         loss_val = self.loss(metric, self.val_data, "validation")
                         new_best = loss_val < self.best_val_loss
                         self.save(self.epoch, best=new_best)
-
-
-# ---data---
-# attempt to read data ( structures, targets)
-# if not found, calculate them with pyscf
-# generate a dataset object
-
-# ---model---
-# ---features--- (if necessary)
-# attempt to read features if required for prescribed model
-# calculate them if necessary
-
-# instantiate model
-# Check for a checkpoint
-
-# Train
-
-
-# save model

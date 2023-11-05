@@ -98,20 +98,20 @@ if __name__ == "__main__":
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Backbone
-    model = get_model(args, trainset, energy_prior, device)
+    model = get_model(args, trainset, metrics, device)
     print(model)
 
     # Overall
-    DDPM_model = GaussianDiffusion(
-        model=model,
-        features=trainset.bead_onehot,
-        num_atoms=trainset.num_beads,
-        timesteps=args.diffusion_steps,
-        norm_factor=norm_factor,
-        loss_weights=args.loss_weights,
-        objective=args.ddpm_objective,
-        forces_reg_weight=args.forces_reg_weight,
-    )
+    # DDPM_model = GaussianDiffusion(
+    #     model=model,
+    #     features=trainset.bead_onehot,
+    #     num_atoms=trainset.num_beads,
+    #     timesteps=args.diffusion_steps,
+    #     norm_factor=norm_factor,
+    #     loss_weights=args.loss_weights,
+    #     objective=args.ddpm_objective,
+    #     forces_reg_weight=args.forces_reg_weight,
+    # )
 
     # Trainer
     trainer = Trainer(

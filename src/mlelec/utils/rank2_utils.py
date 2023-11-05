@@ -1,9 +1,17 @@
 # Handles 2 center objects - coupling decoupling
 # must include preprocessing and postprocessing utils
-from typing import Optional, List
+from typing import Optional, List, Union, Tuple, Dict
+from metatensor import TensorMap
 import torch
 import ase
 import numpy as np
+
+# from mlelec.utils.metatensor_utils import TensorBuilder #TODO
+
+
+def _to_tensormap(block_data: dict):
+    # support for blocks in dict format- just convert to tensormap before using tensormap utils
+    pass
 
 
 def fix_orbital_order(matrix: torch.tensor, frame: ase.Atoms, orbital: dict):
@@ -109,14 +117,14 @@ def _to_blocks(matrices: List[torch.tensor], frames: List[ase.Atoms], orbitals: 
                 if isinstance(ham, np.ndarray):
                     block_data = torch.from_numpy(
                         ham[
-                            ki_base : ki_base + orbs_tot[ai],  # noqa: E203
-                            kj_base : kj_base + orbs_tot[aj],  # noqa: E203
+                            ki_base : ki_base + orbs_tot[ai],
+                            kj_base : kj_base + orbs_tot[aj],
                         ]
                     )
                 elif isinstance(ham, torch.Tensor):
                     block_data = ham[
-                        ki_base : ki_base + orbs_tot[ai],  # noqa: E203
-                        kj_base : kj_base + orbs_tot[aj],  # noqa: E203
+                        ki_base : ki_base + orbs_tot[ai],
+                        kj_base : kj_base + orbs_tot[aj],
                     ]
                 else:
                     raise ValueError
@@ -126,13 +134,13 @@ def _to_blocks(matrices: List[torch.tensor], frames: List[ase.Atoms], orbitals: 
                     block_data_plus = (block_data + block_data.T) * 1 / np.sqrt(2)
                     block_data_minus = (block_data - block_data.T) * 1 / np.sqrt(2)
                 ki_offset = 0
-                for ni, li, mi in orbs[ai]:
+                for ni, li, mi in orbitals[ai]:
                     if (
                         mi != -li
                     ):  # picks the beginning of each (n,l) block and skips the other orbitals
                         continue
                     kj_offset = 0
-                    for nj, lj, mj in orbs[aj]:
+                    for nj, lj, mj in orbitals[aj]:
                         if (
                             mj != -lj
                         ):  # picks the beginning of each (n,l) block and skips the other orbitals
@@ -192,16 +200,196 @@ def _to_blocks(matrices: List[torch.tensor], frames: List[ase.Atoms], orbitals: 
                 kj_base += orbs_tot[aj]
 
             ki_base += orbs_tot[ai]
-    # print(block_builder.build())
     return block_builder.build()
 
 
-def _to_matrix(frame, orbitals):
-    pass
+def blocks_to_matrix(
+    blocks: TensorMap,
+    frames: List[ase.Atoms],
+    orbs: Dict[int, List[Tuple[int, int, int]]],
+    # vectorized: bool = True,
+) -> Union[np.ndarray, torch.Tensor]:
+    # if vectorized:
+    #     return _vectorized_blocks_to_matrix(blocks=blocks, frames=frames, orbs=orbs)
+    # else:
+    return _to_matrix(blocks=blocks, frames=frames, orbs=orbs)
 
 
-def _to_coupled_basis(matrix, orbitals):
-    pass
+def _to_matrix(
+    blocks: TensorMap,
+    frames: List[ase.Atoms],
+    orbs: Dict[int, List[Tuple[int, int, int]]],
+    device=None,
+) -> Union[np.ndarray, torch.Tensor]:
+    """from tensormap to dense representation
+
+    Converts a TensorMap containing matrix blocks in the uncoupled basis,
+    `blocks` into dense matrices.
+    Needs `frames` and `orbs` to reconstruct matrices in the correct order.
+    See `dense_to_blocks` to understant the different types of blocks.
+    """
+
+    # total number of orbitals per atom, orbital offset per atom
+    orbs_tot, orbs_offset = _orbs_offsets(orbs)
+
+    # indices of the block for each atom
+    atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
+
+    if device is None:
+        device = blocks.block(0).values.device
+    else:
+        assert (
+            device == blocks.block(0).values.device
+        ), "device mismatch between blocks and device argument"
+
+    matrices = []
+    for f in frames:
+        norbs = 0
+        for ai in f.numbers:
+            norbs += orbs_tot[ai]
+        matrix = torch.zeros(norbs, norbs, device=device)
+        matrices.append(matrix)
+
+    # loops over block types
+    for idx, block in blocks:
+        # I can't loop over the frames directly, so I'll keep track
+        # of the frame with these two variables
+        dense_idx = -1
+        cur_A = -1
+
+        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+
+        # offset of the orbital block within the pair block in the matrix
+        ki_offset = orbs_offset[(ai, ni, li)]
+        kj_offset = orbs_offset[(aj, nj, lj)]
+        same_koff = ki_offset == kj_offset
+
+        # loops over samples (structure, i, j)
+        for sample, block_data in zip(block.samples, block.values):
+            A = sample["structure"]
+            i = sample["center"]
+            j = sample["neighbor"]
+            # check if we have to update the frame and index
+            if A != cur_A:
+                cur_A = A
+                dense_idx += 1
+
+            matrix = matrices[dense_idx]
+
+            # coordinates of the atom block in the matrix
+            ki_base, kj_base = atom_blocks_idx[(dense_idx, i, j)]
+
+            # values to assign
+            values = block_data[:, :, 0].reshape(2 * li + 1, 2 * lj + 1)
+            # assign values
+            _fill(
+                block_type,
+                matrix,
+                values,
+                ki_base,
+                kj_base,
+                ki_offset,
+                kj_offset,
+                same_koff,
+                li,
+                lj,
+            )
+
+    return matrices
+
+
+def _fill(
+    type: int,
+    matrix: Union[np.ndarray, torch.Tensor],
+    values: Union[np.ndarray, torch.Tensor],
+    ki_base: int,
+    kj_base: int,
+    ki_offset: int,
+    kj_offset: int,
+    same_koff: bool,
+    li: int,
+    lj: int,
+):
+    """fill block of type <type> where type is either -1,0,1,2"""
+    islice = slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1)
+    jslice = slice(kj_base + kj_offset, kj_base + kj_offset + 2 * lj + 1)
+    if type == 0:
+        matrix[islice, jslice] = values
+        if not same_koff:
+            matrix[jslice, islice] = values.T
+    if type == 2:
+        matrix[islice, jslice] = values
+        matrix[jslice, islice] = values.T
+
+    if abs(type) == 1:
+        values_2norm = values / (2 ** (0.5))
+        matrix[islice, jslice] += values_2norm
+        matrix[jslice, islice] += values_2norm.T
+        if not same_koff:
+            islice = slice(ki_base + kj_offset, ki_base + kj_offset + 2 * lj + 1)
+            jslice = slice(kj_base + ki_offset, kj_base + ki_offset + 2 * li + 1)
+            if type == 1:
+                matrix[islice, jslice] += values_2norm.T
+                matrix[jslice, islice] += values_2norm
+            else:
+                matrix[islice, jslice] -= values_2norm.T
+                matrix[jslice, islice] -= values_2norm
+
+
+from mlelec.utils.symmetry import ClebschGordanReal
+
+
+def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):
+    if isinstance(blocks, torch.tensor):
+        print("Converting matrix to blocks before coupling")
+        blocks = _to_blocks(blocks, orbitals)
+
+    if cg is None:
+        lmax = max(blocks.keys["li"] + blocks.keys["lj"])
+        cg = ClebschGordanReal(lmax)
+
+    block_builder = TensorBuilder(
+        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j", "L"],
+        ["structure", "center", "neighbor"],
+        [["M"]],
+        ["value"],
+    )
+    for idx, block in blocks:
+        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+
+        # Moves the components at the end as cg.couple assumes so
+        decoupled = torch.moveaxis(block.values, -1, -2).reshape(
+            (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1)
+        )
+        # selects the (only) key in the coupled dictionary (l1 and l2
+        # that gave birth to the coupled terms L, with L going from
+        # |l1 - l2| up to |l1 + l2|
+        coupled = cg.couple(decoupled)[(li, lj)]
+
+        for L in coupled:
+            block_idx = tuple(idx) + (L,)
+            # skip blocks that are zero because of symmetry
+            if ai == aj and ni == nj and li == lj:
+                parity = (-1) ** (li + lj + L)
+                if (parity == -1 and block_type in (0, 1)) or (
+                    parity == 1 and block_type == -1
+                ):
+                    continue
+
+            new_block = block_builder.add_block(
+                keys=block_idx,
+                properties=np.asarray([[0]], dtype=np.int32),
+                components=[_components_idx(L).reshape(-1, 1)],
+            )
+
+            new_block.add_samples(
+                labels=block.samples.view(dtype=np.int32).reshape(
+                    block.samples.shape[0], -1
+                ),
+                data=torch.moveaxis(coupled[L], -1, -2),
+            )
+
+    return block_builder.build()
 
 
 def _to_uncoupled_basis():
