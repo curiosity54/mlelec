@@ -3,7 +3,7 @@ from typing import List, Optional
 from ase.io import read
 import ase
 import numpy as np
-import pyscf
+import pyscf  # eventually replace with pyscfad #TODO
 import os
 from pathlib import Path
 import hickle
