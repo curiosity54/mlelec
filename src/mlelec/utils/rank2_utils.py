@@ -87,7 +87,11 @@ def _atom_blocks_idx(frames, orbs_tot):
     return atom_blocks_idx
 
 
-def _to_blocks(matrices: List[torch.tensor], frames: List[ase.Atoms], orbitals: dict):
+def _to_blocks(
+    matrices: Union(List[torch.tensor], torch.tensor),
+    frames: List[ase.Atoms],
+    orbitals: dict,
+):
     block_builder = TensorBuilder(
         ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
