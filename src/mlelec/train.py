@@ -93,8 +93,6 @@ if __name__ == "__main__":
 
     norm_factor = trainset.std if args.scale_data else 1.0
 
-    # Set device
-    # Note: Code does not work for cpu in current form
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Backbone

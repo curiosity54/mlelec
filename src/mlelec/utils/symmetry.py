@@ -2,75 +2,10 @@ import torch
 import numpy as np
 import math
 from scipy.spatial.transform import Rotation
+import wigners
 from typing import Dict
 
 # sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
-
-
-def _wigner_d(l, alpha, beta, gamma):
-    """Computes a Wigner D matrix
-     D^l_{mm'}(alpha, beta, gamma)
-    from sympy and converts it to numerical values.
-    (alpha, beta, gamma) are Euler angles (radians, ZYZ convention) and l the irrep.
-    """
-    try:
-        from sympy.physics.wigner import wigner_d
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError(
-            "Calculation of Wigner D matrices requires a sympy installation"
-        )
-    return torch.tensor(wigner_d(l, alpha, beta, gamma), dtype=torch.complex128)
-
-
-def _r2c(sp):
-    """Real to complex SPH. Assumes a block with 2l+1 reals corresponding
-    to real SPH with m indices from -l to +l"""
-
-    l = (len(sp) - 1) // 2  # infers l from the vector size
-    rc = torch.zeros(len(sp), dtype=torch.complex128)
-    rc[l] = sp[l]
-    for m in range(1, l + 1):
-        rc[l + m] = (sp[l + m] + 1j * sp[l - m]) * I_SQRT_2 * (-1) ** m
-        rc[l - m] = (sp[l + m] - 1j * sp[l - m]) * I_SQRT_2
-    return rc
-
-
-def _wigner_d_real(L, alpha, beta, gamma):
-    r2c_mat = torch.hstack(
-        [_r2c(torch.eye(2 * L + 1)[i])[:, torch.newaxis] for i in range(2 * l + 1)]
-    )
-    c2r_mat = np.conjugate(r2c_mat).T
-    wig = _wigner_d(L, alpha, beta, gamma)
-    return torch.real(c2r_mat @ np.conjugate(wig) @ r2c_mat)
-
-
-##SYMPY
-def _cg(l1, l2, L):
-    """Computes CG coefficients from sympy
-    <l1 m1; l2 m2| L M>
-    and converts them to numerical values.
-    Returns a full (2 * l1 + 1, 2 * l2 + 1, 2 * L + 1) array, which
-    is mostly zeros.
-    """
-    try:
-        from sympy.physics.quantum.cg import CG
-    except ModuleNotFoundError:
-        raise ModuleNotFoundError(
-            "Calculation of Clebsch-Gordan coefficients requires a sympy installation, alternatively use the wigners based function in utils/symmetry.py "
-        )
-
-    rcg = np.zeros((2 * l1 + 1, 2 * l2 + 1, 2 * L + 1), dtype=np.double)
-    if np.abs(l1 - l2) > L or np.abs(l1 + l2) < L:
-        return rcg
-    for m1 in range(-l1, l1 + 1):
-        for m2 in range(-l2, l2 + 1):
-            if np.abs(m1 + m2) > L:
-                continue
-            rcg[l1 + m1, l2 + m2, L + (m1 + m2)] += np.double(
-                CG(l1, m1, l2, m2, L, m1 + m2).doit()
-            )
-    return rcg
-
 
 I_SQRT_2 = 1.0 / np.sqrt(2)
 SQRT_2 = np.sqrt(2)
@@ -129,6 +64,71 @@ def check_inversion_equivariance(x: torch.tensor, property_calculator):
     ), "Inversion equivariance test failed"
 
 
+def _wigner_d(l, alpha, beta, gamma):
+    """Computes a Wigner D matrix
+     D^l_{mm'}(alpha, beta, gamma)
+    from sympy and converts it to numerical values.
+    (alpha, beta, gamma) are Euler angles (radians, ZYZ convention) and l the irrep.
+    """
+    try:
+        from sympy.physics.wigner import wigner_d
+    except ModuleNotFoundError:
+        raise ModuleNotFoundError(
+            "Calculation of Wigner D matrices requires a sympy installation"
+        )
+    return torch.tensor(wigner_d(l, alpha, beta, gamma), dtype=torch.complex128)
+
+
+def _r2c(sp):
+    """Real to complex SPH. Assumes a block with 2l+1 reals corresponding
+    to real SPH with m indices from -l to +l"""
+
+    l = (len(sp) - 1) // 2  # infers l from the vector size
+    rc = torch.zeros(len(sp), dtype=torch.complex128)
+    rc[l] = sp[l]
+    for m in range(1, l + 1):
+        rc[l + m] = (sp[l + m] + 1j * sp[l - m]) * I_SQRT_2 * (-1) ** m
+        rc[l - m] = (sp[l + m] - 1j * sp[l - m]) * I_SQRT_2
+    return rc
+
+
+def _real2complex(L: int):
+    """
+    Computes the transformation matrix that goes from a set
+    of real spherical harmonics, ordered as:
+
+        (l, -l), (l, -l + 1), ..., (l, l - 1), (l, l)
+    to complex-valued ones(following the Condon-Shortley phase convention)
+
+    _complex2real is obtained simply by taking the conjugate transpose of the matrix.
+    """
+    dim = 2 * L + 1
+    mat = torch.zeros((dim, dim), dtype=torch.complex128)
+    # m = 0
+    mat[L, L] = 1.0
+
+    if L == 0:
+        return mat
+    for m in range(1, L + 1):
+        # m > 0
+        mat[L + m, L + m] = I_SQRT_2 * (-1) ** m
+        mat[L + m, L - m] = I_SQRT_2 * 1j * (-1) ** m
+        # m < 0
+        mat[L - m, L + m] = I_SQRT_2
+        mat[L - m, L - m] = -I_SQRT_2 * 1j
+
+    return mat
+
+
+def _wigner_d_real(L, alpha, beta, gamma):
+    r2c_mat = torch.hstack(
+        [_r2c(torch.eye(2 * L + 1)[i])[:, torch.newaxis] for i in range(2 * L + 1)]
+    )
+    c2r_mat = np.conjugate(r2c_mat).T
+    wig = _wigner_d(L, alpha, beta, gamma)
+    return torch.real(c2r_mat @ np.conjugate(wig) @ r2c_mat)
+
+
 def xyz_to_spherical(data, axes=()):
     """
     Converts a vector (or a list of outer products of vectors) from
@@ -170,11 +170,7 @@ def spherical_to_xyz(data, axes=()):
     return torch.roll(data, 1, dims=axes)
 
 
-# WIGNERS based
-import wigners
-
-
-def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int):
+def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device):
     """
     Computes the Clebsch-Gordan (CG) matrix for
     transforming complex-valued spherical harmonics.
@@ -194,13 +190,15 @@ def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int):
     Returns:
         real_cg: CG matrix for transforming complex-valued spherical harmonics
     """
-    if np.abs(l1 - l2) > L or np.abs(l1 + l2) < L:
-        return np.zeros((2 * l1 + 1, 2 * l2 + 1, 2 * L + 1), dtype=np.double)
+    if abs(l1 - l2) > L or (l1 + l2) < L:
+        return torch.zeros(
+            (2 * l1 + 1, 2 * l2 + 1, 2 * L + 1), dtype=torch.double, device=device
+        )
     else:
-        return wigners.clebsch_gordan_array(l1, l2, L)
+        return torch.from_numpy(wigners.clebsch_gordan_array(l1, l2, L))
 
 
-def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int, r2c: Dict, c2r: Dict):
+def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int):
     """
     Compute the Clebsch Gordan (CG) matrix for *real* valued spherical harmonics,
     constructed by contracting the CG matrix for complex-valued
@@ -211,53 +209,26 @@ def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int, r2c: Dict, c2r: Dict):
         l1: Order of the first set of spherical harmonics
         l2: Order of the second set of spherical harmonics
         L: Order of the coupled spherical harmonics
-        r2c: transformation matrices from real to complex spherical harmonics
-        c2r: transformation matrices from complex to real spherical harmonics
     Returns:
         real_cg: CG matrix for transforming real-valued spherical harmonics
     """
+    r2c = {}
+    c2r = {}
+    for L in range(abs(l1 - l2), l1 + l2 + 1):
+        r2c[L] = _real2complex(L).to(self.device)
+        c2r[L] = torch.conjugate(r2c[L]).T
+
     complex_cg = _complex_clebsch_gordan_matrix(l1, l2, L)
-    real_cg = np.einsum("ijk,il,jm,nk->lmn", complex_cg, r2c[l1], r2c[l2], c2r[L])
+    real_cg = torch.einsum("ijk,il,jm,nk->lmn", complex_cg, r2c[l1], r2c[l2], c2r[L])
 
     if (l1 + l2 + L) % 2 == 0:
-        return np.real(real_cg)
+        return torch.real(real_cg)
     else:
-        return np.imag(real_cg)
-
-
-def _real2complex(L: int):
-    """
-    Computes the transformation matrix that goes from a set
-    of real spherical harmonics, ordered as:
-
-        (l, -l), (l, -l + 1), ..., (l, l - 1), (l, l)
-    to complex-valued ones(following the Condon-Shortley phase convention)
-
-    _complex2real is obtained simply by taking the conjugate transpose of the matrix.
-    """
-    mult = 2 * L + 1
-    mat = torch.zeros((mult, mult), dtype=torch.complex128)
-    # m = 0
-    mat[L, L] = 1.0
-
-    if L == 0:
-        return mat
-
-    isqrt2 = 1.0 / 2**0.5
-    for m in range(1, L + 1):
-        # m > 0
-        mat[L + m, L + m] = isqrt2 * (-1) ** m
-        mat[L + m, L - m] = isqrt2 * 1j * (-1) ** m
-
-        # m < 0
-        mat[L - m, L + m] = isqrt2
-        mat[L - m, L - m] = -isqrt2 * 1j
-
-    return mat
+        return torch.imag(real_cg)
 
 
 class ClebschGordanReal:
-    def __init__(self, l_max: int, device: str = None) -> None:
+    def __init__(self, l_max: int, device: str = None):
         self._l_max = l_max
         self._cg = {}
         if device is not None:
@@ -266,18 +237,12 @@ class ClebschGordanReal:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
         # real-to-complex and complex-to-real transformations as matrices
-        r2c = {}
-        c2r = {}
-        for L in range(0, self._l_max + 1):
-            r2c[L] = _real2complex(L).to(self.device)
-            c2r[L] = torch.conjugate(r2c[L]).T
-
         for l1 in range(self._l_max + 1):
             for l2 in range(self._l_max + 1):
                 for L in range(
                     max(l1, l2) - min(l1, l2), min(self._l_max, (l1 + l2)) + 1
                 ):
-                    rcg = _real_clebsch_gordan_matrix(l1, l2, L, r2c=r2c, c2r=c2r)
+                    rcg = _real_clebsch_gordan_matrix(l1, l2, L)
 
                     # sparsify: take only the non-zero entries (indices
                     # of m1 and m2 components) for each M
@@ -318,8 +283,8 @@ class ClebschGordanReal:
             )
 
         # infers the shape of the output using the einsum internals
-        ycouple = torch.einsum(combination_string, y1[:, 0, ...], y2[:, 0, ...]).shape
-        Y = torch.zeros((n_items, 2 * L + 1) + ycouple[1:], device=self.device)
+        ycombine = torch.einsum(combination_string, y1[:, 0, ...], y2[:, 0, ...]).shape
+        Y = torch.zeros((n_items, 2 * L + 1) + ycombine[1:], device=self.device)
 
         if (l1, l2, L) in self._cg:
             for M in range(2 * L + 1):

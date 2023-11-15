@@ -2,7 +2,7 @@ import torch
 from typing import Dict, Optional, List
 import numpy as np
 import scipy
-import mlelec.utils.rank2_utils as rank2_utils
+import mlelec.utils.twocenter_utils as twocenter_utils
 import ase
 
 
@@ -15,33 +15,54 @@ class ModelTargets:  # generic class for different targets
         return self.target
 
 
-class SecondRank:  # class for second-rank tensors
+class SingleCenter:  # class for single center tensorial properties
+    def __init__(
+        self, tensor: torch.tensor, orbitals: Optional[Dict], frames: List[ase.Atoms]
+    ):
+        self.tensor = tensor
+        self.orbitals = orbitals
+        self.frames = frames
+
+    def _blocks(self):
+        # decompose tensorial property to different SPH blocks if required
+        pass
+
+
+class TwoCenter:  # class for second-rank tensors
     def __init__(
         self,
         tensor: torch.tensor,
         orbitals: Dict,
         frames: Optional[List[ase.Atoms]] = None,
     ):
-        assert len(tensor.shape) == 2, "Second rank tensor must be of shape (n,n)"
+        assert (
+            len(tensor.shape) == 2
+        ), "Second rank tensor must be of shape (n,n)"  # FIXME
         self.tensor = tensor
         self.orbitals = orbitals
+        self.frames = frames
 
     def _blocks(self):
-        self.blocks = rank2_utils._to_blocks(self.tensor, frames, orbitals)
+        self.blocks = twocenter_utils._to_blocks(
+            self.tensor, self.frames, self.orbitals
+        )
         self.block_keys = self.blocks.keys()
 
+    def eigval(self, overlap=None, first: int = 0, last: int = -1):
+        eig = Eigenvalues(self.tensor, overlap)
+        return eig.eigvalues(first, last)
 
-class Hamiltonian(SecondRank):  # if there are special cases for hamiltonian
+
+class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def __init__(self, hamiltonian, orbitals, frames):
         super().__init__(hamiltonian, orbitals, frames)
         print(self.tensor)
 
     def orthogonalize(self, overlap: torch.tensor):
-        rank2_utils.lowin_orthogonalize(self.tensor, overlap)
+        twocenter_utils.lowin_orthogonalize(self.tensor, overlap)
 
-    def eigval(self, overlap=None, first: int = 0, last: int = -1):
-        eig = Eigenvalues(self.tensor, overlap)
-        return eig.eigvalues(first, last)
+    def project_small(new_basis):
+        pass
 
 
 class Eigenvalues:  # eigval of a second rank tensor
@@ -65,14 +86,33 @@ class Eigenvalues:  # eigval of a second rank tensor
         return scipy.linalg.eigh[first:last][-1]
 
 
-class ElectronDensity(ModelTargets):  # Electron density must be handled another way
+class PBCHamiltonian(TwoCenter):
+    # Handle supercell or translated hamiltonians
+    def __init__(
+        self,
+        hamiltonian: torch.tensor,
+        orbitals: Dict,
+        frames: List[ase.Atoms] = None,
+        k_grid: List[int] = None,
+        translations: List[int] = None,
+    ):
+        super().__init__(hamiltonian, orbitals, frames)
+
+    def combine_phase():
+        pass
+
+
+class ElectronDensity:  # Electron density must be handled another way
     def __init__():
         pass
 
 
-# class DensityMatrix(SecondRank):
+# class DensityMatrix(TwoCenter):
 #     def __init__():
 #         pass
 
 
-# .. Third rank tensors
+# .. Higher center tensors
+# class ThreeCenter:
+#     def __init__(self):
+#         pass

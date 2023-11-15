@@ -48,7 +48,7 @@ class MLP(nn.Module):
 class TargetModel(nn.Module):
     def __init__(self, target, dataset):
         super().__init__()
-        self.models = self._submodels(target)
+        self.model_keys = self._submodels(target)
 
     def _submodels(self, target):
         # return 1 model if no subtargets present, else spawn
