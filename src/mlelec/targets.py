@@ -65,6 +65,24 @@ class Eigenvalues:  # eigval of a second rank tensor
         return scipy.linalg.eigh[first:last][-1]
 
 
+class PBCHamiltonian(SecondRank):
+    def __init__(
+        self,
+        hamiltonian: torch.tensor,
+        orbitals: Dict,
+        frames: List[ase.Atoms] = None,
+        k_grid: List[int] = None,
+        translations: List[int] = None,
+    ):
+        super().__init__(hamiltonian, orbitals, frames)
+
+    def combine_phase():
+        pass
+
+
+# Handle supercell or translated hamiltonians
+
+
 class ElectronDensity(ModelTargets):  # Electron density must be handled another way
     def __init__():
         pass
