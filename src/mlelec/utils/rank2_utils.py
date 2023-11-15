@@ -336,7 +336,7 @@ def _fill(
                 matrix[jslice, islice] -= values_2norm
 
 
-from mlelec.utils.symmetry import ClebschGordanReal
+from .symmetry import ClebschGordanReal
 
 
 def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):

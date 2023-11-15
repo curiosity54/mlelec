@@ -116,9 +116,29 @@ class MLDataset(Dataset):
             test_frac = 1 - (train_frac + val_frac)
             assert test_frac > 0
         assert train_frac + val_frac + test_frac == 1
-        self.train, self.val, self.test = torch.utils.data.random_split(
-            range(self.nstructs), [train_frac, val_frac, test_frac], generator=self.rng
-        )
+
+        if self.rng is not None:
+            self.train, self.val, self.test = torch.utils.data.random_split(
+                range(self.nstructs),
+                [train_frac, val_frac, test_frac],
+                generator=self.rng,
+            )
+        else:  # sequential split  #FIXME
+            self.train = torch.utils.data.Subset(
+                range(self.nstructs), range(int(train_frac * self.nstructs))
+            )
+            self.val = torch.utils.data.subset(
+                range(self.nstructs),
+                range(
+                    int(train_frac * self.nstructs),
+                    int((train_frac + val_frac) * self.nstructs),
+                ),
+            )
+            self.test = torch.utils.data.subset(
+                range(self.nstructs),
+                range(int((train_frac + val_frac) * self.nstructs), self.nstructs),
+            )
+
         # self.train = DataLoader(self.train, batch_size=self.batch_size)
 
     def __len__(self):
