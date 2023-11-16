@@ -3,6 +3,7 @@
 
 from rascaline import SphericalExpansion
 from rascaline import SphericalExpansionByPair as PairExpansion
+import ase
 
 # TODO: support SphericalExpansion, PairExpansion calculators from outside of rascaline
 
@@ -47,7 +48,9 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
             lcut=lcut,
             other_keys_match=["species_center"],
         )
-        rho_prev = _pca(rho_x, kwargs["npca"], kwargs["slice_samples"])
+        rho_prev = _pca(
+            rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
+        )
 
     rho_x = cg_increment(
         rho_prev,
@@ -250,3 +253,8 @@ def twocenter_hermitian_features(
         ),
         blocks=blocks,
     )
+
+
+def twocenter_features():
+    # no hermitian symmetry
+    pass
