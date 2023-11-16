@@ -1,9 +1,101 @@
 import numpy as np
-from equistore import Labels, TensorBlock, TensorMap
-from itertools import product
-from .acdc_mini import acdc_standardize_keys, cg_increment, cg_combine, _remove_suffix
-from mlelec.utils.symmetry import ClebschGordanReal
+from metatensor import Labels, TensorBlock, TensorMap
 from rascaline import SphericalExpansion, SphericalExpansionByPair
+from itertools import product
+import re
+import torch
+import scipy
+
+# from ..utils.symmetry import ClebschGordanReal
+
+
+def _remove_suffix(names, new_suffix=""):
+    suffix = re.compile("_[0-9]?$")
+    rname = []
+    for name in names:
+        match = suffix.search(name)
+        if match is None:
+            rname.append(name + new_suffix)
+        else:
+            rname.append(name[: match.start()] + new_suffix)
+    return rname
+
+
+def acdc_standardize_keys(descriptor, drop_pair_id=True):
+    """Standardize the naming scheme of density expansion coefficient blocks (nu=1)"""
+
+    key_names = np.array(descriptor.keys.names)
+    if not "spherical_harmonics_l" in key_names:
+        raise ValueError(
+            "Descriptor missing spherical harmonics channel key `spherical_harmonics_l`"
+        )
+    if "species_atom_1" in key_names:
+        key_names[np.where(key_names == "species_atom_1")[0]] = "species_center"
+    if "species_atom_2" in key_names:
+        key_names[np.where(key_names == "species_atom_2")[0]] = "species_neighbor"
+    key_names = tuple(key_names)
+    blocks = []
+    keys = []
+    for key, block in descriptor.items():
+        key = tuple(key)
+        if not "inversion_sigma" in key_names:
+            key = (1,) + key
+        if not "order_nu" in key_names:
+            key = (1,) + key
+        keys.append(key)
+        property_names = _remove_suffix(block.properties.names, "_1")
+        sample_names = [
+            "center" if b == "first_atom" else ("neighbor" if b == "second_atom" else b)
+            for b in block.samples.names
+        ]
+        # converts pair_id to shifted neighbor numbers
+        if "pair_id" in sample_names and drop_pair_id:
+            new_samples = block.samples.values.copy().reshape(-1, len(sample_names))
+            # dtype=np.int32
+            icent = np.where(np.asarray(sample_names) == "center")[0]
+            ineigh = np.where(np.asarray(sample_names) == "neighbor")[0]
+            ipid = np.where(np.asarray(sample_names) == "pair_id")[0]
+            new_samples[:, ineigh] += new_samples[:, ipid] * new_samples[:, icent].max()
+            new_samples = Labels(
+                [n for n in sample_names if n != "pair_id"],
+                new_samples[
+                    :,
+                    [
+                        i
+                        for i in range(len(block.samples.names))
+                        if block.samples.names[i] != "pair_id"
+                    ],
+                ],
+            )
+        else:
+            new_samples = Labels(
+                sample_names,
+                np.asarray(block.samples.values).reshape(-1, len(sample_names)),
+            )
+        # convert values to TORCH TENSOR <<<<
+        blocks.append(
+            TensorBlock(
+                values=torch.tensor(block.values),
+                samples=new_samples,
+                components=block.components,
+                properties=Labels(
+                    property_names,
+                    np.asarray(block.properties.values).reshape(
+                        -1, len(property_names)
+                    ),
+                ),
+            )
+        )
+
+    if not "inversion_sigma" in key_names:
+        key_names = ("inversion_sigma",) + key_names
+    if not "order_nu" in key_names:
+        key_names = ("order_nu",) + key_names
+
+    return TensorMap(
+        keys=Labels(names=key_names, values=np.asarray(keys, dtype=np.int32)),
+        blocks=blocks,
+    )
 
 
 def flatten(x):
@@ -504,3 +596,285 @@ def cg_increment(
         other_keys_match=other_keys_match,
         mp=mp,
     )
+
+
+def relabel_key_contract(tensormap):
+    """Relabel the key to contract with other_keys_match, for ACDC - 'species_center' gets renamed to 'species_contract'
+    while for N-center ACDC 'specoes_neighbor' gets renamed to 'species_contract'"""
+    new_tensor_blocks = []
+    new_tensor_keys = []
+    for k, b in tensormap:
+        key = tuple(k)
+        block = TensorBlock(
+            values=b.values,
+            samples=b.samples,
+            components=b.components,
+            properties=b.properties,
+        )
+        new_tensor_blocks.append(block)
+        new_tensor_keys.append(key)
+    if "species_neighbor" in tensormap.keys.dtype.names:
+        # Relabel neighbor species as species_contract to be the channel to contract |rho_j> |g_ij>
+        new_tensor_keys = Labels(
+            (
+                "order_nu",
+                "inversion_sigma",
+                "spherical_harmonics_l",
+                "species_center",
+                "species_contract",
+            ),
+            np.asarray(new_tensor_keys, dtype=np.int32),
+        )
+    else:
+        # Relabel center species as species_contract to be the channel to contract |rho_j>
+        new_tensor_keys = Labels(
+            (
+                "order_nu",
+                "inversion_sigma",
+                "spherical_harmonics_l",
+                "species_contract",
+            ),
+            np.asarray(new_tensor_keys, dtype=np.int32),
+        )
+
+    new_tensormap = TensorMap(new_tensor_keys, new_tensor_blocks)
+    return new_tensormap
+
+
+def contract_rho_ij(rhoijp, elements, property_names=None):
+    """contract the doubly decorated pair feature rhoijp = |rho_{ij}^{[nu, nu']}> to return  |rho_{i}^{[nu <- nu']}>"""
+    rhoMPi_keys = list(set([tuple(list(x)[:-1]) for x in rhoijp.keys]))
+    rhoMPi_blocks = []
+    if property_names == None:
+        property_names = rhoijp.property_names
+
+    for key in rhoMPi_keys:
+        contract_blocks = []
+        contract_properties = []
+        contract_samples = (
+            []
+        )  # rho1i.block(rho1i.blocks_matching(species_center=key[-1])[0]).samples #samples for corres key
+
+        for ele in elements:
+            blockidx = rhoijp.blocks_matching(species_contract=ele)
+            sel_blocks = [
+                rhoijp.block(i)
+                for i in blockidx
+                if key == tuple(list(rhoijp.keys[i])[:-1])
+            ]
+            if not len(sel_blocks):
+                #                 print(key, ele, "skipped")
+                continue
+            assert (
+                len(sel_blocks) == 1
+            )  # sel_blocks is the corresponding rho11 block with the same key and species_contract = ele
+            block = sel_blocks[0]
+            filter_idx = list(zip(block.samples["structure"], block.samples["center"]))
+            #             #len(block.samples)==len(filter_idx)
+            struct, center = np.unique(block.samples["structure"]), np.unique(
+                block.samples["center"]
+            )
+            possible_block_samples = list(product(struct, center))
+
+            block_samples = []
+            ij_samples = []
+            block_values = []
+
+            for isample, sample in enumerate(possible_block_samples):
+                sample_idx = [
+                    idx
+                    for idx, tup in enumerate(filter_idx)
+                    if tup[0] == sample[0] and tup[1] == sample[1]
+                ]
+                if len(sample_idx) == 0:
+                    continue
+                #             #print(key, ele, sample, block.samples[sample_idx])
+                block_samples.append(sample)
+                ij_samples.append(block.samples[sample_idx])
+                block_values.append(
+                    block.values[sample_idx].sum(axis=0)
+                )  # sum j belonging to ele,
+                # block_values has as many entries as samples satisfying (key, ele) so in general we have a ragged list
+                # of contract_blocks
+
+            contract_blocks.append(block_values)
+            contract_samples.append(block_samples)
+            contract_properties.append(block.properties.asarray())
+
+        all_block_samples = sorted(list(set().union(*contract_samples)))
+        #         print('nsamples',len(all_block_samples) )
+        all_block_values = np.zeros(
+            (
+                (len(all_block_samples),)
+                + block.values.shape[1:]
+                + (len(contract_blocks),)
+            )
+        )
+        for ib, bb in enumerate(contract_samples):
+            nzidx = [
+                i for i in range(len(all_block_samples)) if all_block_samples[i] in bb
+            ]
+            #             print(elements[ib],key, bb, all_block_samples)
+            all_block_values[nzidx, :, :, ib] = contract_blocks[ib]
+
+        new_block = TensorBlock(
+            values=all_block_values.reshape(
+                all_block_values.shape[0], all_block_values.shape[1], -1
+            ),
+            samples=Labels(
+                ["structure", "center"], np.asarray(all_block_samples, np.int32)
+            ),
+            components=block.components,
+            properties=Labels(
+                list(property_names),
+                np.asarray(np.vstack(contract_properties), np.int32),
+            ),
+        )
+
+        rhoMPi_blocks.append(new_block)
+    rhoMPi = TensorMap(
+        Labels(
+            ["order_nu", "inversion_sigma", "spherical_harmonics_l", "species_center"],
+            np.asarray(rhoMPi_keys, dtype=np.int32),
+        ),
+        rhoMPi_blocks,
+    )
+
+    return rhoMPi
+
+
+def compute_rhoi_pca(
+    rhoi,
+    npca: Optional[Union[float, List[float]]] = None,
+    slice_samples: Optional[int] = None,
+):
+    """computes PCA contraction with combined elemental and radial channels.
+    returns the contraction matrices
+    """
+    if isinstance(npca, list):
+        assert len(npca) == len(rhoi)
+    else:
+        npca = [npca] * len(rhoi)
+
+    pca_vh_all = []
+    s_sph_all = []
+    pca_blocks = []
+    for idx, (key, block) in enumerate(rhoi.items()):
+        nu, sigma, l, spi = key.values
+        if slice_samples is not None:
+            block = operations.slice_block(
+                block,
+                axis="samples",
+                labels=Labels(
+                    block.samples.names, block.samples.values[::slice_samples]
+                ),
+            )
+
+        nsamples = len(block.samples)
+        ncomps = len(block.components[0])
+        xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
+        u, s, vh = torch.linalg.svd(xl, full_matrices=False)
+        eigs = torch.pow(s, 2) / (xl.shape[0] - 1)
+        eigs_ratio = eigs / torch.sum(eigs)
+        explained_var = torch.cumsum(eigs_ratio, dim=0)
+
+        if npca[idx] is None:
+            npc = vh.shape[1]
+
+        elif 0 < npca[idx] < 1:
+            npc = (explained_var > npca[idx]).nonzero()[1, 0]
+        # allow absolute number of features to retain
+        elif npca[idx] < min(xl.shape[0], xl.shape[1]):
+            npc = npca[idx]
+
+        else:
+            npc = min(xl.shape[0], xl.shape[1])
+        retained = torch.arange(npc)
+
+        s_sph_all.append(s[retained])
+        pca_vh_all.append(vh[retained].T)
+        # print("singular values", s[retained]/s[0])
+        print(vh[retained].T.shape, len(block.properties))
+        pblock = TensorBlock(
+            values=vh[retained].T,
+            components=[],
+            samples=Labels(
+                ["pca"],
+                np.asarray(
+                    [i for i in range(len(block.properties))], dtype=np.int32
+                ).reshape(-1, 1),
+            ),
+            properties=Labels(
+                ["pca"],
+                np.asarray(
+                    [i for i in range(vh[retained].T.shape[1])], dtype=np.int32
+                ).reshape(-1, 1),
+            ),
+        )
+        pca_blocks.append(pblock)
+    pca_tmap = TensorMap(rhoi.keys, pca_blocks)
+    return pca_tmap, pca_vh_all, s_sph_all
+
+
+def get_pca_tmap(rhoi, pca_vh_all):
+    assert len(rhoi.keys) == len(pca_vh_all)
+    pca_blocks = []
+    for idx, (key, block) in enumerate(rhoi):
+        vt = pca_vh_all[idx]
+        # print(vt.shape)
+        pblock = TensorBlock(
+            values=vt,
+            components=[],
+            samples=Labels(
+                ["pca"],
+                np.asarray(
+                    [i for i in range(len(block.properties))], dtype=np.int32
+                ).reshape(-1, 1),
+            ),
+            properties=Labels(
+                ["pca"],
+                np.asarray([i for i in range(vt.shape[-1])], dtype=np.int32).reshape(
+                    -1, 1
+                ),
+            ),
+        )
+        pca_blocks.append(pblock)
+    pca_tmap = TensorMap(rhoi.keys, pca_blocks)
+    return pca_tmap
+
+
+def apply_pca(rhoi, pca_tmap):
+    new_blocks = []
+    for idx, (key, block) in enumerate(rhoi.items()):
+        nu, sigma, l, spi = key
+        xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
+        vt = pca_tmap.block(spherical_harmonics_l=l, inversion_sigma=sigma).values
+        xl_pca = (xl @ vt).reshape((len(block.samples), len(block.components[0]), -1))
+        #         print(xl_pca.shape)
+        pblock = TensorBlock(
+            values=xl_pca,
+            components=block.components,
+            samples=block.samples,
+            properties=Labels(
+                ["pca"],
+                np.asarray(
+                    [i for i in range(xl_pca.shape[-1])], dtype=np.int32
+                ).reshape(-1, 1),
+            ),
+        )
+        new_blocks.append(pblock)
+    pca_tmap = TensorMap(rhoi.keys, new_blocks)
+    return pca_tmap
+
+
+def _pca(feat, npca=0.95, slice_samples=None):
+    """
+    feat: TensorMap
+    """
+    if npca is None:
+        return feat
+    feat_projection, feat_vh_blocks, feat_eva_blocks = compute_rhoi_pca(
+        feat, npca=npca, slice_samples=slice_samples
+    )
+    feat_pca = apply_pca(feat, feat_projection)
+    return feat_pca

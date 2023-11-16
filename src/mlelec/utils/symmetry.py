@@ -34,7 +34,7 @@ def rotate_frame(frame, _rotation):
     """
     frame = frame.copy()
     frame.positions = frame.positions @ _rotation.detach().numpy().T
-    frame.cell = frame.cell @ _rotation.T
+    frame.cell = frame.cell @ _rotation.detach().numpy().T
     return frame
 
 
@@ -64,7 +64,7 @@ def check_inversion_equivariance(x: torch.tensor, property_calculator):
     ), "Inversion equivariance test failed"
 
 
-def _wigner_d(l, alpha, beta, gamma):
+def _wigner_d(L, alpha, beta, gamma):
     """Computes a Wigner D matrix
      D^l_{mm'}(alpha, beta, gamma)
     from sympy and converts it to numerical values.
@@ -76,7 +76,10 @@ def _wigner_d(l, alpha, beta, gamma):
         raise ModuleNotFoundError(
             "Calculation of Wigner D matrices requires a sympy installation"
         )
-    return torch.tensor(wigner_d(l, alpha, beta, gamma), dtype=torch.complex128)
+    # print(wigner_d(L, alpha, beta, gamma))
+    return torch.tensor(
+        wigner_d(L, alpha, beta, gamma), dtype=torch.complex128
+    ).reshape((2 * L + 1, 2 * L + 1))
 
 
 def _r2c(sp):
@@ -122,11 +125,12 @@ def _real2complex(L: int):
 
 def _wigner_d_real(L, alpha, beta, gamma):
     r2c_mat = torch.hstack(
-        [_r2c(torch.eye(2 * L + 1)[i])[:, torch.newaxis] for i in range(2 * L + 1)]
+        [_r2c(torch.eye(2 * L + 1)[i])[:, None] for i in range(2 * L + 1)]
     )
-    c2r_mat = np.conjugate(r2c_mat).T
+    c2r_mat = torch.conj(r2c_mat).T
     wig = _wigner_d(L, alpha, beta, gamma)
-    return torch.real(c2r_mat @ np.conjugate(wig) @ r2c_mat)
+    # print(c2r_mat.shape, wig.shape, r2c_mat.shape)
+    return torch.real(c2r_mat @ torch.conj(wig) @ r2c_mat)
 
 
 def xyz_to_spherical(data, axes=()):
