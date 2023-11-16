@@ -289,23 +289,23 @@ def cg_combine(
                 if "neighbor" in samples_b.names and "neighbor" not in samples_a.names:
                     neighbor_slice = []
                     smp_a, smp_b = 0, 0
-                    while smp_b < samples_b.shape[0]:
+                    while smp_b < samples_b.values.shape[0]:
                         if (
-                            samples_b[smp_b][["structure", "center"]]
-                            != samples_a[smp_a]
-                        ):
-                            if smp_a + 1 < samples_a.shape[0]:
+                            samples_b[smp_b]["structure"]
+                            != samples_a[smp_a]["structure"]
+                        ) or (samples_b[smp_b]["center"] != samples_a[smp_a]["center"]):
+                            if smp_a + 1 < samples_a.values.shape[0]:
                                 smp_a += 1
                         neighbor_slice.append(smp_a)
                         smp_b += 1
                     neighbor_slice = np.asarray(neighbor_slice)
-                    print(
-                        index_a,
-                        index_b,
-                        neighbor_slice,
-                        block_a.samples[neighbor_slice],
-                        block_b.samples,
-                    )
+                    # print(
+                    #     index_a,
+                    #     index_b,
+                    #     neighbor_slice,
+                    #     block_a.samples.values[neighbor_slice],
+                    #     block_b.samples,
+                    # )
 
                 elif "neighbor" in samples_b.names and "neighbor" in samples_a.names:
                     # taking tensor products of gij and gik
@@ -322,13 +322,14 @@ def cg_combine(
                         smp_b+=1
                     """
                     sc_b = (-1, -1)
-                    while smp_b < samples_b.shape[0]:
+                    while smp_b < samples_b.values.shape[0]:
                         # checks if structure index needs updating
                         if (
                             samples_b[smp_b]["center"] != sc_b[1]
                             or samples_b[smp_b]["structure"] != sc_b[0]
                         ):
                             # checks if structure index needs updating
+                            ## FIXME metatensor update
                             sc_b = samples_b[smp_b][["structure", "center"]]
                             idx = np.where(
                                 (
@@ -359,12 +360,18 @@ def cg_combine(
                         # print(smp_a_idx, samples_b[smp_b])
                         if "pair_id" in block_a.samples.names:
                             samples_final.extend(
-                                [tuple(samples_b[smp_b]) + idx for idx in smp_a_idx]
+                                [
+                                    tuple(samples_b.values[smp_b]) + idx
+                                    for idx in smp_a_idx
+                                ]
                             )
                             # print(samples_final)
                         else:
                             samples_final.extend(
-                                [tuple(samples_b[smp_b]) + (idx,) for idx in smp_a_idx]
+                                [
+                                    tuple(samples_b.values[smp_b]) + (idx,)
+                                    for idx in smp_a_idx
+                                ]
                             )
                         smp_b += 1
                     neighbor_slice = np.asarray(neighbor_slice)
@@ -402,7 +409,7 @@ def cg_combine(
                         smp_b+=1
                     """
                     sc_b = (-1, -1)
-                    while smp_b < samples_b.shape[0]:
+                    while smp_b < samples_b.values.shape[0]:
                         # checks if structure index needs updating
                         if (
                             samples_b[smp_b]["center"] != sc_b[1]
@@ -532,7 +539,8 @@ def cg_combine(
             continue  # skips empty blocks
         nz_idx.append(KEY)
         #         print(KEY, X_samples[KEY], len(X_blocks[KEY]) , X_blocks[KEY][0])
-        block_data = torch.concatenate(X_blocks[KEY], axis=-1)
+        print(X_blocks[KEY], X_samples[KEY])
+        block_data = torch.cat(X_blocks[KEY], dim=0)
         sph_components = Labels(
             ["spherical_harmonics_m"],
             np.asarray(range(-L, L + 1), dtype=np.int32).reshape(-1, 1),

@@ -63,14 +63,14 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     return rho_x
 
 
-def pair_feature(
+def pair_features(
     frames: List[ase.Atoms],
     hypers: dict,
-    cg,
+    cg=None,
     rhonu_i: TensorMap = None,
-    order_nu=Union[List[int], int, None],
+    order_nu: Union[List[int], int] = None,
     all_pairs: bool = False,
-    both_centers=False,
+    both_centers: bool = False,
     lcut: int = 3,
     **kwargs,
 ):
@@ -81,6 +81,9 @@ def pair_feature(
 
     calculator = PairExpansion(**hypers)
     rho0_ij = calculator.compute(frames)
+    if not (frames[0].pbc.any()):
+        for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
+            rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
 
     if all_pairs and hypers["interaction_cutoff"] < np.max(
         [np.max(f.get_all_distances()) for f in frames]
@@ -95,7 +98,7 @@ def pair_feature(
     rho0_ij = acdc_standardize_keys(rho0_ij)
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            order_nu, hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
 
     if not both_centers:
