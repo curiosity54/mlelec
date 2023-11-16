@@ -13,3 +13,7 @@ def Eigval_loss(
 ):
     """Loss function for eigenvalues"""
     return torch.sum((pred - target) ** 2)
+
+
+def Custom_loss():
+    pass

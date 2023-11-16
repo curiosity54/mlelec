@@ -22,7 +22,6 @@
 # SPDX-License-Identifier: MIT
 
 import torch
-
 from se3_transformer.model import SE3Transformer
 from se3_transformer.model.fiber import Fiber
 

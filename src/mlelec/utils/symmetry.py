@@ -174,7 +174,7 @@ def spherical_to_xyz(data, axes=()):
     return torch.roll(data, 1, dims=axes)
 
 
-def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device):
+def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device: str = None):
     """
     Computes the Clebsch-Gordan (CG) matrix for
     transforming complex-valued spherical harmonics.
@@ -202,7 +202,9 @@ def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device):
         return torch.from_numpy(wigners.clebsch_gordan_array(l1, l2, L))
 
 
-def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int):
+def _real_clebsch_gordan_matrix(
+    l1: int, l2: int, L: int, r2c_l1, r2c_l2, c2r_L, device: str = None
+):
     """
     Compute the Clebsch Gordan (CG) matrix for *real* valued spherical harmonics,
     constructed by contracting the CG matrix for complex-valued
@@ -216,14 +218,10 @@ def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int):
     Returns:
         real_cg: CG matrix for transforming real-valued spherical harmonics
     """
-    r2c = {}
-    c2r = {}
-    for L in range(abs(l1 - l2), l1 + l2 + 1):
-        r2c[L] = _real2complex(L).to(self.device)
-        c2r[L] = torch.conjugate(r2c[L]).T
-
     complex_cg = _complex_clebsch_gordan_matrix(l1, l2, L)
-    real_cg = torch.einsum("ijk,il,jm,nk->lmn", complex_cg, r2c[l1], r2c[l2], c2r[L])
+    real_cg = torch.einsum(
+        "ijk,il,jm,nk->lmn", complex_cg.type(torch.complex128), r2c_l1, r2c_l2, c2r_L
+    )
 
     if (l1 + l2 + L) % 2 == 0:
         return torch.real(real_cg)
@@ -232,21 +230,33 @@ def _real_clebsch_gordan_matrix(l1: int, l2: int, L: int):
 
 
 class ClebschGordanReal:
-    def __init__(self, l_max: int, device: str = None):
-        self._l_max = l_max
+    def __init__(self, lmax: int, device: str = None):
+        self.lmax = lmax
         self._cg = {}
         if device is not None:
             self.device = device
         else:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+        self.r2c = {}
+        self.c2r = {}
+        for L in range(0, lmax + 1):
+            self.r2c[L] = _real2complex(L).to(device)
+            self.c2r[L] = torch.conj(self.r2c[L]).T
+
         # real-to-complex and complex-to-real transformations as matrices
-        for l1 in range(self._l_max + 1):
-            for l2 in range(self._l_max + 1):
-                for L in range(
-                    max(l1, l2) - min(l1, l2), min(self._l_max, (l1 + l2)) + 1
-                ):
-                    rcg = _real_clebsch_gordan_matrix(l1, l2, L)
+        for l1 in range(self.lmax + 1):
+            for l2 in range(self.lmax + 1):
+                for L in range(abs(l1 - l2), min(self.lmax, (l1 + l2)) + 1):
+                    rcg = _real_clebsch_gordan_matrix(
+                        l1,
+                        l2,
+                        L,
+                        r2c_l1=self.r2c[l1],
+                        r2c_l2=self.r2c[l2],
+                        c2r_L=self.c2r[L],
+                        device=self.device,
+                    )
 
                     # sparsify: take only the non-zero entries (indices
                     # of m1 and m2 components) for each M
@@ -254,16 +264,20 @@ class ClebschGordanReal:
                     for M in range(2 * L + 1):
                         cg_nonzero = torch.where(abs(rcg[:, :, M]) > 1e-15)
                         cg_M = torch.zeros(
-                            len(cg_nonzero[0]),
-                            dtype=[("m1", ">i4"), ("m2", ">i4"), ("cg", ">f8")],
+                            (len(cg_nonzero[0]), 3),
+                            # dtype=[(torch.int32, torch.int32, torch.int32)],
                             device=self.device,
                         )
-                        cg_M["m1"] = cg_nonzero[0]
-                        cg_M["m2"] = cg_nonzero[1]
-                        cg_M["cg"] = rcg[cg_nonzero[0], cg_nonzero[1], M]
+                        cg_M[:, 0] = cg_nonzero[0]
+                        cg_M[:, 1] = cg_nonzero[1]
+                        cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
                         new_cg.append(cg_M)
 
                     self._cg[(l1, l2, L)] = new_cg
+        # self._cg.to(self.device)
+        # self._cg = {
+        #     k: v.to(device=self.device, non_blocking=True) for k, v in self._cg.items()
+        # }
 
     def combine(
         self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str
@@ -273,9 +287,12 @@ class ClebschGordanReal:
         |Y; LM> = \sum_{m1,m2} <l1 m1 l2 m2|LM> |y1; l1 m1> |y2; l2 m2>
         """
         # automatically infer l1 and l2 from the size of the coefficients vectors
+        if y1.device != self.device:
+            y1 = y1.to(self.device)
+            y2 = y2.to(self.device)
         l1 = (y1.shape[1] - 1) // 2
         l2 = (y2.shape[1] - 1) // 2
-        if L > self._l_max or l1 > self._l_max or l2 > self._l_max:
+        if L > self.lmax or l1 > self.lmax or l2 > self.lmax:
             raise ValueError(
                 "Requested CG entry ", (l1, l2, L), " has not been precomputed"
             )
@@ -293,6 +310,9 @@ class ClebschGordanReal:
         if (l1, l2, L) in self._cg:
             for M in range(2 * L + 1):
                 for m1, m2, cg in self._cg[(l1, l2, L)][M]:
+                    m1 = m1.type(torch.int)
+                    m2 = m2.type(torch.int)
+                    # print(m1, m2, M, m1.dtype)
                     Y[:, M, ...] += torch.einsum(
                         combination_string, y1[:, m1, ...], y2[:, m2, ...] * cg
                     )
@@ -379,7 +399,7 @@ class ClebschGordanReal:
                 # in the new coupled term, prepend (l1,l2) to the existing label
                 coupled[(l1, l2) + ltuple] = {}
                 for L in range(
-                    max(l1, l2) - min(l1, l2), min(self._l_max, (l1 + l2)) + 1
+                    max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1
                 ):
                     # ensure that Lterm is created on the same device as the dec_term
                     device = dec_term.device
@@ -421,7 +441,7 @@ class ClebschGordanReal:
                 ),
                 device=self.device,
             )
-            for L in range(max(l1, l2) - min(l1, l2), min(self._l_max, (l1 + l2)) + 1):
+            for L in range(max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1):
                 # supports missing L components, e.g. if they are zero because of symmetry
                 if L not in lcomponents:
                     continue

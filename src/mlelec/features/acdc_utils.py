@@ -5,6 +5,7 @@ from itertools import product
 import re
 import torch
 import scipy
+from typing import List, Optional, Union
 
 # from ..utils.symmetry import ClebschGordanReal
 
@@ -211,7 +212,7 @@ def cg_combine(
     X_grad_samples = {}
     X_grads = {}
 
-    for index_a, block_a in x_a:
+    for index_a, block_a in x_a.items():
         lam_a = index_a["spherical_harmonics_l"]
         sigma_a = index_a["inversion_sigma"]
         order_a = index_a["order_nu"]
@@ -219,7 +220,7 @@ def cg_combine(
             block_a.properties
         )  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
-        for index_b, block_b in x_b:
+        for index_b, block_b in x_b.items():
             lam_b = index_b["spherical_harmonics_l"]
             sigma_b = index_b["inversion_sigma"]
             order_b = index_b["order_nu"]
@@ -469,7 +470,7 @@ def cg_combine(
                 # builds all products in one go
                 if mp:
                     if isinstance(center_slice, slice) or len(center_slice):
-                        one_shot_blocks = clebsch_gordan.combine_einsum(
+                        one_shot_blocks = clebsch_gordan.combine(
                             block_a.values[center_slice][:, :, sel_feats[:, 0]],
                             block_b.values[:, :, sel_feats[:, 1]],
                             L,
@@ -483,7 +484,7 @@ def cg_combine(
 
                 else:
                     if isinstance(neighbor_slice, slice) or len(neighbor_slice):
-                        one_shot_blocks = clebsch_gordan.combine_einsum(
+                        one_shot_blocks = clebsch_gordan.combine(
                             block_a.values[neighbor_slice][:, :, sel_feats[:, 0]],
                             block_b.values[b_slice][:, :, sel_feats[:, 1]],
                             L,
@@ -495,14 +496,14 @@ def cg_combine(
                             grad_b = block_b.gradient("positions")
                             grad_a_data = np.swapaxes(grad_a.data, 1, 2)
                             grad_b_data = np.swapaxes(grad_b.data, 1, 2)
-                            one_shot_grads = clebsch_gordan.combine_einsum(
+                            one_shot_grads = clebsch_gordan.combine(
                                 block_a.values[grad_a.samples["sample"]][
                                     neighbor_slice, :, sel_feats[:, 0]
                                 ],
                                 grad_b_data[b_slice][..., sel_feats[:, 1]],
                                 L=L,
                                 combination_string="iq,iaq->iaq",
-                            ) + clebsch_gordan.combine_einsum(
+                            ) + clebsch_gordan.combine(
                                 block_b.values[grad_b.samples["sample"]][b_slice][
                                     :, :, sel_feats[:, 1]
                                 ],
@@ -531,7 +532,7 @@ def cg_combine(
             continue  # skips empty blocks
         nz_idx.append(KEY)
         #         print(KEY, X_samples[KEY], len(X_blocks[KEY]) , X_blocks[KEY][0])
-        block_data = np.concatenate(X_blocks[KEY], axis=-1)
+        block_data = torch.concatenate(X_blocks[KEY], axis=-1)
         sph_components = Labels(
             ["spherical_harmonics_m"],
             np.asarray(range(-L, L + 1), dtype=np.int32).reshape(-1, 1),
@@ -867,7 +868,7 @@ def apply_pca(rhoi, pca_tmap):
     return pca_tmap
 
 
-def _pca(feat, npca=0.95, slice_samples=None):
+def _pca(feat, npca: Union[float, None] = 0.95, slice_samples: Optional[int] = None):
     """
     feat: TensorMap
     """

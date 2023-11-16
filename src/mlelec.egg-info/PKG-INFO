@@ -1,0 +1,8 @@
+Metadata-Version: 2.1
+Name: mlelec
+Version: 0.0.0
+Summary: TODO
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+
+Integrating atomistic ML models and electronic structure 
