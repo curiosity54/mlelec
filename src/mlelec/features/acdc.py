@@ -40,7 +40,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         cg = ClebschGordanReal(lmax=lcut)
     rho_prev = rho1i
     # compute nu order feature recursively
-    for _ in range(order_nu - 1):
+    for _ in range(order_nu - 2):
         rho_x = cg_increment(
             rho_prev,
             rho1i,
