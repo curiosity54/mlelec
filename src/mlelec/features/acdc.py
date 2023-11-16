@@ -95,12 +95,22 @@ def pair_features(
         calculator_allpairs = PairExpansion(hypers_allpairs)
         rho0_ij = calculator_allpairs.compute(frames)
 
+    # rho0_ij = acdc_standardize_keys(rho0_ij)
+    import metatensor
+
+    blocks = []
+    for k, b in rho0_ij.items():
+        bl = metatensor.sort_block(b)
+        # print(b.samples, bl.samples)
+        blocks.append(bl)
+    rho0_ij = TensorMap(rho0_ij.keys, blocks)
+
     rho0_ij = acdc_standardize_keys(rho0_ij)
     if rhonu_i is None:
         rhonu_i = single_center_features(
             frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
-
+    print(rhonu_i.keys, rho0_ij.keys)
     if not both_centers:
         rhonu_ij = cg_combine(
             rhonu_i,
