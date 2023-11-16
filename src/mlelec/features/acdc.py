@@ -40,7 +40,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         cg = ClebschGordanReal(lmax=lcut)
     rho_prev = rho1i
     # compute nu order feature recursively
-    for _ in range(order_nu - 1):
+    for _ in range(order_nu - 2):
         rho_x = cg_increment(
             rho_prev,
             rho1i,
@@ -63,14 +63,14 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     return rho_x
 
 
-def pair_feature(
+def pair_features(
     frames: List[ase.Atoms],
     hypers: dict,
-    cg,
+    cg=None,
     rhonu_i: TensorMap = None,
-    order_nu=Union[List[int], int, None],
+    order_nu: Union[List[int], int] = None,
     all_pairs: bool = False,
-    both_centers=False,
+    both_centers: bool = False,
     lcut: int = 3,
     **kwargs,
 ):
@@ -81,6 +81,9 @@ def pair_feature(
 
     calculator = PairExpansion(**hypers)
     rho0_ij = calculator.compute(frames)
+    if not (frames[0].pbc.any()):
+        for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
+            rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
 
     if all_pairs and hypers["interaction_cutoff"] < np.max(
         [np.max(f.get_all_distances()) for f in frames]
@@ -92,12 +95,22 @@ def pair_feature(
         calculator_allpairs = PairExpansion(hypers_allpairs)
         rho0_ij = calculator_allpairs.compute(frames)
 
+    # rho0_ij = acdc_standardize_keys(rho0_ij)
+    import metatensor
+
+    blocks = []
+    for k, b in rho0_ij.items():
+        bl = metatensor.sort_block(b)
+        # print(b.samples, bl.samples)
+        blocks.append(bl)
+    rho0_ij = TensorMap(rho0_ij.keys, blocks)
+
     rho0_ij = acdc_standardize_keys(rho0_ij)
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            order_nu, hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
-
+    print(rhonu_i.keys, rho0_ij.keys)
     if not both_centers:
         rhonu_ij = cg_combine(
             rhonu_i,
