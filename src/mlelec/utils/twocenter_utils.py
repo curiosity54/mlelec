@@ -94,6 +94,14 @@ def _to_blocks(
         ["value"],
     )
     orbs_tot, _ = _orbs_offsets(orbitals)
+
+    block_builder = TensorBuilder(
+        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
+        ["structure", "center", "neighbor"],
+        [["m1"], ["m2"]],
+        ["value"],
+    )
+    orbs_tot, _ = _orbs_offsets(orbitals)
     for A in range(len(frames)):
         frame = frames[A]
         ham = matrices[A]
