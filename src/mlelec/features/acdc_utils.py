@@ -12,12 +12,22 @@ import metatensor
 # from ..utils.symmetry import ClebschGordanReal
 def fix_gij(rho0_ij):
     """
-    Assume sorted samples <<<<
-
-    Inserts spherical harm. > 0 on-site (e.g. center=0/neigh=0 or center=1/neigh=1) terms which are 0 and rascaline does not provide them anymore
+    - Add self pairs
+    - Sort samples
+    - Add species_neighbor to properties
     """
     blocks = []
     for key, block in rho0_ij.items():
+        neigh_species = key["species_atom_2"]  # add species_neighbor to  properties
+        bprops = np.concatenate(
+            (
+                np.array([[neigh_species]] * len(block.properties.values)),
+                block.properties.values,
+            ),
+            axis=1,
+        )
+        properties = Labels(["species_neighbor_1"] + block.properties.names, bprops)
+
         if key["spherical_harmonics_l"] != 0:
             val = list(key.values)
             val[key.names.index("spherical_harmonics_l")] = 0
@@ -27,7 +37,6 @@ def fix_gij(rho0_ij):
             bvalues = np.zeros(
                 (bsamples.values.shape[0], block.values.shape[1], block.values.shape[2])
             )
-
             tot = [list(l) for l in np.asarray(bsamples.values)]
             bsam = np.asarray(block.samples.values)
             idx = [tot.index(list(b)) for b in bsam]
@@ -37,11 +46,16 @@ def fix_gij(rho0_ij):
                 values=bvalues,
                 samples=bsamples,
                 components=block.components,
-                properties=block.properties,
+                properties=properties,
             )
         else:
-            block = block.copy()
-        block = metatensor.sort_block(block)
+            block = TensorBlock(
+                values=block.values,
+                samples=block.samples,
+                components=block.components,
+                properties=properties,
+            )
+        block = metatensor.sort_block(block)  # sort block samples
         blocks.append(block)
     return TensorMap(rho0_ij.keys, blocks)
 
@@ -236,6 +250,8 @@ def cg_combine(
             + tuple(n + "_b" for n in x_b.property_names)
             + ("l_" + str(NU),)
         )
+    # else:
+    #     print(feature_names)
 
     X_idx = {}
     X_blocks = {}
@@ -627,22 +643,20 @@ def cg_increment(
     nu = x_nu.keys["order_nu"][0]
 
     feature_roots = _remove_suffix(x_1.block(0).properties.names)
-
-    if nu == 1:
-        feature_names = (
-            tuple(root + "_1" for root in feature_roots)
-            + ("l_1",)
-            + tuple(root + "_2" for root in feature_roots)
-            + ("l_2",)
-        )
-    else:
-        feature_names = (
-            tuple(x_nu.block(0).properties.names)
-            + ("k_" + str(nu + 1),)
-            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-            + ("l_" + str(nu + 1),)
-        )
-
+    # if nu == 1:
+    #     feature_names = (
+    #         tuple(root + "_1" for root in feature_roots)
+    #         + ("l_1",)
+    #         + tuple(root + "_2" for root in feature_roots)
+    #         + ("l_2",)
+    #     )
+    # else:
+    feature_names = (
+        tuple(x_nu.block(0).properties.names)
+        + ("k_" + str(nu + 1),)
+        + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+        + ("l_" + str(nu + 1),)
+    )
     return cg_combine(
         x_nu,
         x_1,

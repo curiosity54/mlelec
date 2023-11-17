@@ -42,7 +42,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
-        rho_x = cg_increment(
+        rho_x = cg_combine(
             rho_prev,
             rho1i,
             clebsch_gordan=cg,
@@ -105,7 +105,6 @@ def pair_features(
         rhonu_i = single_center_features(
             frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
-    # print(rho0_ij[0].values, rhonu_i[0].values)
     if not both_centers:
         rhonu_ij = cg_combine(
             rhonu_i,
@@ -113,6 +112,7 @@ def pair_features(
             clebsch_gordan=cg,
             other_keys_match=["species_center"],
             lcut=lcut,
+            feature_names=kwargs.get("feature_names", None),
         )
         return rhonu_ij
 
@@ -156,8 +156,7 @@ def twocenter_hermitian_features(
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
     blocks = []
-    # central blocks
-    for k, b in single_center:
+    for k, b in single_center.items():
         keys.append(
             tuple(k)
             + (
@@ -165,26 +164,19 @@ def twocenter_hermitian_features(
                 0,
             )
         )
-        # ===
         # `Try to handle the case of no computed features
-        if len(b.samples.tolist()) == 0:
+        if len(list(b.samples.values)) == 0:
             samples_array = b.samples
         else:
-            samples_array = np.vstack(b.samples.tolist())
-            samples_array = np.hstack([samples_array, samples_array[:, -1:]]).astype(
-                np.int32
-            )
-        # ===
-        # samples_array = np.vstack(b.samples.tolist())
+            samples_array = np.asarray(b.samples.values)
+            samples_array = np.hstack(
+                [samples_array, samples_array[:, -1:]]
+            )  # .astype(np.int32)
         blocks.append(
             TensorBlock(
                 samples=Labels(
-                    names=b.samples.names + ("neighbor",),
+                    names=b.samples.names + ["neighbor"],
                     values=samples_array,
-                    # values=np.asarray(
-                    #     np.hstack([samples_array, samples_array[:, -1:]]),
-                    #     dtype=np.int32,
-                    # ),
                 ),
                 components=b.components,
                 properties=b.properties,
@@ -192,7 +184,7 @@ def twocenter_hermitian_features(
             )
         )
 
-    for k, b in pair:
+    for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
             idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
@@ -204,12 +196,16 @@ def twocenter_hermitian_features(
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             for smp_up in range(len(idx_up)):
-                ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
                 for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
+                    ij_lo = b.samples.view(["neighbor", "center"]).values[
+                        idx_lo[smp_lo]
+                    ]
+                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
                     if (
-                        b.samples[idx_up[smp_up]]["structure"]
-                        != b.samples[idx_lo[smp_lo]]["structure"]  # noqa: W503
+                        b.samples["structure"][idx_up[smp_up]]
+                        != b.samples["structure"][idx_lo[smp_lo]]
                     ):
                         raise ValueError(
                             f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
@@ -224,7 +220,7 @@ def twocenter_hermitian_features(
                 TensorBlock(
                     samples=Labels(
                         names=b.samples.names,
-                        values=np.asarray(b.samples[idx_up].tolist(), dtype=np.int32),
+                        values=np.asarray(b.samples.values[idx_up]),
                     ),
                     components=b.components,
                     properties=b.properties,
@@ -235,7 +231,7 @@ def twocenter_hermitian_features(
                 TensorBlock(
                     samples=Labels(
                         names=b.samples.names,
-                        values=np.asarray(b.samples[idx_up].tolist(), dtype=np.int32),
+                        values=np.asarray(b.samples.values[idx_up]),
                     ),
                     components=b.components,
                     properties=b.properties,
@@ -245,18 +241,18 @@ def twocenter_hermitian_features(
         elif k["species_center"] < k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
-            blocks.append(
-                TensorBlock(
-                    samples=b.samples,
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values.copy(),
-                )
-            )
+            blocks.append(b.copy())
+            # TensorBlock(
+            #     samples=b.samples,
+            #     components=b.components,
+            #     properties=b.properties,
+            #     values=b.values.copy(),
+            # )
+            # )
 
     return TensorMap(
         keys=Labels(
-            names=pair.keys.names + ("block_type",),
+            names=pair.keys.names + ["block_type"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,
