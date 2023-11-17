@@ -18,6 +18,7 @@ from mlelec.features.acdc_utils import (
     cg_combine,
     _pca,
     relabel_key_contract,
+    fix_gij,
 )
 from typing import List, Optional, Union
 
@@ -81,9 +82,6 @@ def pair_features(
 
     calculator = PairExpansion(**hypers)
     rho0_ij = calculator.compute(frames)
-    if not (frames[0].pbc.any()):
-        for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
-            rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
 
     if all_pairs and hypers["interaction_cutoff"] < np.max(
         [np.max(f.get_all_distances()) for f in frames]
@@ -96,21 +94,18 @@ def pair_features(
         rho0_ij = calculator_allpairs.compute(frames)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
-    import metatensor
-
-    blocks = []
-    for k, b in rho0_ij.items():
-        bl = metatensor.sort_block(b)
-        # print(b.samples, bl.samples)
-        blocks.append(bl)
-    rho0_ij = TensorMap(rho0_ij.keys, blocks)
-
+    rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+
+    if not (frames[0].pbc.any()):
+        for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
+            rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
+
     if rhonu_i is None:
         rhonu_i = single_center_features(
             frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
-    print(rhonu_i.keys, rho0_ij.keys)
+    # print(rho0_ij[0].values, rhonu_i[0].values)
     if not both_centers:
         rhonu_ij = cg_combine(
             rhonu_i,

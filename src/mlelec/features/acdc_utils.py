@@ -8,7 +8,42 @@ import scipy
 from typing import List, Optional, Union
 import metatensor
 
+
 # from ..utils.symmetry import ClebschGordanReal
+def fix_gij(rho0_ij):
+    """
+    Assume sorted samples <<<<
+
+    Inserts spherical harm. > 0 on-site (e.g. center=0/neigh=0 or center=1/neigh=1) terms which are 0 and rascaline does not provide them anymore
+    """
+    blocks = []
+    for key, block in rho0_ij.items():
+        if key["spherical_harmonics_l"] != 0:
+            val = list(key.values)
+            val[key.names.index("spherical_harmonics_l")] = 0
+            key_copy = Labels(key.names, np.asarray(val).reshape(1, -1))
+
+            bsamples = rho0_ij.block(key_copy).samples
+            bvalues = np.zeros(
+                (bsamples.values.shape[0], block.values.shape[1], block.values.shape[2])
+            )
+
+            tot = [list(l) for l in np.asarray(bsamples.values)]
+            bsam = np.asarray(block.samples.values)
+            idx = [tot.index(list(b)) for b in bsam]
+
+            bvalues[idx] = block.values
+            block = TensorBlock(
+                values=bvalues,
+                samples=bsamples,
+                components=block.components,
+                properties=block.properties,
+            )
+        else:
+            block = block.copy()
+        block = metatensor.sort_block(block)
+        blocks.append(block)
+    return TensorMap(rho0_ij.keys, blocks)
 
 
 def _remove_suffix(names, new_suffix=""):
@@ -78,6 +113,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         blocks.append(
             TensorBlock(
                 values=torch.tensor(block.values),
+                # values=np.asarray(block.values),
                 samples=new_samples,
                 components=block.components,
                 properties=Labels(
@@ -299,15 +335,25 @@ def cg_combine(
                         neighbor_slice.append(smp_a)
                         smp_b += 1
                     neighbor_slice = np.asarray(neighbor_slice)
-                    print(
-                        index_a,
-                        index_b,
-                        samples_b,
-                        samples_a,
-                        neighbor_slice,
-                        #     block_a.samples.values[neighbor_slice],
-                        #     block_b.samples,
-                    )
+                    # print(
+                    #     index_a,
+                    #     index_b,
+                    #     #     samples_b,
+                    #     # samples_a,
+                    #     # "SA",
+                    #     # samples_b,
+                    #     # "SB",
+                    #     neighbor_slice,
+                    #     "NS",
+                    #     block_a.samples.values[neighbor_slice],
+                    #     "A samples",
+                    #     block_b.samples,
+                    #     "B samples",
+                    #     block_a.values[neighbor_slice],
+                    #     "A values",
+                    #     block_b.values[b_slice],
+                    #     "B value",
+                    # )
 
                 elif "neighbor" in samples_b.names and "neighbor" in samples_a.names:
                     # taking tensor products of gij and gik
@@ -527,10 +573,9 @@ def cg_combine(
 
                 X_idx[KEY].append(sel_idx)
                 if len(one_shot_blocks):
-                    print(X_blocks[KEY], "e", one_shot_blocks, "<<<1")
+                    # print(X_blocks[KEY], "e", one_shot_blocks, "<<<1")
                     X_blocks[KEY].append(one_shot_blocks)
                 if grad_components is not None:
-                    print("HERE")
                     X_grads[KEY].append(one_shot_grads)
 
     # turns data into sparse storage format (and dumps any empty block in the process)
@@ -543,8 +588,7 @@ def cg_combine(
             continue  # skips empty blocks
         nz_idx.append(KEY)
         #         print(KEY, X_samples[KEY], len(X_blocks[KEY]) , X_blocks[KEY][0])
-        print(X_blocks[KEY], X_samples[KEY])
-        block_data = torch.cat(X_blocks[KEY], dim=0)
+        block_data = torch.cat(X_blocks[KEY], dim=-1)
         sph_components = Labels(
             ["spherical_harmonics_m"],
             np.asarray(range(-L, L + 1), dtype=np.int32).reshape(-1, 1),
@@ -807,7 +851,7 @@ def compute_rhoi_pca(
         s_sph_all.append(s[retained])
         pca_vh_all.append(vh[retained].T)
         # print("singular values", s[retained]/s[0])
-        print(vh[retained].T.shape, len(block.properties))
+        # print(vh[retained].T.shape, len(block.properties))
         pblock = TensorBlock(
             values=vh[retained].T,
             components=[],
