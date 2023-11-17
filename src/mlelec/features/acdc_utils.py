@@ -7,6 +7,7 @@ import torch
 import scipy
 from typing import List, Optional, Union
 import metatensor
+import metatensor.operations as operations
 
 
 # from ..utils.symmetry import ClebschGordanReal
@@ -826,13 +827,13 @@ def compute_rhoi_pca(
         assert len(npca) == len(rhoi)
     else:
         npca = [npca] * len(rhoi)
-
     pca_vh_all = []
     s_sph_all = []
     pca_blocks = []
     for idx, (key, block) in enumerate(rhoi.items()):
         nu, sigma, l, spi = key.values
         if slice_samples is not None:
+            # FIXME - doesnt work for cuda tensors
             block = operations.slice_block(
                 block,
                 axis="samples",
@@ -853,7 +854,10 @@ def compute_rhoi_pca(
             npc = vh.shape[1]
 
         elif 0 < npca[idx] < 1:
-            npc = (explained_var > npca[idx]).nonzero()[1, 0]
+            try:
+                npc = (explained_var > npca[idx]).nonzero()[1, 0]
+            except:
+                npc = min(xl.shape[0], xl.shape[1])
         # allow absolute number of features to retain
         elif npca[idx] < min(xl.shape[0], xl.shape[1]):
             npc = npca[idx]

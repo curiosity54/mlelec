@@ -3,7 +3,8 @@ import numpy as np
 import math
 from scipy.spatial.transform import Rotation
 import wigners
-from typing import Dict
+from typing import Dict, Optional, List
+from metatensor import TensorMap
 
 # sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -62,6 +63,43 @@ def check_inversion_equivariance(x: torch.tensor, property_calculator):
     assert torch.allclose(
         pred, -1 * inv_pred, atol=1e-6, rtol=1e-6
     ), "Inversion equivariance test failed"
+
+
+def check_equivariance_tmap(
+    t: TensorMap,
+    t_rot: Optional[TensorMap] = None,
+    rtol=1e-8,
+    atol=1e-8,
+    device: str = None,
+    rot_angles: List[float] = [0.0, 0.0, 0.0],
+):
+    try:
+        lmax = max(t.keys["spherical_harmonics_l"])
+    except:
+        raise ValueError("No spherical harmonics in the tensor map")
+    wd = {}
+    for l in range(lmax + 1):
+        wd[l] = _wigner_d_real(l, *rot_angles)
+
+    if t_rot is not None:
+        assert t.keys == t_rot.keys
+        for i, (key, block) in enumerate(t.items()):
+            l = key["spherical_harmonics_l"]
+            r = torch.einsum("xy, nyf-> nxf", wd[l], block.values.to(device).double())
+            if torch.linalg.norm(t_rot[i].values.to(device).double() - r) > atol:
+                raise ValueError(
+                    "Rotation equivariance test failed at {} block".format(i)
+                )
+            # else:
+            #     print(torch.linalg.norm(t_rot[i].values.to(device).double() - r))
+        print("Rotation equivariance test passed")
+
+    else:
+        print(
+            "No rotated tensor map provided, will use first and seconf structure to test equivariance"
+        )
+        test_samples = True
+        raise NotImplementedError("Not implemented yet")
 
 
 def _wigner_d(L, alpha, beta, gamma):

@@ -75,6 +75,8 @@ def pair_features(
     lcut: int = 3,
     **kwargs,
 ):
+    if not isinstance(frames, list):
+        frames = [frames]
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
 
@@ -169,9 +171,7 @@ def twocenter_hermitian_features(
             samples_array = b.samples
         else:
             samples_array = np.asarray(b.samples.values)
-            samples_array = np.hstack(
-                [samples_array, samples_array[:, -1:]]
-            )  # .astype(np.int32)
+            samples_array = np.hstack([samples_array, samples_array[:, -1:]])
         blocks.append(
             TensorBlock(
                 samples=Labels(
@@ -242,13 +242,6 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-            # TensorBlock(
-            #     samples=b.samples,
-            #     components=b.components,
-            #     properties=b.properties,
-            #     values=b.values.copy(),
-            # )
-            # )
 
     return TensorMap(
         keys=Labels(
@@ -259,6 +252,16 @@ def twocenter_hermitian_features(
     )
 
 
-def twocenter_features():
+def twocenter_features(single_center: TensorMap, pair: TensorMap) -> TensorMap:
     # no hermitian symmetry
+    keys = []
+    blocks = []
+    for k, b in single_center.items():
+        keys.append(
+            tuple(k)
+            + (
+                k["species_center"],
+                0,
+            )
+        )
     pass
