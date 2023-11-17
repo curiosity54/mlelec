@@ -1,0 +1,6 @@
+features/acdc_utils/
+ - Simplify cg_combine
+ - Extend fix_gij to periodic systems 
+ - Add non symmetrized two-center features 
+features/metatensor_utils/
+ - Simplify TensorBuilder  
