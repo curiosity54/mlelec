@@ -5,13 +5,8 @@ from metatensor import TensorMap
 import torch
 import ase
 import numpy as np
-
-# from mlelec.utils.metatensor_utils import TensorBuilder #TODO
-
-
-def _to_tensormap(block_data: dict):
-    # support for blocks in dict format- just convert to tensormap before using tensormap utils
-    pass
+from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
+from mlelec.utils.symmetry import ClebschGordanReal
 
 
 def fix_orbital_order(matrix: torch.tensor, frame: ase.Atoms, orbital: dict):
@@ -45,14 +40,14 @@ def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
 
 def _components_idx(l):
     """just a mini-utility function to get the m=-l..l indices"""
-    return torch.arange(-l, l + 1, dtype=int).reshape(2 * l + 1, 1)
+    return np.arange(-l, l + 1, dtype=int).reshape(2 * l + 1, 1)
 
 
 def _components_idx_2d(li, lj):
     """indexing the entries in a 2d (l_i, l_j) block of the hamiltonian
     in the uncoupled basis"""
-    return torch.tensor(
-        torch.meshgrid(_components_idx(li), _components_idx(lj)), dtype=int
+    return np.asarray(
+        np.meshgrid(_components_idx(li), _components_idx(lj)), dtype=int
     ).T.reshape(-1, 2)
 
 
@@ -88,7 +83,7 @@ def _atom_blocks_idx(frames, orbs_tot):
 
 
 def _to_blocks(
-    matrices: Union(List[torch.tensor], torch.tensor),
+    matrices: Union[List[torch.tensor], torch.tensor],
     frames: List[ase.Atoms],
     orbitals: dict,
 ):
@@ -135,8 +130,9 @@ def _to_blocks(
 
                 # print(block_data, block_data.shape)
                 if block_type == 1:
-                    block_data_plus = (block_data + block_data.T) * 1 / np.sqrt(2)
-                    block_data_minus = (block_data - block_data.T) * 1 / np.sqrt(2)
+                    print(block_data)
+                    block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
+                    block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
                 ki_offset = 0
                 for ni, li, mi in orbitals[ai]:
                     if (
@@ -255,9 +251,8 @@ def _to_matrix(
         matrices.append(matrix)
 
     # loops over block types
-    for idx, block in blocks:
-        # I can't loop over the frames directly, so I'll keep track
-        # of the frame with these two variables
+    for idx, block in blocks.items():
+        # dense idx and cur_A track the frame
         dense_idx = -1
         cur_A = -1
 
@@ -299,7 +294,7 @@ def _to_matrix(
                 lj,
             )
 
-    return matrices
+    return torch.stack(matrices)
 
 
 def _fill(
@@ -338,9 +333,6 @@ def _fill(
             else:
                 matrix[islice, jslice] -= values_2norm.T
                 matrix[jslice, islice] -= values_2norm
-
-
-from .symmetry import ClebschGordanReal
 
 
 def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):

@@ -9,9 +9,10 @@ import ase
 class ModelTargets:  # generic class for different targets
     def __init__(self, name: str = "hamiltonian"):
         self.target_class = globals()[name]
+        print(self.target_class)
 
-    def instantiate(self, tensor: torch.tensor, frames, orbitals, overlap):
-        self.target = self.target_class(tensor)
+    def instantiate(self, tensor: torch.tensor, **kwargs):
+        self.target = self.target_class(tensor, **kwargs)
         return self.target
 
 
@@ -36,17 +37,25 @@ class TwoCenter:  # class for second-rank tensors
         frames: Optional[List[ase.Atoms]] = None,
     ):
         assert (
-            len(tensor.shape) == 2
-        ), "Second rank tensor must be of shape (n,n)"  # FIXME
+            len(tensor.shape) == 3
+        ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
         self.tensor = tensor
         self.orbitals = orbitals
         self.frames = frames
 
-    def _blocks(self):
+    def _to_blocks(self):
         self.blocks = twocenter_utils._to_blocks(
             self.tensor, self.frames, self.orbitals
         )
-        self.block_keys = self.blocks.keys()
+        self.block_keys = self.blocks.keys
+        print(self.block_keys)
+        return self.blocks
+
+    def _blocks_to_tensor(self):
+        self.reconstruct = twocenter_utils._to_matrix(
+            self.blocks, self.frames, self.orbitals
+        )
+        return self.reconstruct
 
     def eigval(self, overlap=None, first: int = 0, last: int = -1):
         eig = Eigenvalues(self.tensor, overlap)
@@ -54,14 +63,15 @@ class TwoCenter:  # class for second-rank tensors
 
 
 class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
-    def __init__(self, hamiltonian, orbitals, frames):
-        super().__init__(hamiltonian, orbitals, frames)
-        print(self.tensor)
+    def __init__(self, tensor, orbitals, frames):
+        super().__init__(tensor, orbitals, frames)
+        # print(self.tensor)
 
     def orthogonalize(self, overlap: torch.tensor):
         twocenter_utils.lowin_orthogonalize(self.tensor, overlap)
 
-    def project_small(new_basis):
+    def change_basis(new_basis):
+        # project onto another basis
         pass
 
 
