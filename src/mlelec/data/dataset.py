@@ -15,8 +15,8 @@ import numpy as np
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
 class precomputed_molecules(Enum):
-    water_1000 = "../../examples/data/water_1000"
-    ethane = "../../examples/data/ethane"
+    water_1000 = "examples/data/water_1000"
+    ethane = "examples/data/ethane"
 
 
 # No model/feature info here
