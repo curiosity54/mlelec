@@ -70,7 +70,6 @@ class MoleculeDataset(Dataset):
                 self.aux_data_names.append("overlap")
 
         if self.aux_data_names is not None:
-            print(self.aux_data_names)
             self.aux_data = {t: [] for t in self.aux_data_names}
             self.load_aux_data(aux_data=aux_data)
 
@@ -99,17 +98,18 @@ class MoleculeDataset(Dataset):
                     print(self.data_path + "/{}.hickle".format(t))
                     self.target[t] = hickle.load(
                         self.data_path + "/{}.hickle".format(t)
-                    ).to(device=self.device)
+                    )[self.frame_slice].to(device=self.device)
                     #os.join(self.aux_path, "{}.hickle".format(t))
-            except:
-                raise FileNotFoundError("Required target not found at the given path")
+            except Exception as e:
+                print(e)
+                # raise FileNotFoundError("Required target not found at the given path")
                 # TODO: generate data instead?
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
             for t in self.aux_data_names:
                 if torch.is_tensor(aux_data[t]):
-                    self.aux_data[t] = aux_data[t].to(device=self.device)
+                    self.aux_data[t] = aux_data[t][self.frame_slice].to(device=self.device)
                 else: 
                     self.aux_data[t] = aux_data[t]
 
@@ -121,7 +121,7 @@ class MoleculeDataset(Dataset):
                     )
                     #os.join(self.aux_path, "{}.hickle".format(t))
                     if torch.is_tensor(self.aux_data[t]):
-                        self.aux_data[t] = self.aux_data[t].to(device=self.device)
+                        self.aux_data[t] = self.aux_data[t][self.frame_slice].to(device=self.device)
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
