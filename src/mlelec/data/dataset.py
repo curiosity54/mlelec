@@ -118,11 +118,9 @@ class MoleculeDataset(Dataset):
 
 
 class MLDataset(Dataset):
-    def __init__(
-        self,
-        molecule_data: MoleculeDataset,
-    ):
+    def __init__(self, molecule_data: MoleculeDataset, device: str = "cpu"):
         super().__init__()
+        self.device = device
         self.structures = molecule_data.structures
         self.target = molecule_data.target
         self.target_class = ModelTargets(molecule_data.target_names[0])
@@ -130,6 +128,7 @@ class MLDataset(Dataset):
             next(iter(molecule_data.target.values())),  # FIXME
             frames=self.structures,
             orbitals=molecule_data.aux_data.get("orbitals", None),
+            device=device,
         )
 
         self.nstructs = len(self.structures)
@@ -147,6 +146,8 @@ class MLDataset(Dataset):
 
     def _get_subset(self, y, indices: torch.tensor):
         assert isinstance(y, TensorMap)
+        # for k, b in y.items():
+        #     b = b.values.to(device=self.device)
         return operations.slice(
             y,
             axis="samples",

@@ -75,6 +75,7 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def __init__(
         self, tensor, orbitals, frames, model_strategy: str = "coupled", **kwargs
     ):
+        device = kwargs.get("device", "cpu")
         super().__init__(tensor, orbitals, frames)
         assert torch.allclose(
             self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
@@ -84,14 +85,17 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         if self.model_strategy == "coupled":
             self._couple_blocks()
             self.blocks = self.blocks_coupled
+            self.block_keys = self.coupled_keys
         else:
             self.model_strategy = "uncoupled"
             self.blocks = self.blocks_uncoupled
+            self.block_keys = self.uncoupled_keys
         # print(self.tensor)
+        self.device = device
 
     def _to_blocks(self):
         self.blocks_uncoupled = super()._to_blocks()
-        self.block_keys = self.blocks_uncoupled.keys
+        self.uncoupled_keys = self.blocks_uncoupled.keys
 
     def _couple_blocks(self):
         self.blocks_coupled = twocenter_utils._to_coupled_basis(self.blocks)

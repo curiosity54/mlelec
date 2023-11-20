@@ -86,6 +86,7 @@ def _to_blocks(
     matrices: Union[List[torch.tensor], torch.tensor],
     frames: List[ase.Atoms],
     orbitals: dict,
+    device: str = None,
 ):
     block_builder = TensorBuilder(
         ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
@@ -347,6 +348,7 @@ def _to_coupled_basis(
     blocks: Union[torch.tensor, TensorMap],
     orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
+    device: str = None,
 ):
     if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
@@ -355,7 +357,7 @@ def _to_coupled_basis(
     print(blocks.keys)
     if cg is None:
         lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
-        cg = ClebschGordanReal(lmax)
+        cg = ClebschGordanReal(lmax, device=device)
 
     block_builder = TensorBuilder(
         ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j", "L"],
@@ -401,5 +403,59 @@ def _to_coupled_basis(
     return block_builder.build()
 
 
-def _to_uncoupled_basis():
-    pass
+def _to_uncoupled_basis(
+    blocks: TensorMap,
+    orbitals: Optional[dict] = None,
+    cg: Optional[ClebschGordanReal] = None,
+    device: str = None,
+):
+    if cg is None:
+        lmax = max(blocks.keys["L"])
+        cg = ClebschGordanReal(lmax)
+
+    block_builder = TensorBuilder(
+        # last key name is L, we remove it here
+        blocks.keys.names[:-1],
+        # sample_names from the blocks
+        # this is because, e.g. for multiple molecules, we
+        # may have an additional sample name indexing the
+        # molecule id
+        blocks.sample_names,
+        [["m1"], ["m2"]],
+        ["value"],
+    )
+    for idx, block in blocks.items():
+        block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+        block_idx = (block_type, ai, ni, li, aj, nj, lj)
+        if block_idx in block_builder.blocks:
+            continue
+        coupled = {}
+        for L in range(np.abs(li - lj), li + lj + 1):
+            bidx = blocks.keys.position(block_idx + (L,))
+            if bidx is not None:
+                coupled[L] = torch.moveaxis(blocks.block(bidx).values, -1, -2)
+        decoupled = cg.decouple({(li, lj): coupled})
+
+        new_block = block_builder.add_block(
+            keys=block_idx,
+            properties=np.asarray([[0]], dtype=np.int32),
+            components=[_components_idx(li), _components_idx(lj)],
+        )
+        new_block.add_samples(
+            labels=np.asarray(block.samples.values).reshape(block.samples.shape[0], -1),
+            data=torch.moveaxis(decoupled, 1, -1),
+        )
+    return block_builder.build()
+
+
+def map_targetkeys_to_featkeys(features, key):
+    block_type, ai, ni, li, aj, nj, lj, L = key
+    inversion_sigma = (-1) ** (li + lj + L)
+    block = features.block(
+        block_type=block_type,
+        spherical_harmonics_l=L,
+        inversion_sigma=inversion_sigma,
+        species_center=ai,
+        species_neighbor=aj,
+    )
+    return block
