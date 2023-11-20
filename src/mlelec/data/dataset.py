@@ -34,8 +34,10 @@ class MoleculeDataset(Dataset):
         frames: Optional[List[ase.Atoms]] = None,
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
+        device: str = "cpu",
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
+        self.device = device
         self.path = frame_path
         self.structures = None
         self.mol_name = mol_name.lower()
@@ -89,7 +91,7 @@ class MoleculeDataset(Dataset):
         # TODO: ensure that all keys of self.target names are filled even if they are not provided in target_data
         if target_data is not None:
             for t in self.target_names:
-                self.target[t] = target_data[t]
+                self.target[t] = target_data[t].to(device=self.device)
 
         else:
             try:
@@ -97,7 +99,8 @@ class MoleculeDataset(Dataset):
                     print(self.data_path + "/{}.hickle".format(t))
                     self.target[t] = hickle.load(
                         self.data_path + "/{}.hickle".format(t)
-                    )
+                    ).to(device=self.device)
+                    #os.join(self.aux_path, "{}.hickle".format(t))
             except:
                 raise FileNotFoundError("Required target not found at the given path")
                 # TODO: generate data instead?
@@ -105,7 +108,10 @@ class MoleculeDataset(Dataset):
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
             for t in self.aux_data_names:
-                self.aux_data[t] = aux_data[t]
+                if torch.is_tensor(aux_data[t]):
+                    self.aux_data[t] = aux_data[t].to(device=self.device)
+                else: 
+                    self.aux_data[t] = aux_data[t]
 
         else:
             try:
@@ -113,8 +119,12 @@ class MoleculeDataset(Dataset):
                     self.aux_data[t] = hickle.load(
                         self.aux_path + "/{}.hickle".format(t)
                     )
-            except:
-                raise FileNotFoundError("Auxillary data not found at the given path")
+                    #os.join(self.aux_path, "{}.hickle".format(t))
+                    if torch.is_tensor(self.aux_data[t]):
+                        self.aux_data[t] = self.aux_data[t].to(device=self.device)
+            except Exception as e:
+                print(e)
+                # raise FileNotFoundError("Auxillary data not found at the given path")
 
 
 class MLDataset(Dataset):

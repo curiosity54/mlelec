@@ -246,10 +246,10 @@ def _to_matrix(
 
     if device is None:
         device = blocks.block(0).values.device
-    else:
-        assert (
-            device == blocks.block(0).values.device
-        ), "device mismatch between blocks and device argument"
+    # else:
+        # assert (
+        #     device == blocks.block(0).values.device
+        # ), "device mismatch between blocks and device argument"
 
     matrices = []
     for f in frames:
@@ -354,7 +354,6 @@ def _to_coupled_basis(
         print("Converting matrix to blocks before coupling")
         assert orbitals is not None, "Need orbitals to convert matrix to blocks"
         blocks = _to_blocks(blocks, orbitals)
-    print(blocks.keys)
     if cg is None:
         lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
         cg = ClebschGordanReal(lmax, device=device)
@@ -442,20 +441,32 @@ def _to_uncoupled_basis(
             components=[_components_idx(li), _components_idx(lj)],
         )
         new_block.add_samples(
-            labels=np.asarray(block.samples.values).reshape(block.samples.shape[0], -1),
+            labels=np.asarray(block.samples.values).reshape(block.samples.values.shape[0], -1),
             data=torch.moveaxis(decoupled, 1, -1),
         )
     return block_builder.build()
 
 
 def map_targetkeys_to_featkeys(features, key):
-    block_type, ai, ni, li, aj, nj, lj, L = key
+    try:
+        block_type = key['block_type']
+        species_center = key['a_i']
+        species_neighbor = key['a_j']
+        L = key['L']
+        li = key['l_i']
+        lj = key['l_j']
+        ni = key['n_i']
+        nj = key['n_j']
+    except Exception as e:
+        print(e)
+
+        # block_type, ai, ni, li, aj, nj, lj = key
     inversion_sigma = (-1) ** (li + lj + L)
     block = features.block(
         block_type=block_type,
         spherical_harmonics_l=L,
         inversion_sigma=inversion_sigma,
-        species_center=ai,
-        species_neighbor=aj,
+        species_center=species_center,
+        species_neighbor=species_neighbor,
     )
     return block

@@ -465,7 +465,6 @@ class ClebschGordanReal:
 
         |l1 m1> |l2 m2> = \sum_{L M} <L M |l1 m1 l2 m2> |l1 l2 L M>
         """
-        coupled.to(self.device)
         decoupled = {}
         # applies the decoupling to each entry in the dictionary
         for ltuple, lcomponents in coupled.items():
@@ -490,7 +489,7 @@ class ClebschGordanReal:
                     continue
                 for M in range(2 * L + 1):
                     for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                        dec_term[..., m1, m2] += cg * lcomponents[L][..., M]
+                        dec_term[..., m1.type(torch.int), m2.type(torch.int)] += cg * lcomponents[L][..., M]
             # stores the result with a key that drops the l's we have just decoupled
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}

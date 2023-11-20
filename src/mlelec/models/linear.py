@@ -2,10 +2,10 @@
 import torch
 import torch.nn as nn
 from mlelec.data.dataset import MLDataset
-from typing import List, Dict, Optional
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, _to_uncoupled_basis
+from typing import List, Dict, Optional, Union
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, _to_uncoupled_basis, _to_matrix
 from metatensor import Labels, TensorMap, TensorBlock
-
+import mlelec.metrics as mlmetrics
 
 def _norm_layer(x):
     """
@@ -62,12 +62,17 @@ class LinearTargetModel(nn.Module):
         dataset: MLDataset,
         features: Optional[TensorMap] = None,
         device=None,
-        metrics: "l2loss" = None,
+        metrics: Union[str, List[str]] ="l2_loss",
         **kwargs,
     ):
         self.dataset = dataset
+        self.device = device    
         self.metrics = metrics
-        self.loss_fn = getattr(mlelec.metrics, metrics)
+        if isinstance(metrics, str):
+            self.loss_fn = getattr(mlmetrics, metrics.capitalize())
+        else: 
+            self.loss_fns=[getattr(mlmetrics, m.capitalize()) for m in metrics]
+            # TODO: combine losses 
 
         # FIXME: generalize to other targets
         super().__init__()
@@ -95,57 +100,61 @@ class LinearTargetModel(nn.Module):
             pairs = pair_features(
                 dataset.structures,
                 hypers,
-                order_nu=2,
+                order_nu=1,
                 feature_names=single[0].properties.names,
             )
             self.features = twocenter_hermitian_features(single, pairs)
+        self._submodels(self.dataset.target.blocks, **kwargs)
+        self.dummy_property = self.dataset.target.blocks[0].properties
 
     def _submodels(self, target, **kwargs):
         self.submodels = {}
         # return 1 model if no subtargets present, else spawn
         # multiple models
         if len(self.dataset.target.block_keys) == 1:
-            self.models = MLP(
+            self.model = MLP(
                 nlayers=1,
                 nin=self.features.values.shape[-1],
                 nout=1,
                 nhidden=10,
                 bias=False,
+                device=self.device,
             )
         else:
             for k in self.dataset.target.block_keys:
                 feat = map_targetkeys_to_featkeys(self.features, k)
                 # print(feat,tuple(k))
-                self.submodels[tuple(k)] = MLP(
+                self.submodels[str(tuple(k))] = MLP(
                     nlayers=kwargs["nlayers"],
                     nin=feat.values.shape[-1],
                     nout=kwargs["nout"],
                     nhidden=kwargs["nhidden"],
                     bias=kwargs["bias"],
                 )
-            self.models = torch.nn.ModuleList(self.submodels)
+            self.model = torch.nn.ModuleDict(self.submodels)
+        self.model.to(self.device)
 
     def forward(self):
         pred_blocks = []
-        for targ_key, submodel in self.submodels.items():
-            try:
-                feat = map_targetkeys_to_featkeys(self.features, targ_key)
-                nsamples, ncomp, nprops = feat.values.shape
-                feat = feat.reshape(-1, feat.shape[-1])
-            except ValueError:
-                print("Key not found in features - skipped")
+        for i, (targ_key, submodel) in enumerate(self.submodels.items()):
+            # try: 
+            feat = map_targetkeys_to_featkeys(self.features, self.dataset.target.block_keys[i])
+            nsamples, ncomp, nprops = feat.values.shape
+            featval = feat.values.reshape(-1, feat.values.shape[-1])
+            # except ValueError:
+                # print("Key not found in features - skipped")
 
-            pred = submodel(feat.values)
+            pred = submodel(featval)
             pred_block = TensorBlock(
                 values=pred.reshape((nsamples, ncomp, 1)),
                 samples=feat.samples,
                 components=feat.components,
-                properties=self.predict_properties,
+                properties=self.dummy_property,
             )
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
-
         self.reconstructed = _to_uncoupled_basis(pred_tmap)
+        self.reconstructed_tensor = _to_matrix(self.reconstructed, self.dataset.target.frames, self.dataset.target.orbitals, device=self.device)
 
-        loss = self.metrics(self.reconstructed, self.dataset.target.tensor)
+        loss = self.loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
         return loss
