@@ -306,8 +306,8 @@ class ClebschGordanReal:
                             # dtype=[(torch.int32, torch.int32, torch.int32)],
                             device=self.device,
                         )
-                        cg_M[:, 0] = cg_nonzero[0]
-                        cg_M[:, 1] = cg_nonzero[1]
+                        cg_M[:, 0] = cg_nonzero[0].type(torch.int)
+                        cg_M[:, 1] = cg_nonzero[1].type(torch.int)
                         cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
                         new_cg.append(cg_M)
 
@@ -441,12 +441,17 @@ class ClebschGordanReal:
                 ):
                     # ensure that Lterm is created on the same device as the dec_term
                     device = dec_term.device
+                    if device != self.device:
+                        dec_term = dec_term.to(self.device)
                     Lterm = torch.zeros(
-                        size=dec_term.shape[:-2] + (2 * L + 1,), device=device
+                        size=dec_term.shape[:-2] + (2 * L + 1,), device=self.device
                     )
                     for M in range(2 * L + 1):
                         for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                            Lterm[..., M] += dec_term[..., m1, m2] * cg
+                            Lterm[..., M] += (
+                                dec_term[..., m1.type(torch.int), m2.type(torch.int)]
+                                * cg
+                            )
                     coupled[(l1, l2) + ltuple][L] = Lterm
 
         # repeat if required
@@ -460,7 +465,6 @@ class ClebschGordanReal:
 
         |l1 m1> |l2 m2> = \sum_{L M} <L M |l1 m1 l2 m2> |l1 l2 L M>
         """
-        coupled.to(self.device)
         decoupled = {}
         # applies the decoupling to each entry in the dictionary
         for ltuple, lcomponents in coupled.items():
@@ -485,7 +489,7 @@ class ClebschGordanReal:
                     continue
                 for M in range(2 * L + 1):
                     for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                        dec_term[..., m1, m2] += cg * lcomponents[L][..., M]
+                        dec_term[..., m1.type(torch.int), m2.type(torch.int)] += cg * lcomponents[L][..., M]
             # stores the result with a key that drops the l's we have just decoupled
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}
