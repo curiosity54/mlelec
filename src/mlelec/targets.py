@@ -8,11 +8,16 @@ import ase
 
 class ModelTargets:  # generic class for different targets
     def __init__(self, name: str = "hamiltonian"):
-        self.target_class = globals()[name]
-        print(self.target_class)
+        if name == "hamiltonian" or name == "fock":
+            name = "hamiltonian"
+        name = name.capitalize()
+        self.target_class = globals()[name]  # find target class from string
+        # print(self.target_class)
 
     def instantiate(self, tensor: torch.tensor, **kwargs):
-        self.target = self.target_class(tensor, **kwargs)
+        self.target = self.target_class(
+            tensor, **kwargs
+        )  # instantiate target class with required arguments
         return self.target
 
 
@@ -47,11 +52,15 @@ class TwoCenter:  # class for second-rank tensors
         self.blocks = twocenter_utils._to_blocks(
             self.tensor, self.frames, self.orbitals
         )
-        self.block_keys = self.blocks.keys
-        print(self.block_keys)
         return self.blocks
 
     def _blocks_to_tensor(self):
+        if not hasattr(self, "blocks"):
+            print(
+                "Blocks not found, generating - output might be different than desired"
+            )
+            self.blocks = self._to_blocks()
+
         self.reconstruct = twocenter_utils._to_matrix(
             self.blocks, self.frames, self.orbitals
         )
@@ -63,9 +72,30 @@ class TwoCenter:  # class for second-rank tensors
 
 
 class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
-    def __init__(self, tensor, orbitals, frames):
+    def __init__(
+        self, tensor, orbitals, frames, model_strategy: str = "coupled", **kwargs
+    ):
         super().__init__(tensor, orbitals, frames)
+        assert torch.allclose(
+            self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
+        ), "Only symmetric Hamiltonians supported for now"
+        self.model_strategy = model_strategy
+        self._to_blocks()
+        if self.model_strategy == "coupled":
+            self._couple_blocks()
+            self.blocks = self.blocks_coupled
+        else:
+            self.model_strategy = "uncoupled"
+            self.blocks = self.blocks_uncoupled
         # print(self.tensor)
+
+    def _to_blocks(self):
+        self.blocks_uncoupled = super()._to_blocks()
+        self.block_keys = self.blocks_uncoupled.keys
+
+    def _couple_blocks(self):
+        self.blocks_coupled = twocenter_utils._to_coupled_basis(self.blocks)
+        self.coupled_keys = self.blocks_coupled.keys
 
     def orthogonalize(self, overlap: torch.tensor):
         twocenter_utils.lowin_orthogonalize(self.tensor, overlap)

@@ -138,7 +138,7 @@ def _to_blocks(
 
                 # print(block_data, block_data.shape)
                 if block_type == 1:
-                    print(block_data)
+                    # print(block_data)
                     block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
                     block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
                 ki_offset = 0
@@ -343,13 +343,18 @@ def _fill(
                 matrix[jslice, islice] -= values_2norm
 
 
-def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):
-    if isinstance(blocks, torch.tensor):
+def _to_coupled_basis(
+    blocks: Union[torch.tensor, TensorMap],
+    orbitals: Optional[dict] = None,
+    cg: Optional[ClebschGordanReal] = None,
+):
+    if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
+        assert orbitals is not None, "Need orbitals to convert matrix to blocks"
         blocks = _to_blocks(blocks, orbitals)
-
+    print(blocks.keys)
     if cg is None:
-        lmax = max(blocks.keys["li"] + blocks.keys["lj"])
+        lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
         cg = ClebschGordanReal(lmax)
 
     block_builder = TensorBuilder(
@@ -358,7 +363,7 @@ def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):
         [["M"]],
         ["value"],
     )
-    for idx, block in blocks:
+    for idx, block in blocks.items():
         block_type, ai, ni, li, aj, nj, lj = tuple(idx)
 
         # Moves the components at the end as cg.couple assumes so
@@ -387,8 +392,8 @@ def _to_coupled_basis(blocks: Union[torch.tensor, TensorMap], orbitals):
             )
 
             new_block.add_samples(
-                labels=block.samples.view(dtype=np.int32).reshape(
-                    block.samples.shape[0], -1
+                labels=np.asarray(block.samples.values).reshape(
+                    block.samples.values.shape[0], -1
                 ),
                 data=torch.moveaxis(coupled[L], -1, -2),
             )
