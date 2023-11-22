@@ -31,6 +31,8 @@ class SingleCenter:  # class for single center tensorial properties
 
     def _blocks(self):
         # decompose tensorial property to different SPH blocks if required
+        # for now
+        self.blocks = self.tensor
         pass
 
 

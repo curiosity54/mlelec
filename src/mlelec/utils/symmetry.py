@@ -238,7 +238,7 @@ def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device: str = None)
             (2 * l1 + 1, 2 * l2 + 1, 2 * L + 1), dtype=torch.double, device=device
         )
     else:
-        return torch.from_numpy(wigners.clebsch_gordan_array(l1, l2, L))
+        return torch.from_numpy(wigners.clebsch_gordan_array(l1, l2, L)).to(device)
 
 
 def _real_clebsch_gordan_matrix(
@@ -257,9 +257,13 @@ def _real_clebsch_gordan_matrix(
     Returns:
         real_cg: CG matrix for transforming real-valued spherical harmonics
     """
-    complex_cg = _complex_clebsch_gordan_matrix(l1, l2, L)
+    complex_cg = _complex_clebsch_gordan_matrix(l1, l2, L).to(device)
     real_cg = torch.einsum(
-        "ijk,il,jm,nk->lmn", complex_cg.type(torch.complex128), r2c_l1, r2c_l2, c2r_L
+        "ijk,il,jm,nk->lmn",
+        complex_cg.type(torch.complex128),
+        r2c_l1.to(device),
+        r2c_l2.to(device),
+        c2r_L.to(device),
     )
 
     if (l1 + l2 + L) % 2 == 0:
@@ -280,7 +284,7 @@ class ClebschGordanReal:
         self.r2c = {}
         self.c2r = {}
         for L in range(0, lmax + 1):
-            self.r2c[L] = _real2complex(L).to(device)
+            self.r2c[L] = _real2complex(L).to(self.device)
             self.c2r[L] = torch.conj(self.r2c[L]).T
 
         # real-to-complex and complex-to-real transformations as matrices
