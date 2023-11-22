@@ -1,7 +1,7 @@
 # Handles 2 center objects - coupling decoupling
 # must include preprocessing and postprocessing utils
 from typing import Optional, List, Union, Tuple, Dict
-from metatensor import TensorMap
+from metatensor import TensorMap, TensorBlock
 import torch
 import ase
 import numpy as np
@@ -9,24 +9,36 @@ from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
 from mlelec.utils.symmetry import ClebschGordanReal
 
 
-def fix_orbital_order(matrix: torch.tensor, frame: ase.Atoms, orbital: dict):
-    """Fix the l=1 matrix components from [x,y,z] to [-1, 0,1]"""
+def fix_orbital_order(
+    matrix: torch.tensor, frames: Union[List, ase.Atoms], orbital: dict
+):
+    """Fix the l=1 matrix components from [x,y,z] to [-1, 0,1], handles single and multiple frames"""
 
-    idx = []
-    iorb = 0
-    atoms = list(frame.numbers)
-    for atype in atoms:
-        cur = ()
-        for ia, a in enumerate(orbital[atype]):
-            n, l, _ = a
-            if (n, l) != cur:
-                if l == 1:
-                    idx += [iorb + 1, iorb + 2, iorb]
-                else:
-                    idx += range(iorb, iorb + 2 * l + 1)
-                iorb += 2 * l + 1
-                cur = (n, l)
-    return matrix[idx][:, idx]
+    def fix_one_matrix(matrix: torch.tensor, frame: ase.Atoms, orbital: dict):
+        idx = []
+        iorb = 0
+        atoms = list(frame.numbers)
+        for atom_type in atoms:
+            cur = ()
+            for _, a in enumerate(orbital[atom_type]):
+                n, l, _ = a
+                if (n, l) != cur:
+                    if l == 1:
+                        idx += [iorb + 1, iorb + 2, iorb]
+                    else:
+                        idx += range(iorb, iorb + 2 * l + 1)
+                    iorb += 2 * l + 1
+                    cur = (n, l)
+        return matrix[idx][:, idx]
+
+    if isinstance(frames, list):
+        assert len(matrix.shape) == 3  # (nframe, nao, nao)
+        fixed_matrices = []
+        for i, f in enumerate(frames):
+            fixed_matrices.append(fix_one_matrix(matrix[i], f, orbital))
+        return torch.stack(fixed_matrices)
+    else:
+        return fix_one_matrix(matrix, frames, orbital)
 
 
 def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
@@ -39,12 +51,12 @@ def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
 
 
 def _components_idx(l):
-    """just a mini-utility function to get the m=-l..l indices"""
+    """Returns the m \in {-l,...,l} indices"""
     return np.arange(-l, l + 1, dtype=int).reshape(2 * l + 1, 1)
 
 
 def _components_idx_2d(li, lj):
-    """indexing the entries in a 2d (l_i, l_j) block of the hamiltonian
+    """Returns the 2D outerproduct of m_i \in {-l_i,... , l_i} and m_j \in {-l_j,... , l_j} to index the (l_i, l_j) block of the hamiltonian
     in the uncoupled basis"""
     return np.asarray(
         np.meshgrid(_components_idx(li), _components_idx(lj)), dtype=int
@@ -84,10 +96,14 @@ def _atom_blocks_idx(frames, orbs_tot):
 
 def _to_blocks(
     matrices: Union[List[torch.tensor], torch.tensor],
-    frames: List[ase.Atoms],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
     orbitals: dict,
     device: str = None,
 ):
+    if not isinstance(frames, list):
+        assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
+        frames = [frames]
+        matrices = matrices.reshape(1, *matrices.shape)
     block_builder = TensorBuilder(
         ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
@@ -226,7 +242,7 @@ def blocks_to_matrix(
 
 def _to_matrix(
     blocks: TensorMap,
-    frames: List[ase.Atoms],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
     orbs: Dict[int, List[Tuple[int, int, int]]],
     device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
@@ -237,6 +253,8 @@ def _to_matrix(
     Needs `frames` and `orbs` to reconstruct matrices in the correct order.
     See `dense_to_blocks` to understant the different types of blocks.
     """
+    if not isinstance(frames, list):
+        frames = [frames]
 
     # total number of orbitals per atom, orbital offset per atom
     orbs_tot, orbs_offset = _orbs_offsets(orbs)
@@ -247,9 +265,9 @@ def _to_matrix(
     if device is None:
         device = blocks.block(0).values.device
     # else:
-        # assert (
-        #     device == blocks.block(0).values.device
-        # ), "device mismatch between blocks and device argument"
+    # assert (
+    #     device == blocks.block(0).values.device
+    # ), "device mismatch between blocks and device argument"
 
     matrices = []
     for f in frames:
@@ -302,8 +320,10 @@ def _to_matrix(
                 li,
                 lj,
             )
-
-    return torch.stack(matrices)
+    if len(matrices) == 1:
+        return matrices[0]
+    else:
+        return torch.stack(matrices)
 
 
 def _fill(
@@ -441,7 +461,9 @@ def _to_uncoupled_basis(
             components=[_components_idx(li), _components_idx(lj)],
         )
         new_block.add_samples(
-            labels=np.asarray(block.samples.values).reshape(block.samples.values.shape[0], -1),
+            labels=np.asarray(block.samples.values).reshape(
+                block.samples.values.shape[0], -1
+            ),
             data=torch.moveaxis(decoupled, 1, -1),
         )
     return block_builder.build()
@@ -449,14 +471,14 @@ def _to_uncoupled_basis(
 
 def map_targetkeys_to_featkeys(features, key):
     try:
-        block_type = key['block_type']
-        species_center = key['a_i']
-        species_neighbor = key['a_j']
-        L = key['L']
-        li = key['l_i']
-        lj = key['l_j']
-        ni = key['n_i']
-        nj = key['n_j']
+        block_type = key["block_type"]
+        species_center = key["a_i"]
+        species_neighbor = key["a_j"]
+        L = key["L"]
+        li = key["l_i"]
+        lj = key["l_j"]
+        ni = key["n_i"]
+        nj = key["n_j"]
     except Exception as e:
         print(e)
 
@@ -470,3 +492,37 @@ def map_targetkeys_to_featkeys(features, key):
         species_neighbor=species_neighbor,
     )
     return block
+
+
+def rotate_matrix(
+    matrix, rotation_angles: Union[List, np.array, torch.tensor], frame, orbitals
+):
+    """Rotate a matrix by a rotation matrix"""
+    from mlelec.utils.symmetry import _wigner_d_real
+
+    coupled_blocks = _to_coupled_basis(_to_blocks(matrix, frame, orbitals))
+    wd_real = {}
+    for l in set(bc.keys["L"]):
+        wd_real[l] = (
+            _wigner_d_real(l, *rotation_angles)
+            .type(torch.float)
+            .to(coupled_blocks[0].values.device)
+        )
+
+    rot_blocks = []
+    for i, (key, block) in enumerate(coupled_blocks.items()):
+        L = key["L"]
+        rvalues = torch.einsum("mM, nMf -> nmf", wd_real[L], block.values)
+        rot_blocks.append(
+            TensorBlock(
+                values=rvalues,
+                components=block.components,
+                samples=block.samples,
+                properties=block.properties,
+            )
+        )
+    rot_blocks_coupled = TensorMap(coupled_blocks.keys, rot_blocks)
+    rot_matrix = _to_matrix(
+        _to_uncoupled_basis(rot_blocks_coupled, orbitals), frame, orbitals
+    )
+    return rot_matrix
