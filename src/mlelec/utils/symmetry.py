@@ -162,11 +162,12 @@ def _real2complex(L: int):
 
 
 def _wigner_d_real(L, alpha, beta, gamma):
+    # L must be int (error with int32)
     r2c_mat = torch.hstack(
         [_r2c(torch.eye(2 * L + 1)[i])[:, None] for i in range(2 * L + 1)]
     )
     c2r_mat = torch.conj(r2c_mat).T
-    wig = _wigner_d(L, alpha, beta, gamma)
+    wig = _wigner_d(int(L), alpha, beta, gamma)
     # print(c2r_mat.shape, wig.shape, r2c_mat.shape)
     return torch.real(c2r_mat @ torch.conj(wig) @ r2c_mat)
 
@@ -489,7 +490,9 @@ class ClebschGordanReal:
                     continue
                 for M in range(2 * L + 1):
                     for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                        dec_term[..., m1.type(torch.int), m2.type(torch.int)] += cg * lcomponents[L][..., M]
+                        dec_term[..., m1.type(torch.int), m2.type(torch.int)] += (
+                            cg * lcomponents[L][..., M]
+                        )
             # stores the result with a key that drops the l's we have just decoupled
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}

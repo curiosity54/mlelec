@@ -25,7 +25,7 @@ class MoleculeDataset(Dataset):
         self,
         frame_path: Optional[str] = None,
         mol_name: Union[precomputed_molecules, str] = "water_1000",
-        frame_slice: str = ":",
+        frame_slice: slice = slice(None),
         target: List[str] = ["fock"],  # TODO: list of targets
         use_precomputed: bool = True,
         aux: Optional[List] = None,
@@ -99,7 +99,7 @@ class MoleculeDataset(Dataset):
                     self.target[t] = hickle.load(
                         self.data_path + "/{}.hickle".format(t)
                     )[self.frame_slice].to(device=self.device)
-                    #os.join(self.aux_path, "{}.hickle".format(t))
+                    # os.join(self.aux_path, "{}.hickle".format(t))
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Required target not found at the given path")
@@ -109,8 +109,10 @@ class MoleculeDataset(Dataset):
         if aux_data is not None:
             for t in self.aux_data_names:
                 if torch.is_tensor(aux_data[t]):
-                    self.aux_data[t] = aux_data[t][self.frame_slice].to(device=self.device)
-                else: 
+                    self.aux_data[t] = aux_data[t][self.frame_slice].to(
+                        device=self.device
+                    )
+                else:
                     self.aux_data[t] = aux_data[t]
 
         else:
@@ -119,9 +121,11 @@ class MoleculeDataset(Dataset):
                     self.aux_data[t] = hickle.load(
                         self.aux_path + "/{}.hickle".format(t)
                     )
-                    #os.join(self.aux_path, "{}.hickle".format(t))
+                    # os.join(self.aux_path, "{}.hickle".format(t))
                     if torch.is_tensor(self.aux_data[t]):
-                        self.aux_data[t] = self.aux_data[t][self.frame_slice].to(device=self.device)
+                        self.aux_data[t] = self.aux_data[t][self.frame_slice].to(
+                            device=self.device
+                        )
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
@@ -219,3 +223,9 @@ class MLDataset(Dataset):
 
     def __len__(self):
         return self.nstructs
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        return self.structures[idx], self.target[idx]
