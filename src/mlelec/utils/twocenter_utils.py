@@ -7,6 +7,7 @@ import ase
 import numpy as np
 from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
 from mlelec.utils.symmetry import ClebschGordanReal
+import warnings
 
 
 def fix_orbital_order(
@@ -104,16 +105,40 @@ def _to_blocks(
         assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
         frames = [frames]
         matrices = matrices.reshape(1, *matrices.shape)
-    block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
-        ["structure", "center", "neighbor"],
-        [["m1"], ["m2"]],
-        ["value"],
-    )
+    # check hermiticity:
+    if isinstance(matrices, np.ndarray):
+        matrices = torch.from_numpy(matrices)
+    if torch.allclose(matrices, matrices.transpose(-1, -2)):
+        return _matrix_to_blocks(matrices, frames, orbitals, device)
+
+    else:
+        warnings.warn(
+            "Matrix is neither hermitian nor antihermitian - attempting to decompose"
+        )
+        symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
+            matrices - matrices.transpose(-1, -2)
+        )
+        symm_blocks = _matrix_to_blocks(symm, frames, orbitals, device)
+        antisymm_blocks = _matrix_to_blocks(antisymm, frames, orbitals, device)
+
+        return symm_blocks, antisymm_blocks
+
+
+def _matrix_to_blocks(
+    matrices: Union[List[torch.tensor], torch.tensor],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
+    orbitals: dict,
+    device: str = None,
+):
+    # if not isinstance(frames, list):
+    #     assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
+    #     frames = [frames]
+    #     matrices = matrices.reshape(1, *matrices.shape)
+
     orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
         [["m1"], ["m2"]],
         ["value"],
@@ -177,14 +202,14 @@ def _to_blocks(
                         if block_idx not in block_builder.blocks:
                             block = block_builder.add_block(
                                 keys=block_idx,
-                                properties=np.asarray([[0]], dtype=np.int32),
+                                properties=np.asarray([[0]]),
                                 components=[_components_idx(li), _components_idx(lj)],
                             )
 
                             if block_type == 1:
                                 block_asym = block_builder.add_block(
                                     keys=(-1,) + block_idx[1:],
-                                    properties=np.asarray([[0]], dtype=np.int32),
+                                    properties=np.asarray([[0]]),
                                     components=[
                                         _components_idx(li),
                                         _components_idx(lj),
@@ -228,23 +253,33 @@ def _to_blocks(
     return block_builder.build()
 
 
-def blocks_to_matrix(
+def _to_matrix(
     blocks: TensorMap,
     frames: List[ase.Atoms],
-    orbs: Dict[int, List[Tuple[int, int, int]]],
+    orbitals: Dict[int, List[Tuple[int, int, int]]],
+    hermitian: bool = True,
     # vectorized: bool = True,
+    device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
     # if vectorized:
     #     return _vectorized_blocks_to_matrix(blocks=blocks, frames=frames, orbs=orbs)
     # else:
-    return _to_matrix(blocks=blocks, frames=frames, orbs=orbs)
+
+    return _blocks_to_matrix(
+        blocks=blocks,
+        frames=frames,
+        orbitals=orbitals,
+        hermitian=hermitian,
+        device=device,
+    )
 
 
-def _to_matrix(
+def _blocks_to_matrix(
     blocks: TensorMap,
     frames: Union[ase.Atoms, List[ase.Atoms]],
-    orbs: Dict[int, List[Tuple[int, int, int]]],
+    orbitals: Dict[int, List[Tuple[int, int, int]]],
     device=None,
+    hermitian: bool = True,
 ) -> Union[np.ndarray, torch.Tensor]:
     """from tensormap to dense representation
 
@@ -257,7 +292,7 @@ def _to_matrix(
         frames = [frames]
 
     # total number of orbitals per atom, orbital offset per atom
-    orbs_tot, orbs_offset = _orbs_offsets(orbs)
+    orbs_tot, orbs_offset = _orbs_offsets(orbitals)
 
     # indices of the block for each atom
     atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
@@ -282,8 +317,13 @@ def _to_matrix(
         # dense idx and cur_A track the frame
         dense_idx = -1
         cur_A = -1
-
-        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
 
         # offset of the orbital block within the pair block in the matrix
         ki_offset = orbs_offset[(ai, ni, li)]
@@ -319,6 +359,7 @@ def _to_matrix(
                 same_koff,
                 li,
                 lj,
+                hermitian=hermitian,
             )
     if len(matrices) == 1:
         return matrices[0]
@@ -337,31 +378,48 @@ def _fill(
     same_koff: bool,
     li: int,
     lj: int,
+    hermitian: bool = True,
 ):
     """fill block of type <type> where type is either -1,0,1,2"""
+    # TODO: check matrix device, values devide are the same
     islice = slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1)
     jslice = slice(kj_base + kj_offset, kj_base + kj_offset + 2 * lj + 1)
     if type == 0:
         matrix[islice, jslice] = values
         if not same_koff:
-            matrix[jslice, islice] = values.T
+            if hermitian:
+                matrix[jslice, islice] = values.T
+            else:
+                matrix[jslice, islice] = -values.T
     if type == 2:
         matrix[islice, jslice] = values
-        matrix[jslice, islice] = values.T
+        if hermitian:
+            matrix[jslice, islice] = values.T
+        else:
+            matrix[jslice, islice] = -values.T
 
     if abs(type) == 1:
         values_2norm = values / (2 ** (0.5))
         matrix[islice, jslice] += values_2norm
-        matrix[jslice, islice] += values_2norm.T
+        if hermitian:
+            matrix[jslice, islice] += values_2norm.T
+        else:
+            matrix[jslice, islice] -= values_2norm.T
         if not same_koff:
             islice = slice(ki_base + kj_offset, ki_base + kj_offset + 2 * lj + 1)
             jslice = slice(kj_base + ki_offset, kj_base + ki_offset + 2 * li + 1)
             if type == 1:
                 matrix[islice, jslice] += values_2norm.T
-                matrix[jslice, islice] += values_2norm
+                if hermitian:
+                    matrix[jslice, islice] += values_2norm
+                else:
+                    matrix[jslice, islice] -= values_2norm
             else:
                 matrix[islice, jslice] -= values_2norm.T
-                matrix[jslice, islice] -= values_2norm
+                if hermitian:
+                    matrix[jslice, islice] -= values_2norm
+                else:
+                    matrix[jslice, islice] += values_2norm
 
 
 def _to_coupled_basis(
@@ -379,13 +437,19 @@ def _to_coupled_basis(
         cg = ClebschGordanReal(lmax, device=device)
 
     block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j", "L"],
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
         ["structure", "center", "neighbor"],
         [["M"]],
         ["value"],
     )
     for idx, block in blocks.items():
-        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
 
         # Moves the components at the end as cg.couple assumes so
         decoupled = torch.moveaxis(block.values, -1, -2).reshape(
@@ -444,7 +508,16 @@ def _to_uncoupled_basis(
         ["value"],
     )
     for idx, block in blocks.items():
-        block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
+        L = idx["L"]
+
+        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
         block_idx = (block_type, ai, ni, li, aj, nj, lj)
         if block_idx in block_builder.blocks:
             continue
