@@ -190,7 +190,6 @@ class LinearTargetModel(nn.Module):
                     # nout=1,
                     **kwargs,
                 )
-                print(kwargs["norm"])
 
                 print(self.submodels[str(tuple(k))])
             self.model = torch.nn.ModuleDict(self.submodels)
