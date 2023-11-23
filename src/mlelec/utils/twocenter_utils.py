@@ -104,8 +104,36 @@ def _to_blocks(
         assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
         frames = [frames]
         matrices = matrices.reshape(1, *matrices.shape)
+    # check hermiticity:
+    if isinstance(matrices, np.ndarray):
+        matrices = torch.from_numpy(matrices)
+    if torch.allclose(matrices, matrices.transpose(-1, -2)):
+        return _matrix_to_blocks(matrices, frames, orbitals, device)
+
+    else:
+        print("Matrix is neither hermitian nor antihermitian - attempting to decompose")
+        symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
+            matrices - matrices.transpose(-1, -2)
+        )
+        symm_blocks = _matrix_to_blocks(symm, frames, orbitals, device)
+        antisymm_blocks = _matrix_to_blocks(antisymm, frames, orbitals, device)
+
+        return symm_blocks, antisymm_blocks
+
+
+def _matrix_to_blocks(
+    matrices: Union[List[torch.tensor], torch.tensor],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
+    orbitals: dict,
+    device: str = None,
+):
+    # if not isinstance(frames, list):
+    #     assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
+    #     frames = [frames]
+    #     matrices = matrices.reshape(1, *matrices.shape)
+
     block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
         [["m1"], ["m2"]],
         ["value"],
@@ -113,7 +141,7 @@ def _to_blocks(
     orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j"],
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
         [["m1"], ["m2"]],
         ["value"],
@@ -228,23 +256,33 @@ def _to_blocks(
     return block_builder.build()
 
 
-def blocks_to_matrix(
+def _to_matrix(
     blocks: TensorMap,
     frames: List[ase.Atoms],
-    orbs: Dict[int, List[Tuple[int, int, int]]],
+    orbitals: Dict[int, List[Tuple[int, int, int]]],
+    hermitian: bool = True,
     # vectorized: bool = True,
+    device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
     # if vectorized:
     #     return _vectorized_blocks_to_matrix(blocks=blocks, frames=frames, orbs=orbs)
     # else:
-    return _to_matrix(blocks=blocks, frames=frames, orbs=orbs)
+
+    return _blocks_to_matrix(
+        blocks=blocks,
+        frames=frames,
+        orbitals=orbitals,
+        hermitian=hermitian,
+        device=device,
+    )
 
 
-def _to_matrix(
+def _blocks_to_matrix(
     blocks: TensorMap,
     frames: Union[ase.Atoms, List[ase.Atoms]],
-    orbs: Dict[int, List[Tuple[int, int, int]]],
+    orbitals: Dict[int, List[Tuple[int, int, int]]],
     device=None,
+    hermitian: bool = True,
 ) -> Union[np.ndarray, torch.Tensor]:
     """from tensormap to dense representation
 
@@ -257,7 +295,7 @@ def _to_matrix(
         frames = [frames]
 
     # total number of orbitals per atom, orbital offset per atom
-    orbs_tot, orbs_offset = _orbs_offsets(orbs)
+    orbs_tot, orbs_offset = _orbs_offsets(orbitals)
 
     # indices of the block for each atom
     atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
@@ -319,6 +357,7 @@ def _to_matrix(
                 same_koff,
                 li,
                 lj,
+                hermitian=hermitian,
             )
     if len(matrices) == 1:
         return matrices[0]
@@ -337,6 +376,7 @@ def _fill(
     same_koff: bool,
     li: int,
     lj: int,
+    hermitian: bool = True,
 ):
     """fill block of type <type> where type is either -1,0,1,2"""
     islice = slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1)
@@ -344,24 +384,39 @@ def _fill(
     if type == 0:
         matrix[islice, jslice] = values
         if not same_koff:
-            matrix[jslice, islice] = values.T
+            if hermitian:
+                matrix[jslice, islice] = values.T
+            else:
+                matrix[jslice, islice] = -values.T
     if type == 2:
         matrix[islice, jslice] = values
-        matrix[jslice, islice] = values.T
+        if hermitian:
+            matrix[jslice, islice] = values.T
+        else:
+            matrix[jslice, islice] = -values.T
 
     if abs(type) == 1:
         values_2norm = values / (2 ** (0.5))
         matrix[islice, jslice] += values_2norm
-        matrix[jslice, islice] += values_2norm.T
+        if hermitian:
+            matrix[jslice, islice] += values_2norm.T
+        else:
+            matrix[jslice, islice] -= values_2norm.T
         if not same_koff:
             islice = slice(ki_base + kj_offset, ki_base + kj_offset + 2 * lj + 1)
             jslice = slice(kj_base + ki_offset, kj_base + ki_offset + 2 * li + 1)
             if type == 1:
                 matrix[islice, jslice] += values_2norm.T
-                matrix[jslice, islice] += values_2norm
+                if hermitian:
+                    matrix[jslice, islice] += values_2norm
+                else:
+                    matrix[jslice, islice] -= values_2norm
             else:
                 matrix[islice, jslice] -= values_2norm.T
-                matrix[jslice, islice] -= values_2norm
+                if hermitian:
+                    matrix[jslice, islice] -= values_2norm
+                else:
+                    matrix[jslice, islice] += values_2norm
 
 
 def _to_coupled_basis(

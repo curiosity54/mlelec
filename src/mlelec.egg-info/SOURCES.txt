@@ -46,6 +46,7 @@ src/mlelec/models/SE3transformer_utils/tests/__init__.py
 src/mlelec/models/SE3transformer_utils/tests/test_equivariance.py
 src/mlelec/models/SE3transformer_utils/tests/utils.py
 src/mlelec/utils/__init__.py
+src/mlelec/utils/metatensor_utils.py
 src/mlelec/utils/symmetry.py
 src/mlelec/utils/twocenter_utils.py
 tests/test_example.py
