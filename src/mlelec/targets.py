@@ -4,6 +4,7 @@ import numpy as np
 import scipy
 import mlelec.utils.twocenter_utils as twocenter_utils
 import ase
+import warnings
 
 
 class ModelTargets:  # generic class for different targets
@@ -42,29 +43,40 @@ class TwoCenter:  # class for second-rank tensors
         tensor: torch.tensor,
         orbitals: Dict,
         frames: Optional[List[ase.Atoms]] = None,
+        device=None,
     ):
         assert (
             len(tensor.shape) == 3
         ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
         self.tensor = tensor
+        if isinstance(tensor, np.ndarray):
+            self.tensor = torch.from_numpy(tensor)
+
+        self.tensor = self.tensor.to(device)
         self.orbitals = orbitals
         self.frames = frames
+        self.device = device
 
     def _to_blocks(self):
         self.blocks = twocenter_utils._to_blocks(
-            self.tensor, self.frames, self.orbitals
+            self.tensor, self.frames, self.orbitals, device=self.device
         )
         return self.blocks
 
     def _blocks_to_tensor(self):
         if not hasattr(self, "blocks"):
-            print(
+            warnings.warn(
                 "Blocks not found, generating - output might be different than desired"
             )
             self.blocks = self._to_blocks()
+        if "L" in self.blocks.keys.names:
+            warnings.warn("L found in blocks, uncoupling first")
+            self.blocks = twocenter_utils._to_uncoupled_basis(
+                self.blocks, orbitals=self.orbitals, device=self.device
+            )
 
         self.reconstruct = twocenter_utils._to_matrix(
-            self.blocks, self.frames, self.orbitals
+            self.blocks, self.frames, self.orbitals, device=self.device
         )
         return self.reconstruct
 
@@ -78,7 +90,7 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         self, tensor, orbitals, frames, model_strategy: str = "coupled", **kwargs
     ):
         device = kwargs.get("device", "cpu")
-        super().__init__(tensor, orbitals, frames)
+        super().__init__(tensor, orbitals, frames, device=device)
         assert torch.allclose(
             self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
         ), "Only symmetric Hamiltonians supported for now"
@@ -92,7 +104,6 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
             self.model_strategy = "uncoupled"
             self.blocks = self.blocks_uncoupled
             self.block_keys = self.uncoupled_keys
-        # print(self.tensor)
         self.device = device
 
     def _to_blocks(self):

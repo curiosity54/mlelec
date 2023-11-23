@@ -7,6 +7,7 @@ import ase
 import numpy as np
 from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
 from mlelec.utils.symmetry import ClebschGordanReal
+import warnings
 
 
 def fix_orbital_order(
@@ -111,7 +112,9 @@ def _to_blocks(
         return _matrix_to_blocks(matrices, frames, orbitals, device)
 
     else:
-        print("Matrix is neither hermitian nor antihermitian - attempting to decompose")
+        warnings.warn(
+            "Matrix is neither hermitian nor antihermitian - attempting to decompose"
+        )
         symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
             matrices - matrices.transpose(-1, -2)
         )
@@ -132,12 +135,6 @@ def _matrix_to_blocks(
     #     frames = [frames]
     #     matrices = matrices.reshape(1, *matrices.shape)
 
-    block_builder = TensorBuilder(
-        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
-        ["structure", "center", "neighbor"],
-        [["m1"], ["m2"]],
-        ["value"],
-    )
     orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
@@ -205,14 +202,14 @@ def _matrix_to_blocks(
                         if block_idx not in block_builder.blocks:
                             block = block_builder.add_block(
                                 keys=block_idx,
-                                properties=np.asarray([[0]], dtype=np.int32),
+                                properties=np.asarray([[0]]),
                                 components=[_components_idx(li), _components_idx(lj)],
                             )
 
                             if block_type == 1:
                                 block_asym = block_builder.add_block(
                                     keys=(-1,) + block_idx[1:],
-                                    properties=np.asarray([[0]], dtype=np.int32),
+                                    properties=np.asarray([[0]]),
                                     components=[
                                         _components_idx(li),
                                         _components_idx(lj),
@@ -320,8 +317,13 @@ def _blocks_to_matrix(
         # dense idx and cur_A track the frame
         dense_idx = -1
         cur_A = -1
-
-        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
 
         # offset of the orbital block within the pair block in the matrix
         ki_offset = orbs_offset[(ai, ni, li)]
@@ -379,6 +381,7 @@ def _fill(
     hermitian: bool = True,
 ):
     """fill block of type <type> where type is either -1,0,1,2"""
+    # TODO: check matrix device, values devide are the same
     islice = slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1)
     jslice = slice(kj_base + kj_offset, kj_base + kj_offset + 2 * lj + 1)
     if type == 0:
@@ -434,13 +437,19 @@ def _to_coupled_basis(
         cg = ClebschGordanReal(lmax, device=device)
 
     block_builder = TensorBuilder(
-        ["block_type", "a_i", "n_i", "l_i", "a_j", "n_j", "l_j", "L"],
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
         ["structure", "center", "neighbor"],
         [["M"]],
         ["value"],
     )
     for idx, block in blocks.items():
-        block_type, ai, ni, li, aj, nj, lj = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
 
         # Moves the components at the end as cg.couple assumes so
         decoupled = torch.moveaxis(block.values, -1, -2).reshape(
@@ -499,7 +508,16 @@ def _to_uncoupled_basis(
         ["value"],
     )
     for idx, block in blocks.items():
-        block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
+        L = idx["L"]
+
+        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
         block_idx = (block_type, ai, ni, li, aj, nj, lj)
         if block_idx in block_builder.blocks:
             continue
