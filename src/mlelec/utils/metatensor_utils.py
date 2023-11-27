@@ -200,3 +200,25 @@ class TensorBuilderPerProperties:
         self._properties = []
 
         return block
+
+
+def labels_where(labels, selection, return_idx=False):
+    # Extract the relevant columns from `selection` that the selection will
+    # be performed on
+    keys_out_vals = [[k[name] for name in selection.names] for k in labels]
+
+    # First check that all of the selected keys exist in the output keys
+    for slct in selection.values:
+        if not np.any([np.all(slct == k) for k in keys_out_vals]):
+            raise ValueError(
+                f"selected key {selection.names} = {slct} not found"
+                " in the output keys. Check the `selection` argument."
+            )
+
+    # Build a mask of the selected keys
+    mask = [np.any([np.all(i == j) for j in selection.values]) for i in keys_out_vals]
+
+    labels = Labels(names=labels.names, values=labels.values[mask])
+    if return_idx:
+        return labels, np.where(mask)[0]
+    return labels

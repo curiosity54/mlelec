@@ -265,3 +265,104 @@ def twocenter_features(single_center: TensorMap, pair: TensorMap) -> TensorMap:
             )
         )
     pass
+
+
+def twocenter_hermitian_features_periodic(
+    single_center: TensorMap, pair: TensorMap
+) -> TensorMap:
+    # actually special class of features for Hermitian (rank2 tensor)
+    keys = []
+    blocks = []
+    for k, b in single_center.items():
+        keys.append(
+            tuple(k)
+            + (
+                k["species_center"],
+                0,
+            )
+        )
+        # `Try to handle the case of no computed features
+        if len(list(b.samples.values)) == 0:
+            samples_array = b.samples
+        else:
+            samples_array = np.asarray(b.samples.values)
+            samples_array = np.hstack([samples_array, samples_array[:, -1:]])
+        blocks.append(
+            TensorBlock(
+                samples=Labels(
+                    names=b.samples.names + ["neighbor"],
+                    values=samples_array,
+                ),
+                components=b.components,
+                properties=b.properties,
+                values=b.values,
+            )
+        )
+
+    for k, b in pair.items():
+        if k["species_center"] == k["species_neighbor"]:
+            # off-site, same species
+            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
+            if len(idx_up) == 0:
+                continue
+            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
+
+            # we need to find the "ji" position that matches each "ij" sample.
+            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+            smp_up, smp_lo = 0, 0
+            for smp_up in range(len(idx_up)):
+                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
+                for smp_lo in range(smp_up, len(idx_lo)):
+                    ij_lo = b.samples.view(["neighbor", "center"]).values[
+                        idx_lo[smp_lo]
+                    ]
+                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
+                    if (
+                        b.samples["structure"][idx_up[smp_up]]
+                        != b.samples["structure"][idx_lo[smp_lo]]
+                    ):
+                        raise ValueError(
+                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
+                        )
+                    if tuple(ij) == tuple(ij_lo):
+                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
+                        break
+
+            keys.append(tuple(k) + (1,))
+            keys.append(tuple(k) + (-1,))
+            print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names,
+                        values=np.asarray(b.samples.values[idx_up]),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                )
+            )
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names,
+                        values=np.asarray(b.samples.values[idx_up]),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                )
+            )
+        elif k["species_center"] < k["species_neighbor"]:
+            # off-site, different species
+            keys.append(tuple(k) + (2,))
+            blocks.append(b.copy())
+
+    return TensorMap(
+        keys=Labels(
+            names=pair.keys.names + ["block_type"],
+            values=np.asarray(keys, dtype=np.int32),
+        ),
+        blocks=blocks,
+    )
