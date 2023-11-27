@@ -108,7 +108,7 @@ def _to_blocks(
     # check hermiticity:
     if isinstance(matrices, np.ndarray):
         matrices = torch.from_numpy(matrices)
-    if torch.allclose(matrices, matrices.transpose(-1, -2)):
+    if torch.allclose(torch.abs(matrices), torch.abs(matrices.transpose(-1, -2))):
         return _matrix_to_blocks(matrices, frames, orbitals, device)
 
     else:
