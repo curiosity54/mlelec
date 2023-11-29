@@ -305,8 +305,8 @@ def twocenter_hermitian_features_periodic(
             idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
             if len(idx_lo) == 0:
                 print('Corresponding swapped pair not found', np.array(b.samples.values)[idx_up])
-            else: 
-                print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
+            # else: 
+                # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
@@ -331,7 +331,7 @@ def twocenter_hermitian_features_periodic(
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
-            print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
+            # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
             blocks.append(
                 TensorBlock(
                     samples=Labels(
