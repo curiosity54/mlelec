@@ -11,11 +11,11 @@ import warnings
 
 
 def fix_orbital_order(
-    matrix: torch.tensor, frames: Union[List, ase.Atoms], orbital: dict
+    matrix: Union[torch.tensor, np.ndarray], frames: Union[List, ase.Atoms], orbital: dict
 ):
     """Fix the l=1 matrix components from [x,y,z] to [-1, 0,1], handles single and multiple frames"""
 
-    def fix_one_matrix(matrix: torch.tensor, frame: ase.Atoms, orbital: dict):
+    def fix_one_matrix(matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict):
         idx = []
         iorb = 0
         atoms = list(frame.numbers)
@@ -37,6 +37,8 @@ def fix_orbital_order(
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(fix_one_matrix(matrix[i], f, orbital))
+        if isinstance(matrix, np.ndarray):
+            return np.asarray(fixed_matrices)
         return torch.stack(fixed_matrices)
     else:
         return fix_one_matrix(matrix, frames, orbital)
@@ -488,7 +490,7 @@ def _to_coupled_basis(
 
 def _to_uncoupled_basis(
     blocks: TensorMap,
-    orbitals: Optional[dict] = None,
+    # orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
     device: str = None,
 ):
@@ -542,11 +544,11 @@ def _to_uncoupled_basis(
     return block_builder.build()
 
 
-def map_targetkeys_to_featkeys(features, key):
+def map_targetkeys_to_featkeys(features, key, cell_shift=None):
     try:
         block_type = key["block_type"]
-        species_center = key["a_i"]
-        species_neighbor = key["a_j"]
+        species_center = key["species_i"]
+        species_neighbor = key["species_j"]
         L = key["L"]
         li = key["l_i"]
         lj = key["l_j"]
@@ -557,14 +559,30 @@ def map_targetkeys_to_featkeys(features, key):
 
         # block_type, ai, ni, li, aj, nj, lj = key
     inversion_sigma = (-1) ** (li + lj + L)
-    block = features.block(
-        block_type=block_type,
-        spherical_harmonics_l=L,
-        inversion_sigma=inversion_sigma,
-        species_center=species_center,
-        species_neighbor=species_neighbor,
-    )
-    return block
+    if cell_shift is None:
+        block = features.block(
+            block_type=block_type,
+            spherical_harmonics_l=L,
+            inversion_sigma=inversion_sigma,
+            species_center=species_center,
+            species_neighbor=species_neighbor,
+        )
+        return block
+    else:
+        assert isinstance(cell_shift, List)
+        assert len(cell_shift)==3
+        cell_shift_a, cell_shift_b, cell_shift_c = cell_shift
+        block = features.block(
+            block_type=block_type,
+            spherical_harmonics_l=L,
+            inversion_sigma=inversion_sigma,
+            species_center=species_center,
+            species_neighbor=species_neighbor,
+            cell_shift_a=cell_shift_a,
+            cell_shift_b=cell_shift_b,
+            cell_shift_c=cell_shift_c,
+        )
+        return block
 
 
 def rotate_matrix(

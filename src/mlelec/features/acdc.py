@@ -37,8 +37,8 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-
-        cg = ClebschGordanReal(lmax=lcut)
+        lmax = hypers["max_angular"]
+        cg = ClebschGordanReal(lmax=lmax)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -275,32 +275,7 @@ def twocenter_hermitian_features_periodic(
     
     keys = []
     blocks = []
-    # for k, b in single_center.items():
-    #     keys.append(
-    #         tuple(k)
-    #         + (
-    #             k["species_center"],
-    #             0,
-    #         )
-    #     )
-    #     # `Try to handle the case of no computed features
-    #     if len(list(b.samples.values)) == 0:
-    #         print('HERE', k)
-    #         samples_array = b.samples
-    #     else:
-    #         samples_array = np.asarray(b.samples.values)
-    #         samples_array = np.hstack([samples_array, samples_array[:, -1:]])
-    #     blocks.append(
-    #         TensorBlock(
-    #             samples=Labels(
-    #                 names=b.samples.names + ["neighbor"],
-    #                 values=samples_array,
-    #             ),
-    #             components=b.components,
-    #             properties=b.properties,
-    #             values=b.values,
-    #         )
-    #     )
+   
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]: #self translared pairs 
             idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
@@ -385,13 +360,13 @@ def twocenter_hermitian_features_periodic(
             blocks.append(b.copy())
 
     # kkeys = [list(k) for k in keys]
-    print([len(k) for k in keys])
-    print(keys[2], keys[3], )
+    # print([len(k) for k in keys])
+    # print(keys[2], keys[3], )
     # print(np.asarray(kkeys).shape   )
-    print(Labels(
-            names=pair.keys.names + ["block_type"],
-            values=np.asarray(keys),
-        ),)
+    # print(Labels(
+    #         names=pair.keys.names + ["block_type"],
+    #         values=np.asarray(keys),
+    #     ),)
     return TensorMap(
         keys=Labels(
             names=pair.keys.names + ["block_type"],
