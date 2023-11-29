@@ -552,8 +552,8 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None):
         L = key["L"]
         li = key["l_i"]
         lj = key["l_j"]
-        ni = key["n_i"]
-        nj = key["n_j"]
+        # ni = key["n_i"]
+        # nj = key["n_j"]
     except Exception as e:
         print(e)
 
