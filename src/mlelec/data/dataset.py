@@ -137,6 +137,7 @@ class MLDataset(Dataset):
         self.device = device
         self.structures = molecule_data.structures
         self.target = molecule_data.target
+        print(self.target, next(iter(self.target.values())))
         self.target_class = ModelTargets(molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
             next(iter(molecule_data.target.values())),  # FIXME

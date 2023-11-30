@@ -1,5 +1,5 @@
 # write a functionality to take input structures, calculate desired target
-from typing import List, Optional
+from typing import List, Optional, Union
 from ase.io import read
 import ase
 import numpy as np
@@ -61,7 +61,7 @@ class calculator:
         mol_name: str = "water",
         frame_slice=":",
         dft: bool = False,
-        target: List[str] = ["fock"],
+        target: Union[str,List[str]] = "fock",
     ):  # self.kwargs:Dict[str, Any]
         self.path = path
         self.structures = structures
@@ -74,6 +74,9 @@ class calculator:
             self.pbc = True
         self.nframes = len(self.structures)
         print("Number of frames: ", self.nframes)
+        
+        if isinstance(target, str):
+            target = [target]
         self.target = target
         if "fock" in self.target:
             self.target.append("overlap")
@@ -104,6 +107,7 @@ class calculator:
         """
 
         self.basis = basis_set
+        verbose = kwargs.get("verbose", 5)
         spin = kwargs.get("spin", 0)
         charge = kwargs.get("charge", 0)
         symmetry = kwargs.get("symmetry", False)
@@ -123,9 +127,9 @@ class calculator:
             self.kpts = kwargs.get("kpts", [0, 0, 0])
             self.mol = pyscf.pbc.gto.Cell()
             if self.dft:
-                self.calc = getattr(pyscf.pbc.scf, "RKS")
+                self.calc = getattr(pyscf.pbc.scf, "KRKS")
             else:
-                self.calc = getattr(pyscf.pbc.dft, "RHF")
+                self.calc = getattr(pyscf.pbc.dft, "KRHF")
 
         else:
             self.mol = pyscf.gto.Mole()
@@ -135,7 +139,7 @@ class calculator:
                 self.calc = getattr(pyscf.scf, "RHF")
 
         self.mol.basis = basis_set
-        self.mol.verbose = 5
+        self.mol.verbose = verbose
         self.mol.charge = charge
         self.mol.spin = spin
         self.mol.symmetry = symmetry
@@ -151,9 +155,10 @@ class calculator:
         mol.build()
         if self.pbc:
             mf = self.calc(mol, kpts=self.kpts)
+            mf = mf.density_fit()
         else:
             mf = self.calc(mol)
-        mf = mf.density_fit()
+        
         mf.conv_tol = self.conv_tol
         mf.conv_tol_grad = self.conv_tol_grad
         mf.max_cycle = self.max_cycle
@@ -162,7 +167,7 @@ class calculator:
             mf.kernel()
         else:
             mf.kernel(self.dm)
-
+        print(mol.ao_labels())
         for label in mol.ao_labels():
             _, elem, bas = label.split(" ")[:3]
             if bas not in self.ao_labels[elem]:
@@ -173,7 +178,6 @@ class calculator:
         fock = mf.get_fock()
         overlap = mf.get_ovlp()
         hcore = mf.get_hcore()
-
         if "fock" in self.target:
             self.results["fock"].append(fock)
             self.results["overlap"].append(overlap)
@@ -183,16 +187,26 @@ class calculator:
             self.results["density"].append(self.dm)
         if "hcore" in self.target:
             self.results["hcore"].append(hcore)
+        if "dipole_moment" in self.target: 
+            mo_energy, mo_coeff = mf.eig(fock, overlap)
+            mo_occ = mf.get_occ(mo_energy) # get_occ returns a numpy array
+            dm1 = mf.make_rdm1(mo_coeff, mo_occ)
+            self.results["dipole_moment"].append(mf.dip_moment(dm=dm1))
 
     # TODO: support multiple targets
     def save_results(self, path: str = None):
         if path is None:
             path = os.path.join(self.path, self.basis)
             p = Path(path).mkdir(parents=True, exist_ok=True)
+        else: 
+            #check if path exists 
+            if not os.path.exists(path):
+                print('Creating path', path)
+                p = Path(path).mkdir(parents=True, exist_ok=True)
 
         for k in self.results.keys():
             assert len(self.results[k]) == self.nframes
-            self.results[k] = torch.tensor(self.results[k])
+            self.results[k] = torch.from_numpy(np.array(self.results[k]))
             hickle.dump(self.results[k], os.path.join(path, k + ".hickle"))
 
         ao_nlm = {i: [] for i in self.ao_labels.keys()}
@@ -200,7 +214,7 @@ class calculator:
             for v in self.ao_labels[k]:
                 ao_nlm[k].append(convert_str_to_nlm(v))
 
-        hickle.dump(ao_nlm, os.path.join(path, "orbs.hickle"))
+        hickle.dump(ao_nlm, os.path.join(path, "orbitals.hickle"))
         print("All done, results saved at: ", path)
 
 
