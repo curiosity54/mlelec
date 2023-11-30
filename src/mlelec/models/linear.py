@@ -133,36 +133,9 @@ class LinearTargetModel(nn.Module):
         # FIXME: generalize to other targets
         super().__init__()
         if features is None:
-            from mlelec.features.acdc import (
-                single_center_features,
-                pair_features,
-                twocenter_hermitian_features,
-            )
+            from mlelec.features.acdc import compute_features_for_target
+            self.features = compute_features_for_target(dataset= dataset, **kwargs)
 
-            hypers = kwargs.get("hypers", None)
-            if hypers is None:
-                print("Computing features with default hypers")
-                hypers = {
-                    "cutoff": 4.0,
-                    "max_radial": 6,
-                    "max_angular": 3,
-                    "atomic_gaussian_width": 0.3,
-                    "center_atom_weight": 1,
-                    "radial_basis": {"Gto": {}},
-                    "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
-                }
-            single = single_center_features(dataset.structures, hypers, order_nu = 2, lcut = hypers["max_angular"])
-            if isinstance(dataset.target, SingleCenter):
-                self.features = single
-            elif isinstance(dataset.target, TwoCenter):
-                pairs = pair_features(
-                    dataset.structures,
-                    hypers,
-                    order_nu=1,
-                    lcut = hypers["max_angular"],
-                    feature_names=single[0].properties.names,
-                )
-                self.features = twocenter_hermitian_features(single, pairs)
         
         self._submodels(self.dataset.target.blocks, **kwargs)
         self.dummy_property = self.dataset.target.blocks[0].properties
