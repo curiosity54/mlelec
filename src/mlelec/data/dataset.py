@@ -10,7 +10,8 @@ from mlelec.targets import ModelTargets
 from metatensor import TensorMap, Labels
 import metatensor.operations as operations
 import numpy as np
-
+import os 
+import metatensor
 
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
@@ -23,7 +24,7 @@ class precomputed_molecules(Enum):
 class MoleculeDataset(Dataset):
     def __init__(
         self,
-        frame_path: Optional[str] = None,
+        path: Optional[str] = None,
         mol_name: Union[precomputed_molecules, str] = "water_1000",
         frame_slice: slice = slice(None),
         target: List[str] = ["fock"],  # TODO: list of targets
@@ -35,10 +36,11 @@ class MoleculeDataset(Dataset):
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
         device: str = "cpu",
+        orbs: str="sto-3g",
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
-        self.path = frame_path
+        self.path = path
         self.structures = None
         self.mol_name = mol_name.lower()
         self.use_precomputed = use_precomputed
@@ -48,18 +50,25 @@ class MoleculeDataset(Dataset):
         self.target = {t: [] for t in self.target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
-        if frames is None:
-            assert self.path is not None, "Path to data not provided"
-        self.load_structures(frames=frames)
-
         if target_data is None:
-            self.data_path = self.path
-            self.aux_path = self.path
+            self.data_path = os.path.join(self.path, orbs)
+            self.aux_path = os.path.join(self.path, orbs)
             # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
             if aux_path is not None:
                 self.aux_path = aux_path
+
+        if frames is None:
+            if self.path is None and self.data_path is not None:
+                try:
+                    self.path = self.data_path
+                    self.load_structures()
+                except:
+                    raise ValueError("No structures found at DATA path, either specify frame_path or ensure strures present at data_path")
+            # assert self.path is not None, "Path to data not provided"
+        self.load_structures(frames=frames)
+
 
         self.load_target(target_data=target_data)
         self.aux_data_names = aux
@@ -132,18 +141,20 @@ class MoleculeDataset(Dataset):
 
 
 class MLDataset(Dataset):
-    def __init__(self, molecule_data: MoleculeDataset, device: str = "cpu"):
+    def __init__(self, molecule_data: MoleculeDataset, device: str = "cpu", model_type: Optional[str] = 'acdc', **kwargs, ):
         super().__init__()
         self.device = device
         self.structures = molecule_data.structures
         self.target = molecule_data.target
         print(self.target, next(iter(self.target.values())))
+        # sets the first target as the primary target - # FIXME
         self.target_class = ModelTargets(molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
-            next(iter(molecule_data.target.values())),  # FIXME
+            next(iter(molecule_data.target.values())),  
             frames=self.structures,
             orbitals=molecule_data.aux_data.get("orbitals", None),
             device=device,
+            **kwargs,
         )
 
         self.nstructs = len(self.structures)
@@ -152,7 +163,11 @@ class MLDataset(Dataset):
 
         self.aux_data = molecule_data.aux_data
         self.rng = None
-
+        self.model_type = model_type# flag to know if we are using acdc features or want to cycle hrough positons
+        if self.model_type == 'acdc':
+            self.features = None
+        
+    
     def _shuffle(self, random_seed: int = None):
         if random_seed is None:
             self.rng = torch.default_generator
@@ -183,44 +198,30 @@ class MLDataset(Dataset):
             assert test_frac > 0
         assert train_frac + val_frac + test_frac == 1
 
-        self.train_idx = indices[: int(train_frac * self.nstructs)]
+        self.train_idx = indices[: int(train_frac * self.nstructs)].sort()[0]
         self.val_idx = indices[
             int(train_frac * self.nstructs) : int(
                 (train_frac + val_frac) * self.nstructs
             )
-        ]
-        self.test_idx = indices[int((train_frac + val_frac) * self.nstructs) :]
+        ].sort()[0]
+        self.test_idx = indices[int((train_frac + val_frac) * self.nstructs) :].sort()[0]
         assert len(self.test_idx) > 0
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
 
-        # if self.rng is not None:
-        #     torch.shuffle(indices, generator=self.rng)
-        #     self.train, self.val, self.test = torch.utils.data.random_split(
-        #         range(self.nstructs + 1),
-        #         [train_frac, val_frac, test_frac],
-        #         generator=self.rng,
-        #     )
-        #     assert len(self.test) > 0
 
-        # else:  # sequential split  #FIXME
-        #     self.train = torch.utils.data.Subset(
-        #         range(self.nstructs), range(int(train_frac * self.nstructs))
-        #     )
-        #     self.val = torch.utils.data.Subset(
-        #         range(self.nstructs),
-        #         range(
-        #             int(train_frac * self.nstructs),
-        #             int((train_frac + val_frac) * self.nstructs),
-        #         ),
-        #     )
-        #     self.test = torch.utils.data.Subset(
-        #         range(self.nstructs),
-        #         range(int((train_frac + val_frac) * self.nstructs), self.nstructs),
-        #     )
+    def _set_features(self, features: TensorMap):
+        self.features = features
+        self.feature_names = features.keys.values
+        self.feat_train = self._get_subset(self.features, self.train_idx)
+        self.feat_val = self._get_subset(self.features, self.val_idx)
+        self.feat_test = self._get_subset(self.features, self.test_idx)
 
-        # self.train = DataLoader(self.train, batch_size=self.batch_size)
+    def partition_data(self):
+        self.train_dataset = Dataset(self.feat_train, self.target_train)
+        self.val_dataset = Dataset(self.feat_val, self.target_val)
+        self.test_dataset = Dataset(self.feat_test, self.target_test)
 
     def __len__(self):
         return self.nstructs
@@ -228,5 +229,15 @@ class MLDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        if not self.model_type == "acdc": 
+            return self.structures[idx], self.target.tensor[idx]
+        else:
+            assert self.features is not None, "Features not set, call _set_features() first"
+            x = operations.slice(self.features, axis="samples", labels=Labels(names=["structure"], values=np.asarray([idx]).reshape(-1, 1))) 
+            y = operations.slice(self.target.blocks, axis="samples", labels=Labels(names=["structure"], values=np.asarray([idx]).reshape(-1, 1))) 
+            x = metatensor.to(x, "torch")
+            y = metatensor.to(y, "torch")
 
-        return self.structures[idx], self.target[idx]
+            return x,y
+    
+    

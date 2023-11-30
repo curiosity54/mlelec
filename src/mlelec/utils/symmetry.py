@@ -161,7 +161,7 @@ def _real2complex(L: int):
     return mat
 
 
-def _wigner_d_real(L, alpha, beta, gamma):
+def _wigner_d_real(L, alpha, beta, gamma, device: str = None):
     # L must be int (error with int32)
     r2c_mat = torch.hstack(
         [_r2c(torch.eye(2 * L + 1)[i])[:, None] for i in range(2 * L + 1)]
@@ -169,7 +169,7 @@ def _wigner_d_real(L, alpha, beta, gamma):
     c2r_mat = torch.conj(r2c_mat).T
     wig = _wigner_d(int(L), alpha, beta, gamma)
     # print(c2r_mat.shape, wig.shape, r2c_mat.shape)
-    return torch.real(c2r_mat @ torch.conj(wig) @ r2c_mat)
+    return torch.real(c2r_mat @ torch.conj(wig) @ r2c_mat).to(device)
 
 
 def xyz_to_spherical(data, axes=()):

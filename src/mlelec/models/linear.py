@@ -144,14 +144,14 @@ class LinearTargetModel(nn.Module):
                 print("Computing features with default hypers")
                 hypers = {
                     "cutoff": 4.0,
-                    "max_radial": 4,
+                    "max_radial": 6,
                     "max_angular": 3,
                     "atomic_gaussian_width": 0.3,
                     "center_atom_weight": 1,
                     "radial_basis": {"Gto": {}},
                     "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
                 }
-            single = single_center_features(dataset.structures, hypers, 2)
+            single = single_center_features(dataset.structures, hypers, order_nu = 2, lcut = hypers["max_angular"])
             if isinstance(dataset.target, SingleCenter):
                 self.features = single
             elif isinstance(dataset.target, TwoCenter):
@@ -159,10 +159,11 @@ class LinearTargetModel(nn.Module):
                     dataset.structures,
                     hypers,
                     order_nu=1,
+                    lcut = hypers["max_angular"],
                     feature_names=single[0].properties.names,
                 )
                 self.features = twocenter_hermitian_features(single, pairs)
-
+        
         self._submodels(self.dataset.target.blocks, **kwargs)
         self.dummy_property = self.dataset.target.blocks[0].properties
 
@@ -195,7 +196,7 @@ class LinearTargetModel(nn.Module):
             self.model = torch.nn.ModuleDict(self.submodels)
         self.model.to(self.device)
 
-    def forward(self):
+    def forward(self, features: TensorMap = None):
         pred_blocks = []
         for i, (targ_key, submodel) in enumerate(self.submodels.items()):
             # try:

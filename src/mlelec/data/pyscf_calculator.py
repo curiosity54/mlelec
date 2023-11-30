@@ -10,6 +10,7 @@ import hickle
 import pyscf.pbc.tools.pyscf_ase as pyscf_ase
 import torch
 from collections import defaultdict
+from ase.data import atomic_numbers
 
 # will be updated to work directly with datasets so that we have access
 # to the structures, all species present and ensure basis for all
@@ -170,8 +171,8 @@ class calculator:
         print(mol.ao_labels())
         for label in mol.ao_labels():
             _, elem, bas = label.split(" ")[:3]
-            if bas not in self.ao_labels[elem]:
-                self.ao_labels[elem].append(bas)
+            if bas not in self.ao_labels[atomic_numbers[elem]]:
+                self.ao_labels[atomic_numbers[elem]].append(bas)
 
         print("converged:", mf.converged)
         self.dm = mf.make_rdm1()
@@ -210,13 +211,14 @@ class calculator:
             hickle.dump(self.results[k], os.path.join(path, k + ".hickle"))
 
         ao_nlm = {i: [] for i in self.ao_labels.keys()}
+        
         for k in self.ao_labels.keys():
             for v in self.ao_labels[k]:
                 ao_nlm[k].append(convert_str_to_nlm(v))
+        print(ao_nlm)
 
         hickle.dump(ao_nlm, os.path.join(path, "orbitals.hickle"))
         print("All done, results saved at: ", path)
-
 
 if __name__ == "main":
     calc = calculator(

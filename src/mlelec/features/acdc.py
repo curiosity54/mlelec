@@ -37,8 +37,8 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-        lmax = hypers["max_angular"]
-        cg = ClebschGordanReal(lmax=lmax)
+
+        cg = ClebschGordanReal(lmax=lcut)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -374,3 +374,31 @@ def twocenter_hermitian_features_periodic(
         ),
         blocks=blocks,
     )
+
+
+def compute_features_for_target(dataset:MLDataset, **kwargs):
+    hypers = kwargs.get("hypers", None)
+    if hypers is None:
+        print("Computing features with default hypers")
+        hypers = {
+            "cutoff": 4.0,
+            "max_radial": 6,
+            "max_angular": 3,
+            "atomic_gaussian_width": 0.3,
+            "center_atom_weight": 1,
+            "radial_basis": {"Gto": {}},
+            "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
+        }
+    single = single_center_features(dataset.structures, hypers, order_nu = 2, lcut = hypers["max_angular"])
+    if isinstance(dataset.target, SingleCenter):
+        features = single
+    elif isinstance(dataset.target, TwoCenter):
+        pairs = pair_features(
+            dataset.structures,
+            hypers,
+            order_nu=1,
+            lcut = hypers["max_angular"],
+            feature_names=single[0].properties.names,
+        )
+        features = twocenter_hermitian_features(single, pairs)
+    return features 
