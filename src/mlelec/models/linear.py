@@ -10,7 +10,6 @@ from mlelec.utils.twocenter_utils import (
 )
 from metatensor import Labels, TensorMap, TensorBlock
 import mlelec.metrics as mlmetrics
-from mlelec.targets import SingleCenter, TwoCenter
 
 
 def norm_over_components(x):
@@ -76,6 +75,8 @@ class NormLayer(nn.Module):
 
 class BlockModel(nn.Module):
     "other custom models"
+    ## Could be the MLP as below or other custom model
+    # for now - we just use MLP in the model
 
     def __init__(self):
         super().__init__()
@@ -116,38 +117,25 @@ class LinearTargetModel(nn.Module):
     def __init__(
         self,
         dataset: MLDataset,
-        features: Optional[TensorMap] = None,
         device=None,
-        metrics: Union[str, List[str]] = "l2_loss",
         **kwargs,
     ):
         self.dataset = dataset
         self.device = device
-        self.metrics = metrics
-        if isinstance(metrics, str):
-            self.loss_fn = getattr(mlmetrics, metrics.capitalize())
-        else:
-            self.loss_fns = [getattr(mlmetrics, m.capitalize()) for m in metrics]
-            # TODO: combine losses
 
         # FIXME: generalize to other targets
         super().__init__()
-        if features is None:
-            from mlelec.features.acdc import compute_features_for_target
-            self.features = compute_features_for_target(dataset= dataset, **kwargs)
-
-        
-        self._submodels(self.dataset.target.blocks, **kwargs)
+        self._submodels(self.dataset.features, **kwargs)
         self.dummy_property = self.dataset.target.blocks[0].properties
 
-    def _submodels(self, target, **kwargs):
+    def _submodels(self, features, **kwargs):
         self.submodels = {}
         # return 1 model if no subtargets present, else spawn
         # multiple models
         if len(self.dataset.target.block_keys) == 1:
             self.model = MLP(
                 nlayers=1,
-                nin=self.features.values.shape[-1],
+                nin=features.values.shape[-1],
                 nout=1,
                 nhidden=10,
                 bias=False,
@@ -155,9 +143,9 @@ class LinearTargetModel(nn.Module):
             )
         else:
             for k in self.dataset.target.block_keys:
-                feat = map_targetkeys_to_featkeys(self.features, k)
+                feat = map_targetkeys_to_featkeys(features, k)
                 # print(feat,tuple(k))
-                print(feat.values.device, self.device)
+                # print(feat.values.device, self.device)
                 self.submodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
                     device=self.device,
@@ -165,16 +153,43 @@ class LinearTargetModel(nn.Module):
                     **kwargs,
                 )
 
-                print(self.submodels[str(tuple(k))])
+                # print(k, self.submodels[str(tuple(k))])
             self.model = torch.nn.ModuleDict(self.submodels)
         self.model.to(self.device)
 
-    def forward(self, features: TensorMap = None):
+    def forward(
+        self,
+        features: TensorMap = None,
+        return_type: str = "tensor",
+        batch_indices=None,
+        **kwargs,
+    ):
+        return_choice = [
+            "coupled_blocks",
+            "uncoupled_blocks",
+            "tensor",
+            "loss",
+        ]
+        assert (
+            return_type.lower() in return_choice
+        ), f"return_type must be one of {return_choice}"
+        if return_type == "loss":
+            loss_fn = kwargs.get("loss_fn", None)
+            if loss_fn is None:
+                loss_fn = mlmetrics.L2_loss
+            elif isinstance(loss_fn, str):
+                try:
+                    loss_fn = getattr(mlmetrics, loss_fn.capitalize())
+                except:
+                    raise NotImplementedError(
+                        f"Selected loss function {loss_fn} not implemented"
+                    )
+
         pred_blocks = []
         for i, (targ_key, submodel) in enumerate(self.submodels.items()):
             # try:
             feat = map_targetkeys_to_featkeys(
-                self.features, self.dataset.target.block_keys[i]
+                features, self.dataset.target.block_keys[i]
             )
             nsamples, ncomp, nprops = feat.values.shape
             featval = feat.values
@@ -191,15 +206,24 @@ class LinearTargetModel(nn.Module):
             )
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
-        self.reconstructed = _to_uncoupled_basis(pred_tmap)
+        self.reconstructed_uncoupled = _to_uncoupled_basis(pred_tmap)
+        if batch_indices is not None:
+            batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
+        else:
+            batch_frames = self.dataset.target.frames
         self.reconstructed_tensor = _to_matrix(
-            self.reconstructed,
-            self.dataset.target.frames,
+            self.reconstructed_uncoupled,
+            batch_frames,
             self.dataset.target.orbitals,
             device=self.device,
         )
+        if return_type == "coupled_blocks":
+            return pred_tmap
+        elif return_type == "uncoupled_blocks":
+            return self.reconstructed_uncoupled
+        elif return_type == "tensor":
+            return self.reconstructed_tensor
+        elif return_type == "loss":
+            loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
 
-        loss = self.loss_fn(
-            self.reconstructed_tensor, self.dataset.target.tensor.to(self.device)
-        )
         return loss

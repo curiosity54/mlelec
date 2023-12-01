@@ -268,16 +268,18 @@ def twocenter_features(single_center: TensorMap, pair: TensorMap) -> TensorMap:
 
 
 def twocenter_hermitian_features_periodic(
-    single_center: TensorMap, pair: TensorMap, shift: Optional[Tuple[int, int, int]] = None
+    single_center: TensorMap,
+    pair: TensorMap,
+    shift: Optional[Tuple[int, int, int]] = None,
 ):
-    if shift==[0,0,0]:
+    if shift == [0, 0, 0]:
         return twocenter_hermitian_features(single_center, pair)
-    
+
     keys = []
     blocks = []
-   
+
     for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]: #self translared pairs 
+        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
             idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
             if len(idx) == 0:
                 continue
@@ -293,9 +295,9 @@ def twocenter_hermitian_features_periodic(
                     values=b.values[idx],
                 )
             )
-        else: 
-            raise NotImplementedError # Handle periodic case for different species
-        
+        else:
+            raise NotImplementedError  # Handle periodic case for different species
+
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
@@ -304,9 +306,12 @@ def twocenter_hermitian_features_periodic(
                 continue
             idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
             if len(idx_lo) == 0:
-                print('Corresponding swapped pair not found', np.array(b.samples.values)[idx_up])
-            # else: 
-                # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
+                print(
+                    "Corresponding swapped pair not found",
+                    np.array(b.samples.values)[idx_up],
+                )
+            # else:
+            # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
@@ -376,8 +381,13 @@ def twocenter_hermitian_features_periodic(
     )
 
 
-def compute_features_for_target(dataset:MLDataset, **kwargs):
+from mlelec.targets import SingleCenter, TwoCenter
+from mlelec.data.dataset import MLDataset
+
+
+def compute_features_for_target(dataset: MLDataset, **kwargs):
     hypers = kwargs.get("hypers", None)
+    # if dataset.molecule_data.pbc:
     if hypers is None:
         print("Computing features with default hypers")
         hypers = {
@@ -389,7 +399,9 @@ def compute_features_for_target(dataset:MLDataset, **kwargs):
             "radial_basis": {"Gto": {}},
             "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
         }
-    single = single_center_features(dataset.structures, hypers, order_nu = 2, lcut = hypers["max_angular"])
+    single = single_center_features(
+        dataset.structures, hypers, order_nu=2, lcut=hypers["max_angular"]
+    )
     if isinstance(dataset.target, SingleCenter):
         features = single
     elif isinstance(dataset.target, TwoCenter):
@@ -397,8 +409,10 @@ def compute_features_for_target(dataset:MLDataset, **kwargs):
             dataset.structures,
             hypers,
             order_nu=1,
-            lcut = hypers["max_angular"],
+            lcut=hypers["max_angular"],
             feature_names=single[0].properties.names,
         )
         features = twocenter_hermitian_features(single, pairs)
-    return features 
+    else:
+        raise ValueError(f"Target type {type(dataset.target)} not supported")
+    return features

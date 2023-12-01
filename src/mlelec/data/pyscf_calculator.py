@@ -54,6 +54,14 @@ def convert_str_to_nlm(x: str):
     return [int(n)] + orb_map[lm]
 
 
+def _instantiate_pyscf_mol(frame, basis="sto-3g"):
+    mol = pyscf.gto.Mole()
+    mol.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
+    mol.basis = basis
+    mol.build()
+    return mol
+
+
 class calculator:
     def __init__(
         self,
@@ -62,7 +70,7 @@ class calculator:
         mol_name: str = "water",
         frame_slice=":",
         dft: bool = False,
-        target: Union[str,List[str]] = "fock",
+        target: Union[str, List[str]] = "fock",
     ):  # self.kwargs:Dict[str, Any]
         self.path = path
         self.structures = structures
@@ -75,7 +83,7 @@ class calculator:
             self.pbc = True
         self.nframes = len(self.structures)
         print("Number of frames: ", self.nframes)
-        
+
         if isinstance(target, str):
             target = [target]
         self.target = target
@@ -159,7 +167,7 @@ class calculator:
             mf = mf.density_fit()
         else:
             mf = self.calc(mol)
-        
+
         mf.conv_tol = self.conv_tol
         mf.conv_tol_grad = self.conv_tol_grad
         mf.max_cycle = self.max_cycle
@@ -188,9 +196,9 @@ class calculator:
             self.results["density"].append(self.dm)
         if "hcore" in self.target:
             self.results["hcore"].append(hcore)
-        if "dipole_moment" in self.target: 
+        if "dipole_moment" in self.target:
             mo_energy, mo_coeff = mf.eig(fock, overlap)
-            mo_occ = mf.get_occ(mo_energy) # get_occ returns a numpy array
+            mo_occ = mf.get_occ(mo_energy)  # get_occ returns a numpy array
             dm1 = mf.make_rdm1(mo_coeff, mo_occ)
             self.results["dipole_moment"].append(mf.dip_moment(dm=dm1))
 
@@ -199,10 +207,10 @@ class calculator:
         if path is None:
             path = os.path.join(self.path, self.basis)
             p = Path(path).mkdir(parents=True, exist_ok=True)
-        else: 
-            #check if path exists 
+        else:
+            # check if path exists
             if not os.path.exists(path):
-                print('Creating path', path)
+                print("Creating path", path)
                 p = Path(path).mkdir(parents=True, exist_ok=True)
 
         for k in self.results.keys():
@@ -211,7 +219,7 @@ class calculator:
             hickle.dump(self.results[k], os.path.join(path, k + ".hickle"))
 
         ao_nlm = {i: [] for i in self.ao_labels.keys()}
-        
+
         for k in self.ao_labels.keys():
             for v in self.ao_labels[k]:
                 ao_nlm[k].append(convert_str_to_nlm(v))
@@ -219,6 +227,7 @@ class calculator:
 
         hickle.dump(ao_nlm, os.path.join(path, "orbitals.hickle"))
         print("All done, results saved at: ", path)
+
 
 if __name__ == "main":
     calc = calculator(

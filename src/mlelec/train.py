@@ -7,6 +7,7 @@ import warnings
 from mlelec.train_setup import Trainer
 from mlelec.models import get_model
 from mlelec.datasets.dataset_utils import get_dataset
+from mlelec.features.acdc import compute_features_for_target
 
 from mlelec.data.dataset import precomputed_molecules
 
@@ -32,6 +33,10 @@ parser.add_argument(
     default="./logdir",
     help=" path to save model checkpoints and predictions",
 )
+
+parser.add_argument("--feature_path", type=str, default=None)
+parser.add_argument("--hypers", type=dict, default=None)
+
 
 parser.add_argument(
     "--batch_size",
@@ -81,7 +86,39 @@ parser.add_argument(
 
 args = parser.parse_args()
 
+if args.model_type == "acdc" and args.feature_path is None:
+    # try to load saved features by default but
+    # check if hypers provided to generate features if not
+    # else compute default features
+    if args.hypers is None:
+        warnings.warn("No hypers provided. Computing default features")
+        hypers = {
+            "n_layers": 3,
+            "n_hidden": 128,
+            "activation": "tanh",
+            "norm": True,
+            "bias": False,
+        }
+
+    compute_features_for_target(dataset=dataset, hypers=hypers, device=device)
+
+
+# instantiate model based on args['model_type'] -'linear', 'se3-transformer'..
+def instantiate_model(args, dataset: MLDataset, device):
+    if args.model_type == "linear":
+        # check if features are provided
+        model = LinearTargetModel(dataset, features=features, device=device)
+
+    elif args.model_type == "se3-transformer":
+        raise NotImplementedError
+        # model = SE3TransformerTargetModel(dataset, device)
+    else:
+        raise NotImplementedError
+    return model
+
+
 # change some arguments depending on the situation
+
 
 if __name__ == "__main__":
     trainset, valset, testset = get_dataset(

@@ -90,11 +90,14 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         self, tensor, orbitals, frames, model_strategy: str = "coupled", **kwargs
     ):
         device = kwargs.get("device", "cpu")
-        model_strategy= model_strategy.lower()
+        model_strategy = model_strategy.lower()
+        assert model_strategy in ["coupled", "uncoupled"]
 
         # FIX orbital order for PYSCF # TODO: make rhis optional if not using pyscf
-        tensor = twocenter_utils.fix_orbital_order(tensor, frames=frames, orbital=orbitals)
-    
+        tensor = twocenter_utils.fix_orbital_order(
+            tensor, frames=frames, orbital=orbitals
+        )
+
         super().__init__(tensor, orbitals, frames, device=device)
         assert torch.allclose(
             self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
