@@ -207,9 +207,8 @@ class LinearTargetModel(nn.Module):
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
         self.reconstructed_uncoupled = _to_uncoupled_basis(pred_tmap)
-        if batch_indices is not None:
-            batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
-        else:
+        if batch_indices is  None:
+            #identify the frames in the batch
             batch_indices = list(
                 set(
                     [
@@ -218,12 +217,13 @@ class LinearTargetModel(nn.Module):
                     ]
                 )
             )
+            print(batch_indices)
             # fr_idx = [list(i)[0] for i in fr_idx]
             # print(batch_indices)
             batch_indices = list(batch_indices[0])
             # print(batch_indices)
-            batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
-            # batch_frames = self.dataset.target.frames
+        batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
+        # batch_frames = self.dataset.target.frames
         self.reconstructed_tensor = _to_matrix(
             self.reconstructed_uncoupled,
             batch_frames,

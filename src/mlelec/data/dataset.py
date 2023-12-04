@@ -14,6 +14,7 @@ import os
 import metatensor
 import warnings
 import torch.utils.data as data
+import copy
 
 
 # Dataset class  - to load and pass around structures, targets and
@@ -154,7 +155,16 @@ class MoleculeDataset(Dataset):
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
-
+    def shuffle(self, indices: torch.tensor):
+        self.structures = [self.structures[i] for i in indices]
+        for t in self.target_names:
+            self.target[t] = self.target[t][indices]
+        for t in self.aux_data_names:
+            try:
+                self.aux_data[t] = self.aux_data[t][indices]
+            except:
+                warnings.warn("Aux data {} skipped shuffling ".format(t))
+                continue
 
 class MLDataset(Dataset):
     def __init__(
@@ -163,39 +173,63 @@ class MLDataset(Dataset):
         device: str = "cpu",
         model_type: Optional[str] = "acdc",
         features: Optional[TensorMap] = None,
+        shuffle : bool = False,
+        shuffle_seed: Optional[int] = None,
         **kwargs,
     ):
         super().__init__()
-        self.molecule_data = molecule_data
+        self.nstructs = len(molecule_data.structures)
+        self.rng = None
+        if shuffle:
+            self._shuffle(shuffle_seed)
+        else: 
+            self.indices = self.indices = torch.arange(self.nstructs)
+        self.molecule_data = copy.deepcopy(molecule_data)
+        # self.molecule_data.shuffle(self.indices)
+        # self.molecule_data = molecule_data
         self.device = device
-        self.structures = molecule_data.structures
-        self.target = molecule_data.target
+        self.structures = self.molecule_data.structures
+        self.target = self.molecule_data.target
         # print(self.target, next(iter(self.target.values())))
         # sets the first target as the primary target - # FIXME
-        self.target_class = ModelTargets(molecule_data.target_names[0])
+        self.target_class = ModelTargets(self.molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
-            next(iter(molecule_data.target.values())),
+            next(iter(self.molecule_data.target.values())),
             frames=self.structures,
-            orbitals=molecule_data.aux_data.get("orbitals", None),
+            orbitals=self.molecule_data.aux_data.get("orbitals", None),
             device=device,
             **kwargs,
         )
 
-        self.nstructs = len(self.structures)
+        
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
 
-        self.aux_data = molecule_data.aux_data
+        self.aux_data = self.molecule_data.aux_data
         self.rng = None
         self.model_type = model_type  # flag to know if we are using acdc features or want to cycle hrough positons
         if self.model_type == "acdc":
             self.features = features
+
+        self.train_frac = kwargs.get("train_frac", 0.7)
+        self.val_frac = kwargs.get("val_frac", 0.2)
+        
 
     def _shuffle(self, random_seed: int = None):
         if random_seed is None:
             self.rng = torch.default_generator
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
+
+        self.indices = torch.randperm(self.nstructs, generator=self.rng)
+
+             # update self.structures to reflect shuffling
+            # self.structures_original = self.structures.copy()
+            # self.structures = [self.structures_original[i] for i in self.indices]
+            # self.target.shuffle(self.indices)
+            # self.molecule_data.shuffle(self.indices)
+
+
 
     def _get_subset(self, y: TensorMap, indices: torch.tensor):
         assert isinstance(y, TensorMap)
@@ -210,28 +244,47 @@ class MLDataset(Dataset):
         )
 
     def _split_indices(
-        self, train_frac: float, val_frac: float, test_frac: Optional[float] = None
+        self, train_frac: float=None, val_frac: float=None, test_frac: Optional[float] = None
     ):
-        if self.rng is not None:
-            indices = torch.randperm(self.nstructs, generator=self.rng)
-        else:
-            indices = torch.arange(self.nstructs)
-        if test_frac is None:
-            test_frac = 1 - (train_frac + val_frac)
-            assert test_frac > 0
-        assert np.isclose(train_frac + val_frac + test_frac, 1, rtol=1e-6, atol=1e-5), (
-            train_frac + val_frac + test_frac
-        )
+        #TODO: handle this smarter  
 
-        self.train_idx = indices[: int(train_frac * self.nstructs)].sort()[0]
-        self.val_idx = indices[
-            int(train_frac * self.nstructs) : int(
-                (train_frac + val_frac) * self.nstructs
+        # overwrite self train/val/test indices
+        if train_frac is not None:
+            self.train_frac = train_frac
+        if val_frac is not None:
+            self.val_frac = val_frac
+        if test_frac is None:
+            test_frac = 1 - (self.train_frac + self.val_frac)
+            self.test_frac = test_frac
+            assert self.test_frac > 0
+        else: 
+            try: 
+                self.test_frac = test_frac
+                assert np.isclose(self.train_frac + self.val_frac + self.test_frac, 1, rtol=1e-6, atol=1e-5), (
+            self.train_frac + self.val_frac + self.test_frac, "Split fractions do not add up to 1"
+        )
+            except:
+                self.test_frac = 1 - (self.train_frac + self.val_frac)
+                assert self.test_frac > 0
+
+        # self.train_idx = torch.tensor(list(range(int(train_frac * self.nstructs))))
+        # self.val_idx = torch.tensor(list(
+        #     range(int(train_frac * self.nstructs), int((train_frac + val_frac) * self.nstructs))
+        # ))
+        # self.test_idx = torch.tensor(list(range(int((train_frac + val_frac) * self.nstructs), self.nstructs)))
+        # assert (
+        #     len(self.test_idx)
+        #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+        # ), "Split indices not generated properly"
+
+
+        self.train_idx = self.indices[: int(self.train_frac * self.nstructs)]#.sort()[0]
+        self.val_idx = self.indices[
+            int(self.train_frac * self.nstructs) : int(
+                (self.train_frac + self.val_frac) * self.nstructs
             )
-        ].sort()[0]
-        self.test_idx = indices[int((train_frac + val_frac) * self.nstructs) :].sort()[
-            0
-        ]
+        ]#.sort()[0]
+        self.test_idx = self.indices[int((self.train_frac + self.val_frac) * self.nstructs) :]#.sort()[0]
         assert (
             len(self.test_idx)
             > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
@@ -243,9 +296,7 @@ class MLDataset(Dataset):
         self.train_frames = [self.structures[i] for i in self.train_idx]
         self.val_frames = [self.structures[i] for i in self.val_idx]
         self.test_frames = [self.structures[i] for i in self.test_idx]
-        # update self.structures to reflect shuffling
-        self.structures_original = self.structures.copy()
-        self.structures = [self.structures_original[i] for i in indices]
+       
 
     def _set_features(self, features: TensorMap):
         self.features = features
