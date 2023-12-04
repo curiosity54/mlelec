@@ -210,7 +210,20 @@ class LinearTargetModel(nn.Module):
         if batch_indices is not None:
             batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
         else:
-            batch_frames = self.dataset.target.frames
+            batch_indices = list(
+                set(
+                    [
+                        tuple(set(b.samples["structure"].tolist()))
+                        for (k, b) in pred_tmap.items()
+                    ]
+                )
+            )
+            # fr_idx = [list(i)[0] for i in fr_idx]
+            # print(batch_indices)
+            batch_indices = list(batch_indices[0])
+            # print(batch_indices)
+            batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
+            # batch_frames = self.dataset.target.frames
         self.reconstructed_tensor = _to_matrix(
             self.reconstructed_uncoupled,
             batch_frames,

@@ -20,6 +20,7 @@ import torch.utils.data as data
 # required auxillary data wherever necessary
 class precomputed_molecules(Enum):
     water_1000 = "examples/data/water_1000"
+    water_rotated = "examples/data/water_rotated"
     ethane = "examples/data/ethane"
 
 
@@ -196,7 +197,7 @@ class MLDataset(Dataset):
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-    def _get_subset(self, y, indices: torch.tensor):
+    def _get_subset(self, y: TensorMap, indices: torch.tensor):
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
@@ -231,10 +232,20 @@ class MLDataset(Dataset):
         self.test_idx = indices[int((train_frac + val_frac) * self.nstructs) :].sort()[
             0
         ]
-        assert len(self.test_idx) > 0
+        assert (
+            len(self.test_idx)
+            > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+        ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
+
+        self.train_frames = [self.structures[i] for i in self.train_idx]
+        self.val_frames = [self.structures[i] for i in self.val_idx]
+        self.test_frames = [self.structures[i] for i in self.test_idx]
+        # update self.structures to reflect shuffling
+        self.structures_original = self.structures.copy()
+        self.structures = [self.structures_original[i] for i in indices]
 
     def _set_features(self, features: TensorMap):
         self.features = features
@@ -337,17 +348,20 @@ def get_dataloader(
         ml_data,
         sampler=train_sampler,
         collate_fn=collate_fn,
+        shuffle=False,
     )
     val_loader = data.DataLoader(
         ml_data,
         sampler=val_sampler,
         collate_fn=collate_fn,
+        shuffle=False,
     )
 
     test_loader = data.DataLoader(
         ml_data,
         sampler=test_sampler,
         collate_fn=collate_fn,
+        shuffle=False,
     )
     if selection.lower() == "all":
         return train_loader, val_loader, test_loader

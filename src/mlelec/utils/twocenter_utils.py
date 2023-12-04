@@ -75,6 +75,8 @@ def unfix_orbital_order(
         return matrix[idx][:, idx]
 
     if isinstance(frames, list):
+        if len(frames) == 1:
+            matrix = matrix.reshape(1, *matrix.shape)
         assert len(matrix.shape) == 3  # (nframe, nao, nao)
         fixed_matrices = []
         for i, f in enumerate(frames):
