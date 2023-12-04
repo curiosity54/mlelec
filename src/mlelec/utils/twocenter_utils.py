@@ -11,11 +11,15 @@ import warnings
 
 
 def fix_orbital_order(
-    matrix: Union[torch.tensor, np.ndarray], frames: Union[List, ase.Atoms], orbital: dict
+    matrix: Union[torch.tensor, np.ndarray],
+    frames: Union[List, ase.Atoms],
+    orbital: dict,
 ):
     """Fix the l=1 matrix components from [x,y,z] to [-1, 0,1], handles single and multiple frames"""
 
-    def fix_one_matrix(matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict):
+    def fix_one_matrix(
+        matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict
+    ):
         idx = []
         iorb = 0
         atoms = list(frame.numbers)
@@ -42,6 +46,46 @@ def fix_orbital_order(
         return torch.stack(fixed_matrices)
     else:
         return fix_one_matrix(matrix, frames, orbital)
+
+
+def unfix_orbital_order(
+    matrix: Union[torch.tensor, np.ndarray],
+    frames: Union[List, ase.Atoms],
+    orbital: dict,
+):
+    """Fix the l=1 matrix components from [-1,0,1] to [x,y,z], handles single and multiple frames"""
+
+    def unfix_one_matrix(
+        matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict
+    ):
+        idx = []
+        iorb = 0
+        atoms = list(frame.numbers)
+        for atom_type in atoms:
+            cur = ()
+            for _, a in enumerate(orbital[atom_type]):
+                n, l, _ = a
+                if (n, l) != cur:
+                    if l == 1:
+                        idx += [iorb + 2, iorb, iorb + 1]
+                    else:
+                        idx += range(iorb, iorb + 2 * l + 1)
+                    iorb += 2 * l + 1
+                    cur = (n, l)
+        return matrix[idx][:, idx]
+
+    if isinstance(frames, list):
+        if len(frames) == 1:
+            matrix = matrix.reshape(1, *matrix.shape)
+        assert len(matrix.shape) == 3  # (nframe, nao, nao)
+        fixed_matrices = []
+        for i, f in enumerate(frames):
+            fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
+        if isinstance(matrix, np.ndarray):
+            return np.asarray(fixed_matrices)
+        return torch.stack(fixed_matrices)
+    else:
+        return unfix_one_matrix(matrix, frames, orbital)
 
 
 def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
@@ -570,7 +614,7 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None):
         return block
     else:
         assert isinstance(cell_shift, List)
-        assert len(cell_shift)==3
+        assert len(cell_shift) == 3
         cell_shift_a, cell_shift_b, cell_shift_c = cell_shift
         block = features.block(
             block_type=block_type,

@@ -10,12 +10,18 @@ from mlelec.targets import ModelTargets
 from metatensor import TensorMap, Labels
 import metatensor.operations as operations
 import numpy as np
+import os
+import metatensor
+import warnings
+import torch.utils.data as data
+import copy
 
 
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
 class precomputed_molecules(Enum):
     water_1000 = "examples/data/water_1000"
+    water_rotated = "examples/data/water_rotated"
     ethane = "examples/data/ethane"
 
 
@@ -23,7 +29,7 @@ class precomputed_molecules(Enum):
 class MoleculeDataset(Dataset):
     def __init__(
         self,
-        frame_path: Optional[str] = None,
+        path: Optional[str] = None,
         mol_name: Union[precomputed_molecules, str] = "water_1000",
         frame_slice: slice = slice(None),
         target: List[str] = ["fock"],  # TODO: list of targets
@@ -35,10 +41,11 @@ class MoleculeDataset(Dataset):
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
         device: str = "cpu",
+        orbs: str = "sto-3g",
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
-        self.path = frame_path
+        self.path = path
         self.structures = None
         self.mol_name = mol_name.lower()
         self.use_precomputed = use_precomputed
@@ -48,18 +55,37 @@ class MoleculeDataset(Dataset):
         self.target = {t: [] for t in self.target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
-        if frames is None:
-            assert self.path is not None, "Path to data not provided"
-        self.load_structures(frames=frames)
-
         if target_data is None:
-            self.data_path = self.path
-            self.aux_path = self.path
+            self.data_path = os.path.join(self.path, orbs)
+            self.aux_path = os.path.join(self.path, orbs)
             # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
             if aux_path is not None:
                 self.aux_path = aux_path
+
+        if frames is None:
+            if self.path is None and self.data_path is not None:
+                try:
+                    self.path = self.data_path
+                    self.load_structures()
+                except:
+                    raise ValueError(
+                        "No structures found at DATA path, either specify frame_path or ensure strures present at data_path"
+                    )
+            # assert self.path is not None, "Path to data not provided"
+        self.load_structures(frames=frames)
+        self.pbc = False
+        for f in self.structures:
+            # print(f.pbc, f.cell)
+            if f.pbc.any():
+                if not f.cell.any():
+                    # "PBC found but no cell vectors found"
+                    f.pbc = False
+                self.pbc = True
+            if self.pbc:
+                if not f.cell.any():
+                    f.cell = [100, 100, 100]  # TODO this better
 
         self.load_target(target_data=target_data)
         self.aux_data_names = aux
@@ -129,28 +155,65 @@ class MoleculeDataset(Dataset):
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
-
+    def shuffle(self, indices: torch.tensor):
+        self.structures = [self.structures[i] for i in indices]
+        for t in self.target_names:
+            self.target[t] = self.target[t][indices]
+        for t in self.aux_data_names:
+            try:
+                self.aux_data[t] = self.aux_data[t][indices]
+            except:
+                warnings.warn("Aux data {} skipped shuffling ".format(t))
+                continue
 
 class MLDataset(Dataset):
-    def __init__(self, molecule_data: MoleculeDataset, device: str = "cpu"):
+    def __init__(
+        self,
+        molecule_data: MoleculeDataset,
+        device: str = "cpu",
+        model_type: Optional[str] = "acdc",
+        features: Optional[TensorMap] = None,
+        shuffle : bool = False,
+        shuffle_seed: Optional[int] = None,
+        **kwargs,
+    ):
         super().__init__()
+        self.nstructs = len(molecule_data.structures)
+        self.rng = None
+        if shuffle:
+            self._shuffle(shuffle_seed)
+        else: 
+            self.indices = self.indices = torch.arange(self.nstructs)
+        self.molecule_data = copy.deepcopy(molecule_data)
+        # self.molecule_data.shuffle(self.indices)
+        # self.molecule_data = molecule_data
         self.device = device
-        self.structures = molecule_data.structures
-        self.target = molecule_data.target
-        self.target_class = ModelTargets(molecule_data.target_names[0])
+        self.structures = self.molecule_data.structures
+        self.target = self.molecule_data.target
+        # print(self.target, next(iter(self.target.values())))
+        # sets the first target as the primary target - # FIXME
+        self.target_class = ModelTargets(self.molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
-            next(iter(molecule_data.target.values())),  # FIXME
+            next(iter(self.molecule_data.target.values())),
             frames=self.structures,
-            orbitals=molecule_data.aux_data.get("orbitals", None),
+            orbitals=self.molecule_data.aux_data.get("orbitals", None),
             device=device,
+            **kwargs,
         )
 
-        self.nstructs = len(self.structures)
+        
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
 
-        self.aux_data = molecule_data.aux_data
+        self.aux_data = self.molecule_data.aux_data
         self.rng = None
+        self.model_type = model_type  # flag to know if we are using acdc features or want to cycle hrough positons
+        if self.model_type == "acdc":
+            self.features = features
+
+        self.train_frac = kwargs.get("train_frac", 0.7)
+        self.val_frac = kwargs.get("val_frac", 0.2)
+        
 
     def _shuffle(self, random_seed: int = None):
         if random_seed is None:
@@ -158,7 +221,17 @@ class MLDataset(Dataset):
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-    def _get_subset(self, y, indices: torch.tensor):
+        self.indices = torch.randperm(self.nstructs, generator=self.rng)
+
+             # update self.structures to reflect shuffling
+            # self.structures_original = self.structures.copy()
+            # self.structures = [self.structures_original[i] for i in self.indices]
+            # self.target.shuffle(self.indices)
+            # self.molecule_data.shuffle(self.indices)
+
+
+
+    def _get_subset(self, y: TensorMap, indices: torch.tensor):
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
@@ -171,61 +244,181 @@ class MLDataset(Dataset):
         )
 
     def _split_indices(
-        self, train_frac: float, val_frac: float, test_frac: Optional[float] = None
+        self, train_frac: float=None, val_frac: float=None, test_frac: Optional[float] = None
     ):
-        if self.rng is not None:
-            indices = torch.randperm(self.nstructs, generator=self.rng)
-        else:
-            indices = torch.arange(self.nstructs)
-        if test_frac is None:
-            test_frac = 1 - (train_frac + val_frac)
-            assert test_frac > 0
-        assert train_frac + val_frac + test_frac == 1
+        #TODO: handle this smarter  
 
-        self.train_idx = indices[: int(train_frac * self.nstructs)]
-        self.val_idx = indices[
-            int(train_frac * self.nstructs) : int(
-                (train_frac + val_frac) * self.nstructs
+        # overwrite self train/val/test indices
+        if train_frac is not None:
+            self.train_frac = train_frac
+        if val_frac is not None:
+            self.val_frac = val_frac
+        if test_frac is None:
+            test_frac = 1 - (self.train_frac + self.val_frac)
+            self.test_frac = test_frac
+            assert self.test_frac > 0
+        else: 
+            try: 
+                self.test_frac = test_frac
+                assert np.isclose(self.train_frac + self.val_frac + self.test_frac, 1, rtol=1e-6, atol=1e-5), (
+            self.train_frac + self.val_frac + self.test_frac, "Split fractions do not add up to 1"
+        )
+            except:
+                self.test_frac = 1 - (self.train_frac + self.val_frac)
+                assert self.test_frac > 0
+
+        # self.train_idx = torch.tensor(list(range(int(train_frac * self.nstructs))))
+        # self.val_idx = torch.tensor(list(
+        #     range(int(train_frac * self.nstructs), int((train_frac + val_frac) * self.nstructs))
+        # ))
+        # self.test_idx = torch.tensor(list(range(int((train_frac + val_frac) * self.nstructs), self.nstructs)))
+        # assert (
+        #     len(self.test_idx)
+        #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+        # ), "Split indices not generated properly"
+
+
+        self.train_idx = self.indices[: int(self.train_frac * self.nstructs)]#.sort()[0]
+        self.val_idx = self.indices[
+            int(self.train_frac * self.nstructs) : int(
+                (self.train_frac + self.val_frac) * self.nstructs
             )
-        ]
-        self.test_idx = indices[int((train_frac + val_frac) * self.nstructs) :]
-        assert len(self.test_idx) > 0
+        ]#.sort()[0]
+        self.test_idx = self.indices[int((self.train_frac + self.val_frac) * self.nstructs) :]#.sort()[0]
+        assert (
+            len(self.test_idx)
+            > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+        ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
 
-        # if self.rng is not None:
-        #     torch.shuffle(indices, generator=self.rng)
-        #     self.train, self.val, self.test = torch.utils.data.random_split(
-        #         range(self.nstructs + 1),
-        #         [train_frac, val_frac, test_frac],
-        #         generator=self.rng,
-        #     )
-        #     assert len(self.test) > 0
+        self.train_frames = [self.structures[i] for i in self.train_idx]
+        self.val_frames = [self.structures[i] for i in self.val_idx]
+        self.test_frames = [self.structures[i] for i in self.test_idx]
+       
 
-        # else:  # sequential split  #FIXME
-        #     self.train = torch.utils.data.Subset(
-        #         range(self.nstructs), range(int(train_frac * self.nstructs))
-        #     )
-        #     self.val = torch.utils.data.Subset(
-        #         range(self.nstructs),
-        #         range(
-        #             int(train_frac * self.nstructs),
-        #             int((train_frac + val_frac) * self.nstructs),
-        #         ),
-        #     )
-        #     self.test = torch.utils.data.Subset(
-        #         range(self.nstructs),
-        #         range(int((train_frac + val_frac) * self.nstructs), self.nstructs),
-        #     )
+    def _set_features(self, features: TensorMap):
+        self.features = features
+        if not hasattr(self, "train_idx"):
+            warnings.warn("No train/val/test split found, deafult split used")
+            self._split_indices(train_frac=0.7, val_frac=0.2, test_frac=0.1)
+        self.feature_names = features.keys.values
+        self.feat_train = self._get_subset(self.features, self.train_idx)
+        self.feat_val = self._get_subset(self.features, self.val_idx)
+        self.feat_test = self._get_subset(self.features, self.test_idx)
 
-        # self.train = DataLoader(self.train, batch_size=self.batch_size)
+    def _set_model_return(self, model_return: str = "blocks"):
+        ## Helper function to set output in __get_item__ for model training
+        assert model_return in [
+            "blocks",
+            "tensor",
+        ], "model_target must be one of [blocks, tensor]"
+        self.model_return = model_return
 
     def __len__(self):
         return self.nstructs
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
+            # idx = [i.item() for i in idx]
             idx = idx.tolist()
+        if not self.model_type == "acdc":
+            return self.structures[idx], self.target.tensor[idx]
+        else:
+            assert (
+                self.features is not None
+            ), "Features not set, call _set_features() first"
+            x = operations.slice(
+                self.features,
+                axis="samples",
+                labels=Labels(
+                    names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                ),
+            )
+            if self.model_return == "blocks":
+                y = operations.slice(
+                    self.target.blocks,
+                    axis="samples",
+                    labels=Labels(
+                        names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                    ),
+                )
+            else:
+                idx = [i.item() for i in idx]
+                y = self.target.tensor[idx]
+            # x = metatensor.to(x, "torch")
+            # y = metatensor.to(y, "torch")
 
-        return self.structures[idx], self.target[idx]
+            return x, y, idx
+
+    def collate_fn(self, batch):
+        x = batch[0][0]
+        y = batch[0][1]
+        idx = batch[0][2]
+        return {"input": x, "output": y, "idx": idx}
+
+
+def get_dataloader(
+    ml_data: MLDataset,
+    collate_fn: callable = None,
+    batch_size: int = 4,
+    drop_last: bool = False,
+    selection: Optional[str] = "all",
+    model_return: Optional[str] = None,
+):
+    assert selection in [
+        "all",
+        "train",
+        "val",
+        "test",
+    ], "selection must be one of [all, train, val, test]"
+    if collate_fn is None:
+        collate_fn = ml_data.collate_fn
+
+    assert model_return in [
+        "blocks",
+        "tensor",
+    ], "model_target must be one of [blocks, tensor]"
+    ml_data._set_model_return(model_return)
+    train_sampler = data.sampler.SubsetRandomSampler(ml_data.train_idx)
+    train_sampler = data.sampler.BatchSampler(
+        train_sampler, batch_size=batch_size, drop_last=drop_last
+    )
+
+    val_sampler = data.sampler.SubsetRandomSampler(ml_data.val_idx)
+    val_sampler = data.sampler.BatchSampler(
+        val_sampler, batch_size=batch_size, drop_last=drop_last
+    )
+
+    test_sampler = data.sampler.SubsetRandomSampler(ml_data.test_idx)
+    test_sampler = data.sampler.BatchSampler(
+        test_sampler, batch_size=batch_size, drop_last=drop_last
+    )
+    train_loader = data.DataLoader(
+        ml_data,
+        sampler=train_sampler,
+        collate_fn=collate_fn,
+        shuffle=False,
+    )
+    val_loader = data.DataLoader(
+        ml_data,
+        sampler=val_sampler,
+        collate_fn=collate_fn,
+        shuffle=False,
+    )
+
+    test_loader = data.DataLoader(
+        ml_data,
+        sampler=test_sampler,
+        collate_fn=collate_fn,
+        shuffle=False,
+    )
+    if selection.lower() == "all":
+        return train_loader, val_loader, test_loader
+    elif selection.lower() == "train":
+        return train_loader
+    elif selection.lower() == "val":
+        return val_loader
+    elif selection.lower() == "test":
+        return test_loader

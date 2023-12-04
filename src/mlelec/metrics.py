@@ -5,6 +5,7 @@ from typing import List, Optional
 
 def L2_loss(pred: torch.tensor, target: torch.tensor):
     """L2 loss function"""
+    # target = target.to(pred)
     return torch.sum((pred - target) ** 2)
 
 
