@@ -155,6 +155,11 @@ class MoleculeDataset(Dataset):
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
+        if "overlap" in self.aux_data_names and "density" in self.target_names:
+            self.target_names.append("elec_population")
+            self.target["elec_population"] = torch.sum(torch.einsum("bij, bji ->bi", self.target["density"], self.aux_data["overlap"]), axis=1)
+            #This, for each frame is the Trace(overlap @ Density matrix) = number of electrons 
+    
     def shuffle(self, indices: torch.tensor):
         self.structures = [self.structures[i] for i in indices]
         for t in self.target_names:
