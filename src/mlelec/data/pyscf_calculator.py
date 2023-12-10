@@ -136,9 +136,9 @@ class calculator:
             self.kpts = kwargs.get("kpts", [0, 0, 0])
             self.mol = pyscf.pbc.gto.Cell()
             if self.dft:
-                self.calc = getattr(pyscf.pbc.scf, "KRKS")
+                self.calc = getattr(pyscf.pbc.dft, "KRKS")
             else:
-                self.calc = getattr(pyscf.pbc.dft, "KRHF")
+                self.calc = getattr(pyscf.pbc.scf, "KRHF")
 
         else:
             self.mol = pyscf.gto.Mole()
@@ -183,6 +183,9 @@ class calculator:
                 self.ao_labels[atomic_numbers[elem]].append(bas)
 
         print("converged:", mf.converged)
+        if not mf.converged:
+            raise ValueError("PYSCF Calculation did not converge")
+
         self.dm = mf.make_rdm1()
         fock = mf.get_fock()
         overlap = mf.get_ovlp()
@@ -229,9 +232,216 @@ class calculator:
         print("All done, results saved at: ", path)
 
 
+class calculator_PBC:
+    def __init__(self, structure) -> None:
+        pass
+
+
+# ------TODO: Incorporate the following into the above class -----
+
+import pyscf.pbc.gto as pbcgto
+from pyscf.pbc.tools.k2gamma import get_phase, kpts_to_kmesh, double_translation_indices
+from collections import defaultdict
+
+
+def translation_vectors_for_kmesh(cell, kmesh, wrap_around=False, return_rel=False):
+    from pyscf import lib
+
+    """
+    Adapted from pyscf.pbc.tools.k2gamma to return relative translation vectors
+
+    Translation vectors to construct super-cell of which the gamma point is
+    identical to the k-point mesh of primitive cell
+    """
+    latt_vec = cell.lattice_vectors()
+    R_rel_a = np.arange(kmesh[0])
+    R_rel_b = np.arange(kmesh[1])
+    R_rel_c = np.arange(kmesh[2])
+    if wrap_around:
+        R_rel_a[(kmesh[0] + 1) // 2 :] -= kmesh[0]
+        R_rel_b[(kmesh[1] + 1) // 2 :] -= kmesh[1]
+        R_rel_c[(kmesh[2] + 1) // 2 :] -= kmesh[2]
+    R_vec_rel = lib.cartesian_prod((R_rel_a, R_rel_b, R_rel_c))
+    if return_rel:
+        return R_vec_rel
+    R_vec_abs = np.dot(R_vec_rel, latt_vec)
+    return R_vec_abs
+
+
+def get_scell_phase(frame, kmesh, basis="sto-3g"):
+    """
+    Returns the phase factors for the supercell corresponding to the kpoint mesh
+    Input:
+    frame: ase atoms object
+    kmesh: kpoint mesh
+    basis: basis set
+    """
+    cell = pbcgto.Cell()
+    cell.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
+    cell.basis = basis
+    cell.a = frame.cell
+    cell.build()
+    kpts = cell.make_kpts(kmesh)
+    scell, phase = get_phase(cell, kpts)
+    return cell, scell, phase
+
+
+def check_translation_hermiticity(H: Union[dict, np.ndarray], NR=None):
+    """
+    Check if matric corresponding to H[M,:,N,:] is the same as the matrix corresponding to H[N,:,M,:].
+    """
+    if not isinstance(H, dict):
+        assert len(H.shape) == 4, "H must be a 4D tensor of shape (NR,nao,NR,nao)"
+        H = {
+            (i, j): H[i, :, j, :] for i in range(H.shape[0]) for j in range(H.shape[2])
+        }
+    elif NR is None:
+        NR = next(iter(H.values()))[0].shape[0]
+    # if NR is None:
+    #     try:
+    #         assert len(H.shape)==4
+    #         assert H.shape[0]==H.shape[3]
+    #         NR = H.shape[0]
+    #     except:
+    #         raise ValueError("H must be a 4D tensor of shape (NR,nao,NR,nao)")
+
+    for i in range(NR):
+        for j in range(NR):
+            norm = np.linalg.norm(H[(i, j)] - H[(j, i)].T)
+            if norm > 1e-8:
+                raise ValueError("Non hermiticity detected", norm, i, j)
+
+
+def _map_transidx_to_relative_translation(
+    output_tensor: Union[dict, np.ndarray],
+    cell: Optional[pyscf.pbc.gto.cell] = None,
+    kmesh: Optional[List] = None,
+    R_rel: Optional[np.ndarray] = None,
+):
+    """
+    Find the relative translation vector that the translation index (M,N) of the output tensor (M, :, N,:) corresponds to
+    NOTE: M-N is NOT the translation vector directly. Instead M, N indices must be used to identify the correct translation vectors from where the RELATIVE translation vectors must be generated
+    Args:
+        output_tensor: dict of shape (M, :, N, :), could be any tensor
+        cell: ase cell object
+        kmesh: kpoint mesh
+        R_rel: relative translation vectors
+    Returns:
+        maps_Ls: dict indexed by R_rel, with value corresponding to (M-N, M, N, i) cor, where R_rel is the relative translation vector
+        output_tensor_
+    """
+    if not isinstance(output_tensor, dict):
+        assert (
+            len(output_tensor.shape) == 4
+        ), "output tensor must be a 4D tensor of shape (M, :, N, :)"
+        output_tensor = {
+            (i, j): output_tensor[i, :, j, :]
+            for i in range(output_tensor.shape[0])
+            for j in range(output_tensor.shape[2])
+        }
+
+    if R_rel is None:
+        assert (
+            cell is not None and kmesh is not None
+        ), " Pass cell and kmesh to generate relative displacements"
+        R_rel = translation_vectors_for_kmesh(
+            cell, kmesh, wrap_around=False, return_rel=True
+        )
+
+    maps_Ls = defaultdict(list)
+    for i, (M, N) in enumerate(output_tensor.keys()):
+        maps_Ls[tuple((R_rel[M] - R_rel[N]))].append((M - N, M, N, i))
+
+    maps_Ls = {k: v for k, v in maps_Ls.items() if v}
+    return maps_Ls
+
+
+def map_gammapoint_to_relativetrans(
+    output_tensor: Union[dict, np.ndarray],
+    map_reltrans=None,
+    phase: np.ndarray = None,
+    cell: Optional[pyscf.pbc.gto.cell] = None,
+    kmesh: Optional[List] = None,
+):
+    if not isinstance(output_tensor, dict):
+        assert (
+            len(output_tensor.shape) == 4
+        ), "output tensor must be a 4D tensor of shape (M, :, N, :)"
+        output_tensor = {
+            (i, j): output_tensor[i, :, j, :]
+            for i in range(output_tensor.shape[0])
+            for j in range(output_tensor.shape[2])
+        }
+
+    if map_reltrans is None:
+        map_reltrans = _map_transidx_to_relative_translation(output_tensor, cell, kmesh)
+
+    output_maps_Ls = defaultdict(list)
+    output_Ls = {}
+    weight_Ls = {}
+    phase_diff_Ls = {}
+    for i, key in enumerate(map_reltrans.keys()):
+        for x in map_reltrans[key]:
+            M, N = x[1], x[2]
+            output_maps_Ls[key].append((output_tensor[(M, N)]))
+        # Check that all the values in the output tensor corresponding to the same relative translation vector are the same
+        try:
+            xx = output_maps_Ls[key][0]
+            for y in output_maps_Ls[key][1:]:
+                # print(np.linalg.norm(xx-y), k)
+                if not np.allclose(xx, y):
+                    raise ValueError(
+                        "All matrices for corresponding to this translation not the same!",
+                        key,
+                        np.linalg.norm(xx - y),
+                    )
+            output_Ls[
+                key
+            ] = xx  # assign the first value to this relative translation vector
+            weight_Ls[key] = len(
+                output_maps_Ls[key]
+            )  # track how many times this relative translation vector appears
+            phase_diff_Ls[key] = np.array(
+                phase[N] / phase[M]
+            )  # track the phase difference corresponding to this relative translation vector
+        except:
+            print(key, "skipped")
+
+    return output_Ls, weight_Ls, phase_diff_Ls
+
+
+def map_gammapoint_to_kpoint(
+    output_tensor: Union[dict, np.ndarray],
+    phase: np.ndarray = None,
+    map_reltrans=None,
+    cell: Optional[pyscf.pbc.gto.cell] = None,
+    kmesh: Optional[List] = None,
+    nao=None,
+):
+    Nk = phase.shape[1]
+    if nao is None and cell is not None:
+        nao = cell.nao
+    elif nao is None and isinstance(output_tensor, dict):
+        nao = next(iter(output_tensor.values())).shape[1]
+    elif nao is None and not isinstance(output_tensor, dict):
+        nao = output_tensor.shape[1]
+        print("nao = ", nao)
+    if map_reltrans is None:
+        map_reltrans = _map_transidx_to_relative_translation(output_tensor, cell, kmesh)
+    gamma_to_trans, weight, phase_diff = map_gammapoint_to_relativetrans(
+        output_tensor, map_reltrans, phase, cell, kmesh
+    )
+
+    kmatrix = np.zeros((Nk, nao, nao), dtype=np.complex128)
+    for key in gamma_to_trans.keys():
+        for kpt in range(Nk):
+            kmatrix[kpt] += gamma_to_trans[key] * weight[key] * phase_diff[key][kpt]
+    return kmatrix / Nk
+
+
 if __name__ == "main":
     calc = calculator(
-        path="/Users/jigyasa/scratch/my_mlelec/examples/data/water/",
+        path="../../../examples/data/water/",
         mol_name="water_1000",
         dft=False,
         frame_slice="0:10",
