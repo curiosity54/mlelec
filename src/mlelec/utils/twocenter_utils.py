@@ -161,6 +161,16 @@ def _to_blocks(
         warnings.warn(
             "Matrix is neither hermitian nor antihermitian - attempting to decompose"
         )
+        # check if sum is symmetric:
+        msum = matrices + matrices.transpose(-1, -2)
+        mdiff = matrices - matrices.transpose(-1, -2)
+
+        if not torch.allclose(torch.abs(msum), torch.abs(msum.transpose(-1, -2))):
+            print("Sum is not symmetric")
+        if not torch.allclose(torch.abs(mdiff), torch.abs(mdiff.transpose(-1, -2))):
+            print("Difference is not symmetric")
+            raise ValueError
+
         symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
             matrices - matrices.transpose(-1, -2)
         )
