@@ -12,7 +12,7 @@ I_SQRT_2 = 1.0 / np.sqrt(2)
 SQRT_2 = np.sqrt(2)
 
 
-def random_rotation(alpha, beta, gamma):
+def _rotation_matrix_from_angles(alpha, beta, gamma):
     """A Cartesian rotation matrix in the appropriate convention
     (ZYZ, implicit rotations) to be consistent with the common Wigner D definition.
     (alpha, beta, gamma) are Euler angles (radians)."""
@@ -43,7 +43,7 @@ def check_rotation_equivariance(frame, property_calculator, l: int = None):
     # should also implmenet when feature is passed instead of frame
     device = property_calculator.device
     alpha, beta, gamma = np.random.rand(3)
-    _rotation = random_rotation(alpha, beta, gamma)
+    _rotation =  _rotation_matrix_from_angles(alpha, beta, gamma)
     rot_frame = rotate_frame(frame, _rotation)
     pred = property_calculator(frame.to(device))
     rot_pred = property_calculator(rot_frame.to(device))
