@@ -849,7 +849,7 @@ def compute_rhoi_pca(
         eigs = torch.pow(s, 2) / (xl.shape[0] - 1)
         eigs_ratio = eigs / torch.sum(eigs)
         explained_var = torch.cumsum(eigs_ratio, dim=0)
-
+        # print(explained_var)
         if npca[idx] is None:
             npc = vh.shape[1]
 
