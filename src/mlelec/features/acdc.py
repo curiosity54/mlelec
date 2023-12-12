@@ -11,6 +11,7 @@ from metatensor import TensorMap, TensorBlock, Labels
 import metatensor.operations as operations
 import torch
 import numpy as np
+import warnings
 
 from mlelec.features.acdc_utils import (
     acdc_standardize_keys,
@@ -29,6 +30,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames)
     rhoi = rhoi.keys_to_properties(["species_neighbor"])
+    # print(rhoi[0].samples)
     rho1i = acdc_standardize_keys(rhoi)
 
     if order_nu == 1:
@@ -60,7 +62,11 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         lcut=lcut,
         other_keys_match=["species_center"],
     )
-
+    if kwargs.get("pca_final", False):
+        warnings.warn("PCA final features")
+        rho_x = _pca(
+            rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
+        )
     return rho_x
 
 
@@ -73,6 +79,7 @@ def pair_features(
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
+    max_shift = None,
     **kwargs,
 ):
     if not isinstance(frames, list):
@@ -85,14 +92,31 @@ def pair_features(
     calculator = PairExpansion(**hypers)
     rho0_ij = calculator.compute(frames)
 
-    if all_pairs and hypers["interaction_cutoff"] < np.max(
+    if all_pairs:
+        hypers_allpairs = hypers.copy()
+        if max_shift is None and hypers["cutoff"] < np.max(
         [np.max(f.get_all_distances()) for f in frames]
     ):
-        hypers_allpairs = hypers.copy()
-        hypers_allpairs["interaction_cutoff"] = np.ceil(
-            np.max([np.max(f.get_all_distances()) for f in frames])
-        )
-        calculator_allpairs = PairExpansion(hypers_allpairs)
+            hypers_allpairs["cutoff"] = np.ceil(
+                np.max([np.max(f.get_all_distances()) for f in frames])
+            )
+            nmax = int(hypers_allpairs["max_radial"]/ hypers["cutoff"] * hypers_allpairs["cutoff"])
+            hypers_allpairs["max_radial"] = nmax
+        elif max_shift is not None:
+            repframes = [f.repeat(max_shift) for f in frames]
+            hypers_allpairs["cutoff"] = np.ceil(
+                np.max([np.max(f.get_all_distances()) for f in repframes])
+            )
+        
+            warnings.warn(
+                f"Using cutoff {hypers_allpairs['cutoff']} for all pairs feature"
+            )
+        else:
+            warnings.warn(
+                f"Using unchanged hypers for all pairs feature"
+            )
+        calculator_allpairs = PairExpansion(**hypers_allpairs)
+        
         rho0_ij = calculator_allpairs.compute(frames)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
@@ -153,7 +177,7 @@ def pair_features(
 
 
 def twocenter_hermitian_features(
-    single_center: TensorMap, pair: TensorMap
+    single_center: TensorMap, pair: TensorMap, 
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
@@ -216,6 +240,8 @@ def twocenter_hermitian_features(
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
+            
+            
             blocks.append(
                 TensorBlock(
                     samples=Labels(
@@ -271,6 +297,7 @@ def twocenter_hermitian_features_periodic(
     single_center: TensorMap,
     pair: TensorMap,
     shift: Optional[Tuple[int, int, int]] = None,
+    antisymmetric: bool = False,
 ):
     if shift == [0, 0, 0]:
         return twocenter_hermitian_features(single_center, pair)
@@ -337,28 +364,52 @@ def twocenter_hermitian_features_periodic(
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+            if not antisymmetric:
+                blocks.append(
+                    TensorBlock(
+                        samples=Labels(
+                            names=b.samples.names,
+                            values=np.asarray(b.samples.values[idx_up]),
+                        ),
+                        components=b.components,
+                        properties=b.properties,
+                        values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                    )
                 )
-            )
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                blocks.append(
+                    TensorBlock(
+                        samples=Labels(
+                            names=b.samples.names,
+                            values=np.asarray(b.samples.values[idx_up]),
+                        ),
+                        components=b.components,
+                        properties=b.properties,
+                        values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                    )
                 )
-            )
+            else:
+                blocks.append(
+                    TensorBlock(
+                        samples=Labels(
+                            names=b.samples.names,
+                            values=np.asarray(b.samples.values[idx_up]),
+                        ),
+                        components=b.components,
+                        properties=b.properties,
+                        values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                    )
+                )
+                blocks.append(
+                    TensorBlock(
+                        samples=Labels(
+                            names=b.samples.names,
+                            values=np.asarray(b.samples.values[idx_up]),
+                        ),
+                        components=b.components,
+                        properties=b.properties,
+                        values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                    )
+                )
         elif k["species_center"] < k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
