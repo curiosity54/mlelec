@@ -39,8 +39,8 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-
-        cg = ClebschGordanReal(lmax=lcut)
+        L = max(lcut, hypers["max_angular"])
+        cg = ClebschGordanReal(lmax=L)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -84,10 +84,13 @@ def pair_features(
 ):
     if not isinstance(frames, list):
         frames = [frames]
+    if lcut is None:    
+        lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-
-        cg = ClebschGordanReal(lmax=lcut)
+        L = max(lcut, hypers["max_angular"])
+        cg = ClebschGordanReal(lmax=L)
+        # cg = ClebschGordanReal(lmax=lcut)
 
     calculator = PairExpansion(**hypers)
     rho0_ij = calculator.compute(frames)
