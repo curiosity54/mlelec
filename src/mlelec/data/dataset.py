@@ -51,6 +51,7 @@ class MoleculeDataset(Dataset):
         self.use_precomputed = use_precomputed
         self.frame_slice = frame_slice
         self.target_names = target
+        self.basis = orbs
 
         self.target = {t: [] for t in self.target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
@@ -128,6 +129,16 @@ class MoleculeDataset(Dataset):
                     # os.join(self.aux_path, "{}.hickle".format(t))
             except Exception as e:
                 print(e)
+                print("Generating data")
+                from mlelec.data.pyscf_calculator import calculator
+                calc = calculator(
+                path=self.path,
+                mol_name=self.mol_name,
+                frame_slice=":",
+                target=self.target_names,
+            )
+                calc.calculate(basis_set=self.basis, verbose=1)
+                calc.save_results()
                 # raise FileNotFoundError("Required target not found at the given path")
                 # TODO: generate data instead?
 
