@@ -363,6 +363,7 @@ def map_gammapoint_to_relativetrans(
     cell: Optional[pyscf.pbc.gto.cell] = None,
     kmesh: Optional[List] = None,
 ):
+    """For each unique translation obtained from _map_transidx_to_relative_translation, find the corresponding block of the output tensor - make sure all instances corresponding to the same rel translation are equal - track how many times each rel translation appears in WEIGHTS - track the phase difference corresponding to each rel translation"""
     if not isinstance(output_tensor, dict):
         assert (
             len(output_tensor.shape) == 4
@@ -418,6 +419,7 @@ def map_gammapoint_to_kpoint(
     kmesh: Optional[List] = None,
     nao=None,
 ):
+    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix"""
     Nk = phase.shape[1]
     if nao is None and cell is not None:
         nao = cell.nao

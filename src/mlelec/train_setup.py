@@ -24,8 +24,8 @@ class ModelTrainer:
         max_epochs: int = 100000,
         log_interval: int = 100,
         save_path="./train_results",
-        checkpoint: str = "best",  # last, best or number to begin 
-        save_all_checkpoints:bool=False, 
+        checkpoint: str = "best",  # last, best or number to begin
+        save_all_checkpoints: bool = False,
         device: str = "cuda" if torch.cuda.is_available() else "cpu",
         start_from_checkpoint: bool = False,
         optimizer: Optional[str] = None,
@@ -47,8 +47,10 @@ class ModelTrainer:
         }
         self.checkpoint = checkpoint
         self.save_all_checkpoints = save_all_checkpoints
-        self.save_path = os.path.join(save_path, datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S'))
-        
+        self.save_path = os.path.join(
+            save_path, datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        )
+
         # self.writer = SummaryWriter(self.save_path + "/" + "_trn")
 
         self.best_val_loss = 10**10
@@ -116,22 +118,22 @@ class ModelTrainer:
         with tqdm(start=self.epoch, total=self.max_epochs) as pbar:
             early_stop_count = 0
             while self.epoch < self.max_epochs:
-                train_loss=0
+                train_loss = 0
                 for batch_idx, data in enumerate(self.train_data):
                     # data = data.to(self.device)
                     self.optimizer.zero_grad()
-                    pred = self.model(data["input"], return_type="tensor", batch_indices=data["idx"])
-                    loss = loss_fn(pred,data["output"])
+                    pred = self.model(
+                        data["input"], return_type="tensor", batch_indices=data["idx"]
+                    )
+                    loss = loss_fn(pred, data["output"])
                     loss.backward()
                     self.optimizer.step()
                     # self.writer.add_scalar("Loss train", loss.item(), self.epoch)
                     self.epoch += 1
-                    train_loss+=loss.item()
+                    train_loss += loss.item()
                     pbar.update(1)
                 if self.epoch % self.log_interval == 0:
-                    print(
-                            f"Train Epoch: {self.epoch} , Loss: {train_loss:.6f}"
-                        )
+                    print(f"Train Epoch: {self.epoch} , Loss: {train_loss:.6f}")
                     # self.writer.add_scalar("Loss train", loss.item(), self.epoch)
                     val_loss = self.validate(loss_fn)
                     new_best = val_loss < self.best_val_loss
@@ -151,16 +153,19 @@ class ModelTrainer:
 
     def validate(self, loss_fn):
         self.model.train(False)
-        val_loss=0
-        for i, data in enumerate(self.val_data):
-            pred = self.model(data["input"], return_type="tensor", batch_indices=data["idx"])
-            vloss = loss_fn(pred, data["output"])
-            val_loss += vloss.item()
-        print(   f"Val Epoch: {self.epoch} , Loss: {val_loss:.6f}"
-                        )
+        val_loss = 0
+        with torch.no_grad():
+            for i, data in enumerate(self.val_data):
+                pred = self.model(
+                    data["input"], return_type="tensor", batch_indices=data["idx"]
+                )
+                vloss = loss_fn(pred, data["output"])
+                val_loss += vloss.item()
+
+        print(f"Val Epoch: {self.epoch} , Loss: {val_loss:.6f}")
         # self.writer.add_scalar("Loss validation", loss.item(), self.epoch)
         self.model.train(True)
         return val_loss
-    
-    def test(self): 
-        pass 
+
+    def test(self):
+        pass
