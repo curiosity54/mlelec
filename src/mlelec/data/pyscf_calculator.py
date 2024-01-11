@@ -363,6 +363,7 @@ def map_gammapoint_to_relativetrans(
     cell: Optional[pyscf.pbc.gto.cell] = None,
     kmesh: Optional[List] = None,
 ):
+    """For each unique translation obtained from _map_transidx_to_relative_translation, find the corresponding block of the output tensor - make sure all instances corresponding to the same rel translation are equal - track how many times each rel translation appears in WEIGHTS - track the phase difference corresponding to each rel translation"""
     if not isinstance(output_tensor, dict):
         assert (
             len(output_tensor.shape) == 4
@@ -418,6 +419,7 @@ def map_gammapoint_to_kpoint(
     kmesh: Optional[List] = None,
     nao=None,
 ):
+    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix"""
     Nk = phase.shape[1]
     if nao is None and cell is not None:
         nao = cell.nao
@@ -437,6 +439,28 @@ def map_gammapoint_to_kpoint(
         for kpt in range(Nk):
             kmatrix[kpt] += gamma_to_trans[key] * weight[key] * phase_diff[key][kpt]
     return kmatrix / Nk
+
+
+def kpoint_to_gamma(kmatrix, phase):
+    """
+    Convert the kpoint matrix to the gamma point matrix
+
+    kmatrix: ndarray of shape (Nk, nao, nao)
+    phase: dict with the relative translation vectors R as keys. Each value is an ndarray of shape (Nk,) corresponding to phase factors for each kpoint e^{i k.R}
+    """
+    nao = kmatrix.shape[-1]
+    Nk = next(iter(phase.values())).shape[0]
+    assert (
+        len(kmatrix) == Nk
+    ), "Number of kpoints in the kpoint matrix must be equal to the number of kpoints in the phase matrix"
+    translated_matrices = np.zeros((len(phase.keys()), nao, nao), dtype=np.complex128)
+
+    for i, key in enumerate(phase.keys()):
+        for kpt in range(Nk):
+            # km[i] +=  phase_diff[key][kpt] * phase_diff[key][kpt].conj() * gamma_to_trans[key] * weight[key] # This works
+            translated_matrices[i] += kmatrix[kpt] * phase[key][kpt].conj()
+
+    return translated_matrices / Nk
 
 
 if __name__ == "main":
