@@ -441,6 +441,28 @@ def map_gammapoint_to_kpoint(
     return kmatrix / Nk
 
 
+def kpoint_to_gamma(kmatrix, phase):
+    """
+    Convert the kpoint matrix to the gamma point matrix
+
+    kmatrix: ndarray of shape (Nk, nao, nao)
+    phase: dict with the relative translation vectors R as keys. Each value is an ndarray of shape (Nk,) corresponding to phase factors for each kpoint e^{i k.R}
+    """
+    nao = kmatrix.shape[-1]
+    Nk = next(iter(phase.values())).shape[0]
+    assert (
+        len(kmatrix) == Nk
+    ), "Number of kpoints in the kpoint matrix must be equal to the number of kpoints in the phase matrix"
+    translated_matrices = np.zeros((len(phase.keys()), nao, nao), dtype=np.complex128)
+
+    for i, key in enumerate(phase.keys()):
+        for kpt in range(Nk):
+            # km[i] +=  phase_diff[key][kpt] * phase_diff[key][kpt].conj() * gamma_to_trans[key] * weight[key] # This works
+            translated_matrices[i] += kmatrix[kpt] * phase[key][kpt].conj()
+
+    return translated_matrices / Nk
+
+
 if __name__ == "main":
     calc = calculator(
         path="../../../examples/data/water/",
