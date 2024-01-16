@@ -512,7 +512,7 @@ def _to_coupled_basis(
         decoupled = torch.moveaxis(block.values, -1, -2).reshape(
             (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1)
         )
-        
+
         # selects the (only) key in the coupled dictionary (l1 and l2
         # that gave birth to the coupled terms L, with L going from
         # |l1 - l2| up to |l1 + l2|
@@ -525,10 +525,10 @@ def _to_coupled_basis(
             # skip blocks that are zero because of symmetry
             if ai == aj and ni == nj and li == lj:
                 parity = (-1) ** (li + lj + L)
-                if ((parity == -1 and block_type in (0, 1)) or (
-                    parity == 1 and block_type == -1
-                )) and not skip_symmetry:
-                 
+                if (
+                    (parity == -1 and block_type in (0, 1))
+                    or (parity == 1 and block_type == -1)
+                ) and not skip_symmetry:
                     continue
 
             new_block = block_builder.add_block(
@@ -605,7 +605,7 @@ def _to_uncoupled_basis(
     return block_builder.build()
 
 
-def map_targetkeys_to_featkeys(features, key, cell_shift=None):
+def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
     try:
         block_type = key["block_type"]
         species_center = key["species_i"]
@@ -621,6 +621,28 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None):
         # block_type, ai, ni, li, aj, nj, lj = key
     inversion_sigma = (-1) ** (li + lj + L)
     if cell_shift is None:
+        if return_key:
+            return labels_where(
+                features.keys,
+                Labels(
+                    [
+                        "block_type",
+                        "spherical_harmonics_l",
+                        "inversion_sigma",
+                        "species_center",
+                        "species_neighbor",
+                    ],
+                    values=np.asarray(
+                        [
+                            block_type,
+                            L,
+                            inversion_sigma,
+                            species_center,
+                            species_neighbor,
+                        ]
+                    ).reshape(1, -1),
+                ),
+            )
         block = features.block(
             block_type=block_type,
             spherical_harmonics_l=L,
@@ -633,6 +655,34 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None):
         assert isinstance(cell_shift, List)
         assert len(cell_shift) == 3
         cell_shift_a, cell_shift_b, cell_shift_c = cell_shift
+        if return_key:
+            return labels_where(
+                features.keys,
+                Labels(
+                    [
+                        "block_type",
+                        "spherical_harmonics_l",
+                        "inversion_sigma",
+                        "species_center",
+                        "species_neighbor",
+                        "cell_shift_a",
+                        "cell_shift_b",
+                        "cell_shift_c",
+                    ],
+                    values=np.asarray(
+                        [
+                            block_type,
+                            L,
+                            inversion_sigma,
+                            species_center,
+                            species_neighbor,
+                            cell_shift_a,
+                            cell_shift_b,
+                            cell_shift_c,
+                        ]
+                    ).reshape(1, -1),
+                ),
+            )
         block = features.block(
             block_type=block_type,
             spherical_harmonics_l=L,
