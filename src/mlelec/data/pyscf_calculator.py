@@ -419,7 +419,7 @@ def map_gammapoint_to_kpoint(
     kmesh: Optional[List] = None,
     nao=None,
 ):
-    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix"""
+    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}"""
     Nk = phase.shape[1]
     if nao is None and cell is not None:
         nao = cell.nao
