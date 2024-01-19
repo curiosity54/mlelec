@@ -3,7 +3,7 @@ import numpy as np
 import math
 from scipy.spatial.transform import Rotation
 import wigners
-from typing import Dict, Optional, List
+from typing import Dict, Optional, List, Union
 from metatensor import TensorMap
 
 # sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
@@ -43,7 +43,7 @@ def check_rotation_equivariance(frame, property_calculator, l: int = None):
     # should also implmenet when feature is passed instead of frame
     device = property_calculator.device
     alpha, beta, gamma = np.random.rand(3)
-    _rotation =  _rotation_matrix_from_angles(alpha, beta, gamma)
+    _rotation = _rotation_matrix_from_angles(alpha, beta, gamma)
     rot_frame = rotate_frame(frame, _rotation)
     pred = property_calculator(frame.to(device))
     rot_pred = property_calculator(rot_frame.to(device))
@@ -131,6 +131,18 @@ def _r2c(sp):
         rc[l + m] = (sp[l + m] + 1j * sp[l - m]) * I_SQRT_2 * (-1) ** m
         rc[l - m] = (sp[l + m] - 1j * sp[l - m]) * I_SQRT_2
     return rc
+
+
+def _c2r(cp):
+    """Complex to real SPH. Assumes a block with 2l+1 complex
+    corresponding to Y^m_l with m indices from -l to +l"""
+    l = (len(cp) - 1) // 2  # infers l from the vector size
+    rs = torch.zeros(len(cp), dtype=torch.float64)
+    rs[l] = np.real(cp[l])
+    for m in range(1, l + 1):
+        rs[l - m] = (-1) ** m * SQRT_2 * np.imag(cp[l + m])
+        rs[l + m] = (-1) ** m * SQRT_2 * np.real(cp[l + m])
+    return rs
 
 
 def _real2complex(L: int):
@@ -510,3 +522,33 @@ class ClebschGordanReal:
         if ltuple[2:] == ():
             decoupled = next(iter(decoupled[()].values()))
         return decoupled
+
+
+def _reflect_hermitian(matrix: Union[torch.tensor, np.ndarray], retain_upper=True):
+    """
+    TODO: support matrices (_, N, N)
+
+    matrix: (N,N) matrix (could be non-hermitian)
+    retain_upper: bool. If true, the upper triangle of the matrix is retained and reflected along the diagonal, else the lower triangle is retained.
+
+    Returns a hermitian matrix with the same diagonal elements as the input matrix and the upper or lower triangle elements reflected along the diagonal.
+    """
+
+    if isinstance(matrix, torch.Tensor):
+        lib = torch
+    else:
+        lib = np
+    tmp = lib.zeros_like(matrix)
+    dim = matrix.shape[-1]
+    if not retain_upper:
+        tmp[lib.tril_indices(dim)] = matrix[lib.tril_indices(dim)]
+
+    tmp[lib.triu_indices(dim)] = matrix[
+        lib.triu_indices(dim)
+    ]  # selected_matrice[tuple(s)][0][np.triu_indices(nao)]
+    tmp += tmp.T
+    # fix the diagonal
+    for i in range(tmp.shape[0]):
+        tmp[i, i] /= 2
+    assert np.isclose(tmp - tmp.T, 0).all()
+    return tmp
