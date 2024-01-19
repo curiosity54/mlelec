@@ -278,7 +278,7 @@ def get_scell_phase(frame, kmesh, basis="sto-3g"):
     """
     cell = pbcgto.Cell()
     cell.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
-    cell.basis = basis
+    cell.basis = basis  # check if this is actually needed
     cell.a = frame.cell
     cell.build()
     kpts = cell.make_kpts(kmesh)
@@ -441,12 +441,20 @@ def map_gammapoint_to_kpoint(
     return kmatrix / Nk
 
 
-def kpoint_to_gamma(kmatrix, phase):
+def kpoint_to_translations(
+    kmatrix,
+    phase,
+    map_reltrans=None,
+    return_supercell=True,
+    cell: Optional[pyscf.pbc.gto.cell] = None,
+    kmesh: Optional[List] = None,
+):
     """
     Convert the kpoint matrix to the gamma point matrix
 
     kmatrix: ndarray of shape (Nk, nao, nao)
     phase: dict with the relative translation vectors R as keys. Each value is an ndarray of shape (Nk,) corresponding to phase factors for each kpoint e^{i k.R}
+    return_gamma: bool, if True, return the gamma point matrix, else return the dict of translated matrices
     """
     nao = kmatrix.shape[-1]
     Nk = next(iter(phase.values())).shape[0]
@@ -460,7 +468,19 @@ def kpoint_to_gamma(kmatrix, phase):
             # km[i] +=  phase_diff[key][kpt] * phase_diff[key][kpt].conj() * gamma_to_trans[key] * weight[key] # This works
             translated_matrices[i] += kmatrix[kpt] * phase[key][kpt].conj()
 
-    return translated_matrices / Nk
+    translated_matrices = translated_matrices / Nk
+    translated_matrices = {k: v for k, v in zip(phase.keys(), translated_matrices)}
+    if return_supercell:
+        gamma = np.zeros(Nk, nao, Nk, nao)  # np for now - TODO: allow for torch
+        assert cell is not None and kmesh is not None, "Provide cell and kmesh"
+        idx_map = _map_transidx_to_relative_translation(gamma, cell, kmesh)
+
+        for key in phase.keys():
+            for i, (_, M, N, _) in enumerate(idx_map[key]):
+                gamma[M, :N, :] = translated_matrices[key]
+        return gamma
+
+    return translated_matrices
 
 
 if __name__ == "main":
