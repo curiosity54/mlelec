@@ -15,6 +15,7 @@ import metatensor
 import warnings
 import torch.utils.data as data
 import copy
+from collections import defaultdict
 
 
 # Dataset class  - to load and pass around structures, targets and
@@ -438,3 +439,171 @@ def get_dataloader(
         return val_loader
     elif selection.lower() == "test":
         return test_loader
+
+from mlelec.data.pyscf_calculator import kpoint_to_translations, translations_to_kpoint
+from mlelec.data.pyscf_calculator import get_scell_phase, map_supercell_to_relativetrans, translation_vectors_for_kmesh, _map_transidx_to_relative_translation
+class PeriodicDataset(Dataset):
+    #TODO: make format compatible with MolecularDataset
+    def __init__(self, frames, frame_slice:slice= slice(None), kgrid:Union[List[int], List[List[int]]]=[1,1,1], matrices_kpoint:Union[torch.tensor, np.ndarray]=None, matrices_translation:Union[Dict, torch.tensor, np.ndarray]=None, target:List[str]=["real_translation"] , aux:List[str]=["real_overlap"], use_precomputed:bool=True, device = "cuda", orbs:str="sto-3g", desired_shifts:List=None):
+        self.structures = frames
+        self.frame_slice = frame_slice
+        self.nstructs = len(frames)
+        self.kmesh = kgrid
+        self.kgrid_is_list = False
+        if isinstance(kgrid[0], list):
+            self.kgrid_is_list = True
+            assert len(self.kmesh) == self.nstructs, "If kgrid is a list, it must have the same length as the number of structures"
+        else: 
+            self.kmesh = [kgrid for _ in range(self.nstructs)] # currently easiest to do 
+            
+        self.device = device
+        self.basis = orbs
+        self.use_precomputed = use_precomputed
+        if not use_precomputed:
+            raise NotImplementedError("You must use precomputed data for now.")
+
+        self.target_names = target
+        self.aux_names = aux
+        self.desired_shifts_sup = [] # track the negative counterparts of desired_shifts as well
+        self.cells = []
+        self.phase_matrices = []
+        self.supercells = []
+        self.all_relative_shifts = [] # allowed shifts of kmesh
+        
+        for ifr, structure in enumerate(self.structures):
+            # if self.kgrid_is_list:
+                # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
+            # else:
+            cell, scell, phase = get_scell_phase(structure, self.kmesh[ifr])
+
+            self.cells.append(cell)
+            self.supercells.append(scell)
+            self.phase_matrices.append(phase)
+            self.all_relative_shifts.append(translation_vectors_for_kmesh(cell, self.kmesh[ifr], return_rel=True).tolist())
+        
+        self.supercell_matrices = None
+        if desired_shifts is not None: 
+            self.desired_shifts = desired_shifts 
+            
+            for s in self.desired_shifts:
+                self.desired_shifts_sup.append(s) # make this tuple(s)?
+                if [-s[0], -s[1], -s[2]] not in self.desired_shifts:
+                    self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
+        #     # if self._isgamma_sc:
+        #         # TODO 
+        #         #extract unit cell and translations 
+        
+        if matrices_translation is not None:
+            if desired_shifts is None:
+                self.desired_shifts = self.desired_shifts_sup = np.unique(np.vstack(self.all_relative_shifts), axis=0) 
+            self.matrices_translation = {tuple(t): [] for t in list(self.desired_shifts)} 
+            self.weights_translation = []#{tuple(t): [] for t in list(self.desired_shifts)} 
+            self.phase_diff_translation =[] #{tuple(t): [] for t in list(self.desired_shifts)} 
+            
+            self.matrices_translation = defaultdict(list)#{}
+            if not isinstance(matrices_translation[0], dict): 
+                # assume we are given the supercell matrices
+                self.supercell_matrices = matrices_translation.copy()
+                # convert to dict of translations
+                matrices_translation = []
+                for ifr in range(self.nstructs): 
+                    #TODO: we'd need to track frames in which desired shifts not found 
+                    translated_mat_dict, weight, phase_diff = map_gammapoint_to_relativetrans(self.supercell_matrices[ifr], phase=self.phase_matrices[ifr], cell= self.cells[ifr], kmesh=self.kmesh[ifr])
+                    matrices_translation.append(translated_mat_dict)
+                    self.weights_translation.append(weight)
+                    self.phase_diff_translation.append(phase_diff)
+
+                    for i,t in enumerate(self.desired_shifts_sup):
+                        # for ifr in range(self.nstructs): 
+                        # idx_t = self.all_relative_shifts[ifr].index(list(t))
+                        # print(tuple(t), idx_t, self.matrices_translation.keys())#matrices_translation[ifr][idx_t])
+                        self.matrices_translation[tuple(t)].append( translated_mat_dict[tuple(t)])
+
+
+                # assume we are given dicts with translatiojns as keys
+            else:
+                self.matrices_translation = matrices_translation # NOT TESTED FIXME
+            self.matrices_kpoint = self.get_kpoint_target()
+        else: 
+            assert matrices_kpoint is not None, "Must provide either matrices_kpoint or matrices_translation"
+            
+        if matrices_kpoint is not None:
+            self.matrices_kpoint = matrices_kpoint
+            self.matrices_translation = self.get_translation_target(matrices_kpoint)
+
+
+        self.target = {t: [] for t in self.target_names}
+        for t in self.target_names:
+        # keep only desired shifts
+            if t == "real_translation":
+                self.target[t] = self.matrices_translation
+            elif t == "kpoint":
+                self.target[t] = self.matrices_kpoint
+    
+    
+    def get_kpoint_target(self):
+        kmatrix = []
+        for ifr in range(self.nstructs):
+            kmatrix.append(translations_to_kpoint(self.matrices_translation[ifr],self.phase_diff_translation[ifr], self.weights_translation[ifr]))
+        return kmatrix
+        
+
+    def get_translation_target(self, matrices_kpoint):
+        target = []
+        self.translation_idx_map = []
+        if not hasattr(self, "phase_diff_translation"):
+            self.phase_diff_translation = []
+            for ifr in range(self.nstructs):
+                assert matrices_kpoint[ifr].shape[0] == self.phase_matrices[ifr].shape[0], "Number of kpoints and phase matrices must be the same"
+                Nk = self.phase_matrices[ifr].shape[0]
+                nao = matrices_kpoint[ifr].shape[-1]
+                idx_map = _map_transidx_to_relative_translation(np.zeros((Nk, nao, Nk, nao)), R_rel = np.asarray(self.all_relative_shifts[ifr]))
+                print(self.all_relative_shifts[ifr], idx_map)
+                self.translation_idx_map.append(idx_map)
+                frame_phase = {}
+                for i, (key, val) in enumerate(idx_map.items()):
+                    M, N = val[0][1], val[0][2]
+                    frame_phase[key] = np.array(self.phase_matrices[ifr][N] /self.phase_matrices[ifr][M])
+                self.phase_diff_translation.append(frame_phase)
+
+        for ifr in range(self.nstructs):
+            sc = kpoint_to_translations(matrices_kpoint[ifr], self.phase_diff_translation[ifr], idx_map=self.translation_idx_map[ifr], return_supercell=False)
+            # convert this to dict over trnaslations and to gamma point if required
+            target.append(sc)
+        return target
+
+    def _run_tests(self):
+        self.check_translation_hermiticity()
+        self.check_fourier()
+        self.check_block_()
+
+    def check_translation_hermiticity(self):
+        """Check H(T) = H(-T)^T"""
+        pass 
+        # for i, structure in enumerate(self.structures):
+        #     check_translation_hermiticity(structure, self.matrices_translation[i])
+    
+    def check_fourier(self):
+        pass
+
+    def check_block_(self):
+        # mat -> blocks _> couple -> uncouple -> mat 
+        pass
+        
+    def discard_nonhermiticity(self, target= "", retain="upper"):
+        """For each T, create a hermitian target with the upper triangle reflected across the diagonal
+        retain = "upper" or "lower" 
+        target :str to specify which matrices to discard nonhermiticity from 
+        """
+        retain = retain.lower()
+        retain_upper = retain == "upper"
+        from mlelec.utils.symmetry import _reflect_hermitian
+        for i, mat in enumerate(len(self.targets[target])):
+            assert len(mat.shape) == 2, "matrix to discard non-hermiticity from must be a 2D matrix"
+
+            self.target[target] = _reflect_hermitian(mat, retain_upper=retain_upper)
+
+
+    def __len__(self):
+        return self.nstructs
+    

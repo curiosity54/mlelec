@@ -356,7 +356,7 @@ def _map_transidx_to_relative_translation(
     return maps_Ls
 
 
-def map_gammapoint_to_relativetrans(
+def map_supercell_to_relativetrans(
     output_tensor: Union[dict, np.ndarray],
     map_reltrans=None,
     phase: np.ndarray = None,
@@ -411,15 +411,20 @@ def map_gammapoint_to_relativetrans(
     return output_Ls, weight_Ls, phase_diff_Ls
 
 
-def map_gammapoint_to_kpoint(
-    output_tensor: Union[dict, np.ndarray],
+def map_supercell_to_kpoint(
+    output_tensor: Union[np.ndarray, torch.tensor], #Union[dict, np.ndarray],
     phase: np.ndarray = None,
     map_reltrans=None,
     cell: Optional[pyscf.pbc.gto.cell] = None,
     kmesh: Optional[List] = None,
     nao=None,
 ):
-    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}"""
+    """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}
+    output_tensor: Supercell matrix shape (NR, nao, NR, nao) where NR is the number of relative translations and nao is the number of atomic orbitals
+    phase: matrix of shape (NR, Nk) where Nk is the number of kpoints 
+    map_reltrans: dict of shape (NR, 4) where NR is the number of relative translations and 4 corresponds to (M-N, M, N, i) cor, where R_rel is the relative translation vector
+
+    """
     Nk = phase.shape[1]
     if nao is None and cell is not None:
         nao = cell.nao
@@ -430,21 +435,36 @@ def map_gammapoint_to_kpoint(
         print("nao = ", nao)
     if map_reltrans is None:
         map_reltrans = _map_transidx_to_relative_translation(output_tensor, cell, kmesh)
-    gamma_to_trans, weight, phase_diff = map_gammapoint_to_relativetrans(
+    sc_to_trans, weight, phase_diff = map_supercell_to_relativetrans(
         output_tensor, map_reltrans, phase, cell, kmesh
     )
+    return translations_to_kpoint(sc_to_trans, phase_diff, weight)
+    # kmatrix = np.zeros((Nk, nao, nao), dtype=np.complex128)
+    # for key in sc_to_trans.keys():
+    #     for kpt in range(Nk):
+    #         kmatrix[kpt] += sc_to_trans[key] * weight[key] * phase_diff[key][kpt]
+    # return kmatrix / Nk
 
+def translations_to_kpoint(translated_matrices_dict, phase_diff, weights):
+    """
+    translated_matrices_dict: dict of shape (NR, nao, nao) where NR is the number of relative translations and nao is the number of atomic orbitals
+    phase_diff: dict of shape (NR, Nk) where Nk is the number of kpoints
+    weights: dict of shape (NR,) where NR is the number of relative translations
+    Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}
+    
+    """
+    Nk = next(iter(phase_diff.values())).shape[-1]
+    nao = next(iter(translated_matrices_dict.values())).shape[-1]
     kmatrix = np.zeros((Nk, nao, nao), dtype=np.complex128)
-    for key in gamma_to_trans.keys():
+    for key in translated_matrices_dict.keys():
         for kpt in range(Nk):
-            kmatrix[kpt] += gamma_to_trans[key] * weight[key] * phase_diff[key][kpt]
+            kmatrix[kpt] += translated_matrices_dict[key] * weights[key] * phase_diff[key][kpt]
     return kmatrix / Nk
-
 
 def kpoint_to_translations(
     kmatrix,
     phase,
-    map_reltrans=None,
+    idx_map=None,
     return_supercell=True,
     cell: Optional[pyscf.pbc.gto.cell] = None,
     kmesh: Optional[List] = None,
@@ -454,7 +474,7 @@ def kpoint_to_translations(
 
     kmatrix: ndarray of shape (Nk, nao, nao)
     phase: dict with the relative translation vectors R as keys. Each value is an ndarray of shape (Nk,) corresponding to phase factors for each kpoint e^{i k.R}
-    return_gamma: bool, if True, return the gamma point matrix, else return the dict of translated matrices
+    return_supercell: bool, if True, assemble the translated matrices into the supercell matrix, else return the dict of translated matrices
     """
     nao = kmatrix.shape[-1]
     Nk = next(iter(phase.values())).shape[0]
