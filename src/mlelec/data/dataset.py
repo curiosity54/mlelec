@@ -508,7 +508,7 @@ class PeriodicDataset(Dataset):
                 matrices_translation = []
                 for ifr in range(self.nstructs): 
                     #TODO: we'd need to track frames in which desired shifts not found 
-                    translated_mat_dict, weight, phase_diff = map_gammapoint_to_relativetrans(self.supercell_matrices[ifr], phase=self.phase_matrices[ifr], cell= self.cells[ifr], kmesh=self.kmesh[ifr])
+                    translated_mat_dict, weight, phase_diff = map_supercell_to_relativetrans(self.supercell_matrices[ifr], phase=self.phase_matrices[ifr], cell= self.cells[ifr], kmesh=self.kmesh[ifr])
                     matrices_translation.append(translated_mat_dict)
                     self.weights_translation.append(weight)
                     self.phase_diff_translation.append(phase_diff)
@@ -523,7 +523,7 @@ class PeriodicDataset(Dataset):
                 # assume we are given dicts with translatiojns as keys
             else:
                 self.matrices_translation = matrices_translation # NOT TESTED FIXME
-            self.matrices_kpoint = self.get_kpoint_target()
+            # self.matrices_kpoint = self.get_kpoint_target()
         else: 
             assert matrices_kpoint is not None, "Must provide either matrices_kpoint or matrices_translation"
             
@@ -598,7 +598,7 @@ class PeriodicDataset(Dataset):
         retain = retain.lower()
         retain_upper = retain == "upper"
         from mlelec.utils.symmetry import _reflect_hermitian
-        for i, mat in enumerate(len(self.targets[target])):
+        for i, mat in enumerate(self.targets[target]):
             assert len(mat.shape) == 2, "matrix to discard non-hermiticity from must be a 2D matrix"
 
             self.target[target] = _reflect_hermitian(mat, retain_upper=retain_upper)

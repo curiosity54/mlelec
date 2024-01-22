@@ -552,3 +552,25 @@ def _reflect_hermitian(matrix: Union[torch.tensor, np.ndarray], retain_upper=Tru
         tmp[i, i] /= 2
     assert np.isclose(tmp - tmp.T, 0).all()
     return tmp
+
+
+def recover_nonhermitian(matA, matB, retain_upper=True):
+    # TODO: support (_,N,N) matrices
+    """take pair of matrices where matA = matB^T"""
+    assert len(matA.shape) == 2, "matA must be a square 2D matrix"
+    assert len(matB.shape) == 2, "matB must be a square 2D matrix"
+    assert matA.shape == matB.shape
+    if isinstance(matA, torch.Tensor):
+        lib = torch
+    else:
+        lib = np
+    nh_A = lib.zeros_like(matA)
+    nh_B = lib.zeros_like(matB)
+    dim = matA.shape[-1]
+    nh_A[lib.triu_indices(dim)] = matA[lib.triu_indices(dim)]
+    nh_B[lib.triu_indices(dim)] = matB[lib.triu_indices(dim)]
+
+    nh_A[lib.tril_indices(dim, 1)] = matB[lib.triu_indices(dim, 1)]
+    nh_B[lib.tril_indices(dim, 1)] = matA[lib.triu_indices(dim, 1)]
+
+    return nh_A, nh_B

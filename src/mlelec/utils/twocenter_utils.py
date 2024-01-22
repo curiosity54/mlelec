@@ -605,6 +605,10 @@ def _to_uncoupled_basis(
     return block_builder.build()
 
 
+from .metatensor_utils import labels_where
+from metatensor import Labels
+
+
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
     try:
         block_type = key["block_type"]
