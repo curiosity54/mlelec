@@ -408,6 +408,7 @@ def map_supercell_to_relativetrans(
             )  # track the phase difference corresponding to this relative translation vector
         except Exception as e:
             print(e)
+            raise ValueError("map_supercell_to_relativetrans failed!")
             print(key, "skipped")
 
     return output_Ls, weight_Ls, phase_diff_Ls
