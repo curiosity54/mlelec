@@ -130,26 +130,26 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         pass
 
 
-class Eigenvalues:  # eigval of a second rank tensor
-    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
-        self.tensor = tensor
-        self.overlap = overlap
-        assert len(tensor.shape) == 2
-        if overlap is not None:
-            assert tensor.shape == overlap.shape
-        assert tensor.shape[0] == tensor.shape[1]  # square matrix
-        # TODO : handle non symmetric matrices
-
-        self.eigvals = torch.tensor(
-            scipy.linalg.eigvalsh(self.tensor, self.overlap)
-        )  # FIXME this breaks the autograd chain
-
-    def eigvalues(self, first: int = 0, last: int = -1):
-        return self.eigvals[first:last]
-
-    def eigvectors(self, first: int = 0, last: int = -1):
-        return scipy.linalg.eigh[first:last][-1]
-
+#class Eigenvalues:  # eigval of a second rank tensor
+#    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
+#        self.tensor = tensor
+#        self.overlap = overlap
+#        assert len(tensor.shape) == 2
+#        if overlap is not None:
+#            assert tensor.shape == overlap.shape
+#        assert tensor.shape[0] == tensor.shape[1]  # square matrix
+#        # TODO : handle non symmetric matrices
+#
+#        self.eigvals = torch.tensor(
+#            scipy.linalg.eigvalsh(self.tensor, self.overlap)
+#        )  # FIXME this breaks the autograd chain
+#
+#    def eigvalues(self, first: int = 0, last: int = -1):
+#        return self.eigvals[first:last]
+#
+#    def eigvectors(self, first: int = 0, last: int = -1):
+#        return scipy.linalg.eigh[first:last][-1]
+#
 
 class PBCHamiltonian(TwoCenter):
     # Handle supercell or translated hamiltonians
@@ -158,10 +158,11 @@ class PBCHamiltonian(TwoCenter):
         hamiltonian: torch.tensor,
         orbitals: Dict,
         frames: List[ase.Atoms] = None,
-        k_grid: List[int] = None,
+        kgrid: List[int] = None,
         translations: List[int] = None,
     ):
         super().__init__(hamiltonian, orbitals, frames)
+        pass 
 
     def combine_phase():
         pass
