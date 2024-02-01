@@ -381,6 +381,7 @@ def map_supercell_to_relativetrans(
     output_Ls = {}
     weight_Ls = {}
     phase_diff_Ls = {}
+    assert phase is not None
     for i, key in enumerate(map_reltrans.keys()):
         for x in map_reltrans[key]:
             M, N = x[1], x[2]
@@ -405,14 +406,16 @@ def map_supercell_to_relativetrans(
             phase_diff_Ls[key] = np.array(
                 phase[N] / phase[M]
             )  # track the phase difference corresponding to this relative translation vector
-        except:
+        except Exception as e:
+            print(e)
+            raise ValueError("map_supercell_to_relativetrans failed!")
             print(key, "skipped")
 
     return output_Ls, weight_Ls, phase_diff_Ls
 
 
 def map_supercell_to_kpoint(
-    output_tensor: Union[np.ndarray, torch.tensor], #Union[dict, np.ndarray],
+    output_tensor: Union[np.ndarray, torch.tensor],  # Union[dict, np.ndarray],
     phase: np.ndarray = None,
     map_reltrans=None,
     cell: Optional[pyscf.pbc.gto.cell] = None,
@@ -421,7 +424,7 @@ def map_supercell_to_kpoint(
 ):
     """Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}
     output_tensor: Supercell matrix shape (NR, nao, NR, nao) where NR is the number of relative translations and nao is the number of atomic orbitals
-    phase: matrix of shape (NR, Nk) where Nk is the number of kpoints 
+    phase: matrix of shape (NR, Nk) where Nk is the number of kpoints
     map_reltrans: dict of shape (NR, 4) where NR is the number of relative translations and 4 corresponds to (M-N, M, N, i) cor, where R_rel is the relative translation vector
 
     """
@@ -445,21 +448,25 @@ def map_supercell_to_kpoint(
     #         kmatrix[kpt] += sc_to_trans[key] * weight[key] * phase_diff[key][kpt]
     # return kmatrix / Nk
 
+
 def translations_to_kpoint(translated_matrices_dict, phase_diff, weights):
     """
     translated_matrices_dict: dict of shape (NR, nao, nao) where NR is the number of relative translations and nao is the number of atomic orbitals
     phase_diff: dict of shape (NR, Nk) where Nk is the number of kpoints
     weights: dict of shape (NR,) where NR is the number of relative translations
     Combine each relative translation vector with the corresponding phase difference to obtain the kpoint matrix. H(K) = \sum_R e^{ik.R} H(R)}
-    
+
     """
     Nk = next(iter(phase_diff.values())).shape[-1]
     nao = next(iter(translated_matrices_dict.values())).shape[-1]
     kmatrix = np.zeros((Nk, nao, nao), dtype=np.complex128)
     for key in translated_matrices_dict.keys():
         for kpt in range(Nk):
-            kmatrix[kpt] += translated_matrices_dict[key] * weights[key] * phase_diff[key][kpt]
+            kmatrix[kpt] += (
+                translated_matrices_dict[key] * weights[key] * phase_diff[key][kpt]
+            )
     return kmatrix / Nk
+
 
 def kpoint_to_translations(
     kmatrix,
