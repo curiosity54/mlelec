@@ -315,19 +315,117 @@ def twocenter_hermitian_features(
     )
 
 
-def twocenter_features(single_center: TensorMap, pair: TensorMap) -> TensorMap:
+def twocenter_features(single_center: TensorMap, pair: TensorMap, shift=None) -> TensorMap:
     # no hermitian symmetry
+    if shift == [0, 0, 0]:
+        return twocenter_hermitian_features(single_center, pair)
+
     keys = []
     blocks = []
-    for k, b in single_center.items():
-        keys.append(
-            tuple(k)
-            + (
-                k["species_center"],
-                0,
+
+    for k, b in pair.items():
+        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
+            idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
+            if len(idx) == 0:
+                continue
+            keys.append(tuple(k) + (0,))
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names,
+                        values=np.asarray(b.samples.values[idx]),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=b.values[idx],
+                )
             )
-        )
-    pass
+        else:
+            raise NotImplementedError  # Handle periodic case for different species
+
+    for k, b in pair.items():
+        if k["species_center"] == k["species_neighbor"]:
+            # off-site, same species
+            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
+            if len(idx_up) == 0:
+                continue
+            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
+            if len(idx_lo) == 0:
+                print(
+                    "Corresponding swapped pair not found",
+                    np.array(b.samples.values)[idx_up],
+                )
+            # else:
+            # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
+            # we need to find the "ji" position that matches each "ij" sample.
+            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+            smp_up, smp_lo = 0, 0
+            for smp_up in range(len(idx_up)):
+                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
+                for smp_lo in range(smp_up, len(idx_lo)):
+                    ij_lo = b.samples.view(["neighbor", "center"]).values[
+                        idx_lo[smp_lo]
+                    ]
+                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
+                    if (
+                        b.samples["structure"][idx_up[smp_up]]
+                        != b.samples["structure"][idx_lo[smp_lo]]
+                    ):
+                        raise ValueError(
+                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
+                        )
+                    if tuple(ij) == tuple(ij_lo):
+                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
+                        break
+
+            keys.append(tuple(k) + (1,))
+            keys.append(tuple(k) + (-1,))
+            # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
+
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names,
+                        values=np.asarray(b.samples.values[idx_up]),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                )
+            )
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names,
+                        values=np.asarray(b.samples.values[idx_up]),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                )
+            )
+          
+        elif k["species_center"] < k["species_neighbor"]:
+            # off-site, different species
+            keys.append(tuple(k) + (2,))
+            blocks.append(b.copy())
+
+    # kkeys = [list(k) for k in keys]
+    # print([len(k) for k in keys])
+    # print(keys[2], keys[3], )
+    # print(np.asarray(kkeys).shape   )
+    # print(Labels(
+    #         names=pair.keys.names + ["block_type"],
+    #         values=np.asarray(keys),
+    #     ),)
+    return TensorMap(
+        keys=Labels(
+            names=pair.keys.names + ["block_type"],
+            values=np.asarray(keys),
+        ),
+        blocks=blocks,
+    )
 
 
 def twocenter_hermitian_features_periodic(
