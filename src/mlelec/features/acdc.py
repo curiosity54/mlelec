@@ -5,8 +5,6 @@ from rascaline import SphericalExpansion
 from rascaline import SphericalExpansionByPair as PairExpansion
 import ase
 
-# TODO: support SphericalExpansion, PairExpansion calculators from outside of rascaline
-
 from metatensor import TensorMap, TensorBlock, Labels
 import metatensor.operations as operations
 import torch
@@ -18,8 +16,9 @@ from mlelec.features.acdc_utils import (
     cg_increment,
     cg_combine,
     _pca,
-    relabel_key_contract,
+    relabel_keys,
     fix_gij,
+    drop_blocks_L,
 )
 from typing import List, Optional, Union, Tuple
 
@@ -34,11 +33,14 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     rho1i = acdc_standardize_keys(rhoi)
 
     if order_nu == 1:
-        return rho1i
+        # return upto lcut? # TODO: change this maybe
+        return drop_blocks_L(rho1i, lcut)
+        # return rho1i
     if lcut is None:
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
+
         L = max(lcut, hypers["max_angular"])
         cg = ClebschGordanReal(lmax=L)
     rho_prev = rho1i
@@ -64,9 +66,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
     )
     if kwargs.get("pca_final", False):
         warnings.warn("PCA final features")
-        rho_x = _pca(
-            rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
-        )
+        rho_x = _pca(rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None))
     return rho_x
 
 
@@ -75,19 +75,28 @@ def pair_features(
     hypers: dict,
     cg=None,
     rhonu_i: TensorMap = None,
-    order_nu: Union[List[int], int] = None,
+    order_nu: Union[
+        List[int], int
+    ] = None,  # List currently not supported - useful when combining nu on i and nu' on j
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
-    max_shift = None,
+    max_shift=None,
     **kwargs,
 ):
+    """
+    hypers: dictionary of hyperparameters for the pair expansion as in Rascaline
+    cg: object of utils:symmetry:ClebschGordanReal
+    rhonu_i: TensorMap of single center features
+    order_nu: int or list of int, order of the spherical expansion
+    """
     if not isinstance(frames, list):
         frames = [frames]
-    if lcut is None:    
+    if lcut is None:
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
+
         L = max(lcut, hypers["max_angular"])
         cg = ClebschGordanReal(lmax=L)
         # cg = ClebschGordanReal(lmax=lcut)
@@ -98,33 +107,43 @@ def pair_features(
     if all_pairs:
         hypers_allpairs = hypers.copy()
         if max_shift is None and hypers["cutoff"] < np.max(
-        [np.max(f.get_all_distances()) for f in frames]
-    ):
+            [np.max(f.get_all_distances()) for f in frames]
+        ):
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances()) for f in frames])
             )
-            nmax = int(hypers_allpairs["max_radial"]/ hypers["cutoff"] * hypers_allpairs["cutoff"])
+            nmax = int(
+                hypers_allpairs["max_radial"]
+                / hypers["cutoff"]
+                * hypers_allpairs["cutoff"]
+            )
             hypers_allpairs["max_radial"] = nmax
         elif max_shift is not None:
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances()) for f in repframes])
             )
-        
+
             warnings.warn(
                 f"Using cutoff {hypers_allpairs['cutoff']} for all pairs feature"
             )
         else:
-            warnings.warn(
-                f"Using unchanged hypers for all pairs feature"
-            )
+            warnings.warn(f"Using unchanged hypers for all pairs feature")
         calculator_allpairs = PairExpansion(**hypers_allpairs)
-        
+
         rho0_ij = calculator_allpairs.compute(frames)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+    if isinstance(order_nu, list):
+        assert (
+            len(order_nu) == 2
+        ), "specify order_nu as [nu_i, nu_j] for correlation orders for i and j respectively"
+        order_nu_i, order_nu_j = order_nu
+    else:
+        assert isinstance(order_nu, int), "specify order_nu as int or list of 2 ints"
+        order_nu_i = order_nu
 
     if not (frames[0].pbc.any()):
         for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
@@ -132,7 +151,7 @@ def pair_features(
 
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
     if not both_centers:
         rhonu_ij = cg_combine(
@@ -146,29 +165,44 @@ def pair_features(
         return rhonu_ij
 
     else:
-        # build the feature with atom-centered density on both centers
-        # rho_ij = rho_i x gij x rho_j
-        rhonu_ip = relabel_key_contract(rhonu_i)
-        # gji = relabel_key_contract(gij)
-        rho0_ji = relabel_key_contract(rho0_ij)
+        # # build the feature with atom-centered density on both centers
+        # # rho_ij = rho_i x gij x rho_j
+        if "order_nu_j" not in locals():
+            warnings.warn("nu_j not defined, using nu_i for nu_j as well")
+            order_nu_j = order_nu_i
+        if order_nu_j != order_nu_i:
+            # compire
+            rhonup_j = single_center_features(
+                frames,
+                order_nu=order_nu_j,
+                hypers=hypers,
+                lcut=lcut,
+                cg=cg,
+                kwargs=kwargs,
+            )
+        else:
+            rhonup_j = rhonu_i.copy()
 
-        rhonu_ijp = cg_increment(
-            rhonu_ip,
-            rho0_ji,
+        rhoj = relabel_keys(rhonup_j, "species_neighbor")
+        # build rhoj x gij
+        rhonuij = cg_combine(
+            rhoj,
+            rho0_ij,
             lcut=lcut,
-            other_keys_match=["species_contract"],
+            other_keys_match=["species_neighbor"],
             clebsch_gordan=cg,
-            mp=True,
+            mp=True,  # for combining with neighbor
         )
-
-        rhonu_nuijp = cg_combine(
+        # combine with rhoi
+        rhonu_nupij = cg_combine(
             rhonu_i,
-            rhonu_ijp,
+            rhonuij,
             lcut=lcut,
             other_keys_match=["species_center"],
             clebsch_gordan=cg,
         )
-        return rhonu_nuijp
+
+        return rhonu_nupij
 
 
 # TODO: MP feature
@@ -180,7 +214,8 @@ def pair_features(
 
 
 def twocenter_hermitian_features(
-    single_center: TensorMap, pair: TensorMap, 
+    single_center: TensorMap,
+    pair: TensorMap,
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
@@ -243,8 +278,7 @@ def twocenter_hermitian_features(
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
-            
-            
+
             blocks.append(
                 TensorBlock(
                     samples=Labels(

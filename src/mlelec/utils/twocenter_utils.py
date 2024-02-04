@@ -9,6 +9,9 @@ from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
 from mlelec.utils.symmetry import ClebschGordanReal
 import warnings
 
+SQRT_2 = 2 ** (0.5)
+ISQRT_2 = 1 / SQRT_2
+
 
 def fix_orbital_order(
     matrix: Union[torch.tensor, np.ndarray],
@@ -146,6 +149,7 @@ def _to_blocks(
     frames: Union[ase.Atoms, List[ase.Atoms]],
     orbitals: dict,
     device: str = None,
+    NH=False,
 ):
     if not isinstance(frames, list):
         assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
@@ -154,30 +158,168 @@ def _to_blocks(
     # check hermiticity:
     if isinstance(matrices, np.ndarray):
         matrices = torch.from_numpy(matrices)
-    if torch.allclose(torch.abs(matrices), torch.abs(matrices.transpose(-1, -2))):
+    if NH: 
+        warnings.warn(
+            "Matrix is neither hermitian nor antihermitian - attempting to use _toblocks for NH"
+        )
+
+        nh_blocks = _matrix_to_blocks_NH(matrices, frames, orbitals, device)
+        return nh_blocks
+    
+    else:
+        assert torch.allclose(torch.abs(matrices), torch.abs(matrices.transpose(-1, -2))), "Matrix supposed to be hermitian but is not"
         return _matrix_to_blocks(matrices, frames, orbitals, device)
 
-    else:
-        warnings.warn(
-            "Matrix is neither hermitian nor antihermitian - attempting to decompose"
-        )
+        
         # check if sum is symmetric:
-        msum = matrices + matrices.transpose(-1, -2)
-        mdiff = matrices - matrices.transpose(-1, -2)
+        # msum = matrices + matrices.transpose(-1, -2)
+        # mdiff = matrices - matrices.transpose(-1, -2)
 
-        if not torch.allclose(torch.abs(msum), torch.abs(msum.transpose(-1, -2))):
-            print("Sum is not symmetric")
-        if not torch.allclose(torch.abs(mdiff), torch.abs(mdiff.transpose(-1, -2))):
-            print("Difference is not symmetric")
-            raise ValueError
+        # if not torch.allclose(torch.abs(msum), torch.abs(msum.transpose(-1, -2))):
+        #     print("Sum is not symmetric")
+        # if not torch.allclose(torch.abs(mdiff), torch.abs(mdiff.transpose(-1, -2))):
+        #     print("Difference is not symmetric")
+        #     raise ValueError
 
-        symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
-            matrices - matrices.transpose(-1, -2)
-        )
-        symm_blocks = _matrix_to_blocks(symm, frames, orbitals, device)
-        antisymm_blocks = _matrix_to_blocks(antisymm, frames, orbitals, device)
+        # symm, antisymm = 0.5 * (matrices + matrices.transpose(-1, -2)), 0.5 * (
+        #     matrices - matrices.transpose(-1, -2)
+        # )
+        # symm_blocks = _matrix_to_blocks(symm, frames, orbitals, device)
+        # antisymm_blocks = _matrix_to_blocks(antisymm, frames, orbitals, device)
 
-        return symm_blocks, antisymm_blocks
+        # return symm_blocks, antisymm_blocks
+
+
+def _matrix_to_blocks_NH(
+    matrices: Union[List[torch.tensor], torch.tensor],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
+    orbitals: dict,
+    device: str = None,
+):
+    orbs_tot, _ = _orbs_offsets(orbitals)
+
+    block_builder = TensorBuilder(
+        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
+        ["structure", "center", "neighbor"],
+        [["m1"], ["m2"]],
+        ["value"],
+    )
+    orbs_tot, _ = _orbs_offsets(orbitals)
+    for A in range(len(frames)):
+        frame = frames[A]
+        ham = matrices[A]
+        ki_base = 0
+        for i, ai in enumerate(frame.numbers):
+            kj_base = 0
+            for j, aj in enumerate(frame.numbers):
+                if i == j:
+                    block_type = 0  # diagonal
+                elif ai == aj:
+                    block_type = 1  # same-species
+                else:
+                    if (
+                        ai > aj
+                    ):  # only sorted element types - #TODO this doesnt hold i think
+
+                        kj_base += orbs_tot[aj]
+                        # continue
+                    block_type = 2  # different species
+                if isinstance(ham, np.ndarray):
+                    block_data = torch.from_numpy(
+                        ham[
+                            ki_base : ki_base + orbs_tot[ai],
+                            kj_base : kj_base + orbs_tot[aj],
+                        ]
+                    )
+                elif isinstance(ham, torch.Tensor):
+                    block_data = ham[
+                        ki_base : ki_base + orbs_tot[ai],
+                        kj_base : kj_base + orbs_tot[aj],
+                    ]
+                else:
+                    raise ValueError
+
+                # print(block_data, block_data.shape)
+                if block_type == 1:
+                    # print(block_data)
+                    block_data_plus = (block_data + block_data.T) * ISQRT_2
+                    block_data_minus = (
+                        block_data - block_data.T
+                    ) * ISQRT_2  # / 2 ** (0.5)
+                ki_offset = 0
+                for ni, li, mi in orbitals[ai]:
+                    if (
+                        mi != -li
+                    ):  # picks the beginning of each (n,l) block and skips the other orbitals
+                        continue
+                    kj_offset = 0
+                    for nj, lj, mj in orbitals[aj]:
+                        if (
+                            mj != -lj
+                        ):  # picks the beginning of each (n,l) block and skips the other orbitals
+                            continue
+                        # if ai == aj and (ni > nj or (ni == nj and li > lj)):
+                        #     kj_offset += 2 * lj + 1
+                        #     continue
+                        block_idx = (block_type, ai, ni, li, aj, nj, lj)
+                        if block_idx not in block_builder.blocks:
+                            block = block_builder.add_block(
+                                keys=block_idx,
+                                properties=np.asarray([[0]]),
+                                components=[_components_idx(li), _components_idx(lj)],
+                            )
+
+                            if block_type == 1:
+                                block_asym = block_builder.add_block(
+                                    keys=(-1,) + block_idx[1:],
+                                    properties=np.asarray([[0]]),
+                                    components=[
+                                        _components_idx(li),
+                                        _components_idx(lj),
+                                    ],
+                                )
+                        else:
+                            block = block_builder.blocks[block_idx]
+                            if block_type == 1:
+                                block_asym = block_builder.blocks[(-1,) + block_idx[1:]]
+
+                        islice = slice(ki_offset, ki_offset + 2 * li + 1)
+                        jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
+                        # print(i, islice, "I")
+                        # print(j, jslice, "J")
+                        # print("block_type", block_type)
+
+                        if block_type == 1:
+                            block.add_samples(
+                                labels=[(A, i, j)],
+                                data=block_data_plus[islice, jslice].reshape(
+                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+                                ),
+                            )
+                            block_asym.add_samples(
+                                labels=[(A, i, j)],
+                                data=block_data_minus[islice, jslice].reshape(
+                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+                                ),
+                            )
+
+                        else:
+                            # print(
+                            #     i, j, block_data[islice, jslice], 2 * li + 1, 2 * lj + 1
+                            # )
+                            block.add_samples(
+                                labels=[(A, i, j)],
+                                data=block_data[islice, jslice].reshape(
+                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+                                ),
+                            )
+
+                        kj_offset += 2 * lj + 1
+                    ki_offset += 2 * li + 1
+                kj_base += orbs_tot[aj]
+
+            ki_base += orbs_tot[ai]
+    return block_builder.build()
 
 
 def _matrix_to_blocks(
@@ -237,8 +379,12 @@ def _matrix_to_blocks(
                 # print(block_data, block_data.shape)
                 if block_type == 1:
                     # print(block_data)
-                    block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
-                    block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
+                    block_data_plus = (
+                        block_data + block_data.T
+                    ) * ISQRT_2  
+                    block_data_minus = (
+                        block_data - block_data.T
+                    ) * ISQRT_2  
                 ki_offset = 0
                 for ni, li, mi in orbitals[ai]:
                     if (
@@ -315,6 +461,7 @@ def _to_matrix(
     orbitals: Dict[int, List[Tuple[int, int, int]]],
     hermitian: bool = True,
     # vectorized: bool = True,
+    NH=False,
     device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
     # if vectorized:
@@ -327,6 +474,7 @@ def _to_matrix(
         orbitals=orbitals,
         hermitian=hermitian,
         device=device,
+        NH=NH,
     )
 
 
@@ -336,6 +484,7 @@ def _blocks_to_matrix(
     orbitals: Dict[int, List[Tuple[int, int, int]]],
     device=None,
     hermitian: bool = True,
+    NH=False,
 ) -> Union[np.ndarray, torch.Tensor]:
     """from tensormap to dense representation
 
@@ -400,27 +549,101 @@ def _blocks_to_matrix(
 
             # coordinates of the atom block in the matrix
             ki_base, kj_base = atom_blocks_idx[(dense_idx, i, j)]
-
+            # print(
+            #     ni,
+            #     li,
+            #     nj,
+            #     lj,
+            #     i,
+            #     j,
+            #     slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1),
+            #     slice(kj_base + kj_offset, kj_base + kj_offset + 2 * lj + 1),
+            # )
             # values to assign
             values = block_data[:, :, 0].reshape(2 * li + 1, 2 * lj + 1)
             # assign values
-            _fill(
-                block_type,
-                matrix,
-                values,
-                ki_base,
-                kj_base,
-                ki_offset,
-                kj_offset,
-                same_koff,
-                li,
-                lj,
-                hermitian=hermitian,
-            )
+            if NH:
+                _fill_NH(
+                    block_type,
+                    matrix,
+                    values,
+                    ki_base,
+                    kj_base,
+                    ki_offset,
+                    kj_offset,
+                    same_koff,
+                    li,
+                    lj,
+                )
+            else:
+                _fill(
+                    block_type,
+                    matrix,
+                    values,
+                    ki_base,
+                    kj_base,
+                    ki_offset,
+                    kj_offset,
+                    same_koff,
+                    li,
+                    lj,
+                    hermitian=hermitian,
+                )
+
     if len(matrices) == 1:
         return matrices[0]
     else:
         return torch.stack(matrices)
+
+
+def _fill_NH(
+    type: int,
+    matrix: Union[np.ndarray, torch.Tensor],
+    values: Union[np.ndarray, torch.Tensor],
+    ki_base: int,
+    kj_base: int,
+    ki_offset: int,
+    kj_offset: int,
+    same_koff: bool,
+    li: int,
+    lj: int,
+):
+    """fill block of type <type> where type is either -1,0,1,2"""
+    # TODO: check matrix device, values devide are the same
+    islice = slice(ki_base + ki_offset, ki_base + ki_offset + 2 * li + 1)
+    jslice = slice(kj_base + kj_offset, kj_base + kj_offset + 2 * lj + 1)
+    if type == 0:
+        matrix[islice, jslice] = values
+        # if not same_koff:
+        #     if hermitian:
+        #         matrix[jslice, islice] = values.T
+        #     else:
+        #         matrix[jslice, islice] = values.T * -1
+    if type == 2:
+        matrix[islice, jslice] = values
+        # if hermitian:
+        #     matrix[jslice, islice] = values.T
+        # else:
+        #     matrix[jslice, islice] = values.T * -1
+
+    if abs(type) == 1:
+        values_2norm = values * ISQRT_2
+        matrix[islice, jslice] += values_2norm
+        # if not same_koff:
+        #     islice = slice(ki_base + kj_offset, ki_base + kj_offset + 2 * lj + 1)
+        #     jslice = slice(kj_base + ki_offset, kj_base + ki_offset + 2 * li + 1)
+        #     if type == 1:
+        #         matrix[islice, jslice] += values_2norm.T
+        #         # if hermitian:
+        #         #     matrix[jslice, islice] += values_2norm
+        #         # else:
+        #         #     matrix[jslice, islice] -= values_2norm
+        #     else:
+        #         matrix[islice, jslice] += values_2norm.T
+        #         # if hermitian:
+        #         #     matrix[jslice, islice] -= values_2norm
+        #         # else:
+        #         #     matrix[jslice, islice] += values_2norm
 
 
 def _fill(
@@ -446,16 +669,16 @@ def _fill(
             if hermitian:
                 matrix[jslice, islice] = values.T
             else:
-                matrix[jslice, islice] = -values.T
+                matrix[jslice, islice] = values.T * -1
     if type == 2:
         matrix[islice, jslice] = values
         if hermitian:
             matrix[jslice, islice] = values.T
         else:
-            matrix[jslice, islice] = -values.T
+            matrix[jslice, islice] = values.T * -1
 
     if abs(type) == 1:
-        values_2norm = values / (2 ** (0.5))
+        values_2norm = values * ISQRT_2
         matrix[islice, jslice] += values_2norm
         if hermitian:
             matrix[jslice, islice] += values_2norm.T
@@ -732,3 +955,19 @@ def rotate_matrix(
         _to_uncoupled_basis(rot_blocks_coupled, orbitals), frame, orbitals
     )
     return rot_matrix
+
+
+def discard_nonhermiticity(matrices, retain="upper"):
+    """For each T, create a hermitian target with the upper triangle reflected across the diagonal
+    retain = "upper" or "lower"
+    target :str to specify which matrices to discard nonhermiticity from
+    """
+    retain = retain.lower()
+    retain_upper = retain == "upper"
+    fixed = np.zeros_like(matrices)
+    for i, mat in enumerate(matrices):
+        assert (
+            len(mat.shape) == 2
+        ), "matrix to discard non-hermiticity from must be a 2D matrix"
+        fixed[i] = _reflect_hermitian(mat, retain_upper=retain_upper)
+    return fixed
