@@ -20,10 +20,11 @@ from collections import defaultdict
 
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
-class precomputed_molecules(Enum):
+class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
     water_1000 = "examples/data/water_1000"
     water_rotated = "examples/data/water_rotated"
     ethane = "examples/data/ethane"
+    pbc_c2_rotated = "examples/data/pbc/c2_rotated"
 
 
 # No model/feature info here
@@ -461,6 +462,7 @@ from mlelec.data.pyscf_calculator import (
     map_supercell_to_relativetrans,
     translation_vectors_for_kmesh,
     _map_transidx_to_relative_translation,
+    map_mic_translations,
 )
 
 
@@ -535,6 +537,17 @@ class PeriodicDataset(Dataset):
             self.desired_shifts_sup.append(s)  # make this tuple(s)?
             self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
         self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
+        # FIXME - works only for a uniform kgrid across structures
+        self.desired_shifts_sup = map_mic_translations(
+            self.desired_shifts_sup, self.kmesh[0]
+        )  ##<<<<<<
+        self.desired_shifts = []
+        for L in self.desired_shifts_sup:
+            lL = list(L)
+            lmL = list(-1 * np.array(lL))
+            if not (lL in self.desired_shifts):
+                if not (lmL in self.desired_shifts):
+                    self.desired_shifts.append(lL)
 
         if matrices_translation is not None:
             self.matrices_translation = {
@@ -594,7 +607,20 @@ class PeriodicDataset(Dataset):
 
         if matrices_kpoint is not None:
             self.matrices_kpoint = matrices_kpoint
-            self.matrices_translation = self.get_translation_target(matrices_kpoint)
+            matrices_translation = self.get_translation_target(matrices_kpoint)
+            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
+            self.matrices_translation = {
+                key: [] for key in set().union(*matrices_translation)
+            }
+            [
+                self.matrices_translation[k].append(matrices_translation[ifr][k])
+                for ifr in range(self.nstructs)
+                for k in matrices_translation[ifr].keys()
+            ]
+            for k in self.matrices_translation.keys():
+                self.matrices_translation[k] = np.stack(
+                    self.matrices_translation[k]
+                ).real
 
         self.target = {t: [] for t in self.target_names}
         for t in self.target_names:
@@ -649,7 +675,8 @@ class PeriodicDataset(Dataset):
                 return_supercell=False,
             )
             # convert this to dict over trnaslations and to gamma point if required
-            target.append(sc)
+            subset_translations = {tuple(t): sc[tuple(t)] for t in self.desired_shifts}
+            target.append(subset_translations)
         return target
 
     def _run_tests(self):

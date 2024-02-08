@@ -5,6 +5,8 @@ from rascaline import SphericalExpansion
 from rascaline import SphericalExpansionByPair as PairExpansion
 import ase
 
+# TODO: support SphericalExpansion, PairExpansion calculators from outside of rascaline
+
 from metatensor import TensorMap, TensorBlock, Labels
 import metatensor.operations as operations
 import torch
@@ -16,18 +18,15 @@ from mlelec.features.acdc_utils import (
     cg_increment,
     cg_combine,
     _pca,
-    relabel_keys,
+    relabel_key_contract,
     fix_gij,
-    drop_blocks_L,
 )
 from typing import List, Optional, Union, Tuple
 
 # TODO: use rascaline.clebsch_gordan.combine_single_center_to_nu when support for multiple centers is added
 
 
-def single_center_features(
-    frames, hypers, order_nu, lcut=None, cg=None, device=None, **kwargs
-):
+def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwargs):
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames)
     rhoi = rhoi.keys_to_properties(["species_neighbor"])
@@ -35,16 +34,13 @@ def single_center_features(
     rho1i = acdc_standardize_keys(rhoi)
 
     if order_nu == 1:
-        # return upto lcut? # TODO: change this maybe
-        return drop_blocks_L(rho1i, lcut)
-        # return rho1i
+        return rho1i
     if lcut is None:
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-
         L = max(lcut, hypers["max_angular"])
-        cg = ClebschGordanReal(lmax=L, device=device)
+        cg = ClebschGordanReal(lmax=L)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -54,7 +50,6 @@ def single_center_features(
             clebsch_gordan=cg,
             lcut=lcut,
             other_keys_match=["species_center"],
-            device=device,
         )
         rho_prev = _pca(
             rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
@@ -69,7 +64,9 @@ def single_center_features(
     )
     if kwargs.get("pca_final", False):
         warnings.warn("PCA final features")
-        rho_x = _pca(rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None))
+        rho_x = _pca(
+            rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
+        )
     return rho_x
 
 
@@ -78,31 +75,21 @@ def pair_features(
     hypers: dict,
     cg=None,
     rhonu_i: TensorMap = None,
-    order_nu: Union[
-        List[int], int
-    ] = None,  # List currently not supported - useful when combining nu on i and nu' on j
+    order_nu: Union[List[int], int] = None,
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
-    max_shift=None,
-    device=None,
+    max_shift = None,
     **kwargs,
 ):
-    """
-    hypers: dictionary of hyperparameters for the pair expansion as in Rascaline
-    cg: object of utils:symmetry:ClebschGordanReal
-    rhonu_i: TensorMap of single center features
-    order_nu: int or list of int, order of the spherical expansion
-    """
     if not isinstance(frames, list):
         frames = [frames]
-    if lcut is None:
+    if lcut is None:    
         lcut = 10
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
-
         L = max(lcut, hypers["max_angular"])
-        cg = ClebschGordanReal(lmax=L, device=device)
+        cg = ClebschGordanReal(lmax=L)
         # cg = ClebschGordanReal(lmax=lcut)
 
     calculator = PairExpansion(**hypers)
@@ -111,43 +98,33 @@ def pair_features(
     if all_pairs:
         hypers_allpairs = hypers.copy()
         if max_shift is None and hypers["cutoff"] < np.max(
-            [np.max(f.get_all_distances()) for f in frames]
-        ):
+        [np.max(f.get_all_distances()) for f in frames]
+    ):
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances()) for f in frames])
             )
-            nmax = int(
-                hypers_allpairs["max_radial"]
-                / hypers["cutoff"]
-                * hypers_allpairs["cutoff"]
-            )
+            nmax = int(hypers_allpairs["max_radial"]/ hypers["cutoff"] * hypers_allpairs["cutoff"])
             hypers_allpairs["max_radial"] = nmax
         elif max_shift is not None:
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances()) for f in repframes])
             )
-
+        
             warnings.warn(
                 f"Using cutoff {hypers_allpairs['cutoff']} for all pairs feature"
             )
         else:
-            warnings.warn(f"Using unchanged hypers for all pairs feature")
+            warnings.warn(
+                f"Using unchanged hypers for all pairs feature"
+            )
         calculator_allpairs = PairExpansion(**hypers_allpairs)
-
+        
         rho0_ij = calculator_allpairs.compute(frames)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
-    if isinstance(order_nu, list):
-        assert (
-            len(order_nu) == 2
-        ), "specify order_nu as [nu_i, nu_j] for correlation orders for i and j respectively"
-        order_nu_i, order_nu_j = order_nu
-    else:
-        assert isinstance(order_nu, int), "specify order_nu as int or list of 2 ints"
-        order_nu_i = order_nu
 
     if not (frames[0].pbc.any()):
         for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
@@ -155,7 +132,7 @@ def pair_features(
 
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
     if not both_centers:
         rhonu_ij = cg_combine(
@@ -169,45 +146,29 @@ def pair_features(
         return rhonu_ij
 
     else:
-        # # build the feature with atom-centered density on both centers
-        # # rho_ij = rho_i x gij x rho_j
-        if "order_nu_j" not in locals():
-            warnings.warn("nu_j not defined, using nu_i for nu_j as well")
-            order_nu_j = order_nu_i
-        if order_nu_j != order_nu_i:
-            # compire
-            rhonup_j = single_center_features(
-                frames,
-                order_nu=order_nu_j,
-                hypers=hypers,
-                lcut=lcut,
-                cg=cg,
-                kwargs=kwargs,
-            )
-        else:
-            rhonup_j = rhonu_i.copy()
+        # build the feature with atom-centered density on both centers
+        # rho_ij = rho_i x gij x rho_j
+        rhonu_ip = relabel_key_contract(rhonu_i)
+        # gji = relabel_key_contract(gij)
+        rho0_ji = relabel_key_contract(rho0_ij)
 
-        rhoj = relabel_keys(rhonup_j, "species_neighbor")
-        # build rhoj x gij
-        rhonuij = cg_combine(
-            rhoj,
-            rho0_ij,
+        rhonu_ijp = cg_increment(
+            rhonu_ip,
+            rho0_ji,
             lcut=lcut,
-            other_keys_match=["species_neighbor"],
+            other_keys_match=["species_contract"],
             clebsch_gordan=cg,
-            mp=True,  # for combining with neighbor
+            mp=True,
         )
-        # combine with rhoi
-        rhonu_nupij = cg_combine(
+
+        rhonu_nuijp = cg_combine(
             rhonu_i,
-            rhonuij,
+            rhonu_ijp,
             lcut=lcut,
             other_keys_match=["species_center"],
             clebsch_gordan=cg,
-            feature_names=kwargs.get("feature_names", None),
         )
-
-        return rhonu_nupij
+        return rhonu_nuijp
 
 
 # TODO: MP feature
@@ -219,8 +180,7 @@ def pair_features(
 
 
 def twocenter_hermitian_features(
-    single_center: TensorMap,
-    pair: TensorMap,
+    single_center: TensorMap, pair: TensorMap, 
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
@@ -283,7 +243,8 @@ def twocenter_hermitian_features(
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
-
+            
+            
             blocks.append(
                 TensorBlock(
                     samples=Labels(
@@ -320,111 +281,19 @@ def twocenter_hermitian_features(
     )
 
 
-def twocenter_features_periodic_NH(
-    single_center: TensorMap, pair: TensorMap, shift=None
-) -> TensorMap:
+def twocenter_features(single_center: TensorMap, pair: TensorMap) -> TensorMap:
     # no hermitian symmetry
-    if shift == [0, 0, 0]:
-        return twocenter_hermitian_features(single_center, pair)
-
     keys = []
     blocks = []
-
-    for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
-            idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
-            if len(idx) == 0:
-                continue
-            keys.append(tuple(k) + (0,))
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values[idx],
-                )
+    for k, b in single_center.items():
+        keys.append(
+            tuple(k)
+            + (
+                k["species_center"],
+                0,
             )
-        else:
-            raise NotImplementedError  # Handle periodic case for different species
-
-    for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:
-            # off-site, same species
-            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
-            if len(idx_up) == 0:
-                continue
-            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
-            if len(idx_lo) == 0:
-                print(
-                    "Corresponding swapped pair not found",
-                    np.array(b.samples.values)[idx_up],
-                )
-            # else:
-            # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
-            # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            smp_up, smp_lo = 0, 0
-            for smp_up in range(len(idx_up)):
-                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
-                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
-                for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples.view(["neighbor", "center"]).values[
-                        idx_lo[smp_lo]
-                    ]
-                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
-                    if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
-                    ):
-                        raise ValueError(
-                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
-                        )
-                    if tuple(ij) == tuple(ij_lo):
-                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
-                        break
-
-            keys.append(tuple(k) + (1,))
-            keys.append(tuple(k) + (-1,))
-            # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
-
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_lo]),
-                )
-            )
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_lo]),
-                )
-            )
-
-        elif k["species_center"] < k["species_neighbor"]:
-            # off-site, different species
-            keys.append(tuple(k) + (2,))
-            blocks.append(b.copy())
-
-    return TensorMap(
-        keys=Labels(
-            names=pair.keys.names + ["block_type"],
-            values=np.asarray(keys),
-        ),
-        blocks=blocks,
-    )
+        )
+    pass
 
 
 def twocenter_hermitian_features_periodic(
