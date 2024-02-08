@@ -315,7 +315,9 @@ def twocenter_hermitian_features(
     )
 
 
-def twocenter_features(single_center: TensorMap, pair: TensorMap, shift=None) -> TensorMap:
+def twocenter_features_periodic_NH(
+    single_center: TensorMap, pair: TensorMap, shift=None
+) -> TensorMap:
     # no hermitian symmetry
     if shift == [0, 0, 0]:
         return twocenter_hermitian_features(single_center, pair)
@@ -391,7 +393,7 @@ def twocenter_features(single_center: TensorMap, pair: TensorMap, shift=None) ->
                     ),
                     components=b.components,
                     properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                    values=(b.values[idx_up] + b.values[idx_lo]),
                 )
             )
             blocks.append(
@@ -402,23 +404,15 @@ def twocenter_features(single_center: TensorMap, pair: TensorMap, shift=None) ->
                     ),
                     components=b.components,
                     properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                    values=(b.values[idx_up] - b.values[idx_lo]),
                 )
             )
-          
+
         elif k["species_center"] < k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
 
-    # kkeys = [list(k) for k in keys]
-    # print([len(k) for k in keys])
-    # print(keys[2], keys[3], )
-    # print(np.asarray(kkeys).shape   )
-    # print(Labels(
-    #         names=pair.keys.names + ["block_type"],
-    #         values=np.asarray(keys),
-    #     ),)
     return TensorMap(
         keys=Labels(
             names=pair.keys.names + ["block_type"],
