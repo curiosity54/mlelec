@@ -66,6 +66,7 @@ def single_center_features(
         clebsch_gordan=cg,
         lcut=lcut,
         other_keys_match=["species_center"],
+        feature_names=kwargs.get("feature_names", None),
     )
     if kwargs.get("pca_final", False):
         warnings.warn("PCA final features")
@@ -223,6 +224,7 @@ def twocenter_hermitian_features(
     pair: TensorMap,
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
+    print("HERE")
     keys = []
     blocks = []
     for k, b in single_center.items():
@@ -310,10 +312,12 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-
+    keys = np.pad(keys, ((0, 0), (0, 3)))
     return TensorMap(
         keys=Labels(
-            names=pair.keys.names + ["block_type"],
+            names=pair.keys.names
+            + ["block_type"]
+            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,

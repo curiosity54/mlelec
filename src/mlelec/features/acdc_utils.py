@@ -639,6 +639,7 @@ def cg_increment(
     filter_sigma=[-1, 1],
     other_keys_match=None,
     mp=False,
+    feature_names=None,
 ):
     """Specialized version of the CG product to perform iterations with nu=1 features"""
 
@@ -653,12 +654,14 @@ def cg_increment(
     #         + ("l_2",)
     #     )
     # else:
-    feature_names = (
-        tuple(x_nu.block(0).properties.names)
-        + ("k_" + str(nu + 1),)
-        + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-        + ("l_" + str(nu + 1),)
-    )
+    feature_names = feature_names
+    if feature_names is None:
+        feature_names = (
+            tuple(x_nu.block(0).properties.names)
+            + ("k_" + str(nu + 1),)
+            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+            + ("l_" + str(nu + 1),)
+        )
     return cg_combine(
         x_nu,
         x_1,
