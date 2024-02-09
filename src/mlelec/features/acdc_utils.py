@@ -174,6 +174,7 @@ def cg_combine(
     filter_sigma=[-1, 1],
     other_keys_match=None,
     mp=False,
+    device=None,
 ):
     """
     modified cg_combine from acdc_mini.py to add the MP contraction, that contracts over NOT the center but the neighbor yielding |rho_j> |g_ij>, can be merged
@@ -186,7 +187,7 @@ def cg_combine(
         lcut = lmax_a + lmax_b + 1
 
     if clebsch_gordan is None:
-        clebsch_gordan = ClebschGordanReal(max(lcut, lmax_a, lmax_b) + 1)
+        clebsch_gordan = ClebschGordanReal(max(lcut, lmax_a, lmax_b) + 1, device=device)
 
     other_keys_a = tuple(
         name
@@ -638,6 +639,7 @@ def cg_increment(
     filter_sigma=[-1, 1],
     other_keys_match=None,
     mp=False,
+    feature_names=None,
 ):
     """Specialized version of the CG product to perform iterations with nu=1 features"""
 
@@ -652,12 +654,14 @@ def cg_increment(
     #         + ("l_2",)
     #     )
     # else:
-    feature_names = (
-        tuple(x_nu.block(0).properties.names)
-        + ("k_" + str(nu + 1),)
-        + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-        + ("l_" + str(nu + 1),)
-    )
+    feature_names = feature_names
+    if feature_names is None:
+        feature_names = (
+            tuple(x_nu.block(0).properties.names)
+            + ("k_" + str(nu + 1),)
+            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+            + ("l_" + str(nu + 1),)
+        )
     return cg_combine(
         x_nu,
         x_1,
@@ -829,7 +833,7 @@ def compute_rhoi_pca(
     s_sph_all = []
     pca_blocks = []
     for idx, (key, block) in enumerate(rhoi.items()):
-        nu, sigma, l, spi = key.values
+        # nu, sigma, l, spi = key.values
         if slice_samples is not None:
             # FIXME - doesnt work for cuda tensors
             block = operations.slice_block(
@@ -919,7 +923,9 @@ def get_pca_tmap(rhoi, pca_vh_all):
 def apply_pca(rhoi, pca_tmap):
     new_blocks = []
     for idx, (key, block) in enumerate(rhoi.items()):
-        nu, sigma, l, spi = key
+        # nu, sigma, l, spi = key
+        sigma = key["inversion_sigma"]
+        l = key["spherical_harmonics_l"]
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
         vt = pca_tmap.block(spherical_harmonics_l=l, inversion_sigma=sigma).values
         xl_pca = (xl @ vt).reshape((len(block.samples), len(block.components[0]), -1))

@@ -25,7 +25,9 @@ from typing import List, Optional, Union, Tuple
 # TODO: use rascaline.clebsch_gordan.combine_single_center_to_nu when support for multiple centers is added
 
 
-def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwargs):
+def single_center_features(
+    frames, hypers, order_nu, lcut=None, cg=None, device=None, **kwargs
+):
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames)
     rhoi = rhoi.keys_to_properties(["species_neighbor"])
@@ -42,7 +44,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         from mlelec.utils.symmetry import ClebschGordanReal
 
         L = max(lcut, hypers["max_angular"])
-        cg = ClebschGordanReal(lmax=L)
+        cg = ClebschGordanReal(lmax=L, device=device)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -52,6 +54,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
             clebsch_gordan=cg,
             lcut=lcut,
             other_keys_match=["species_center"],
+            device=device,
         )
         rho_prev = _pca(
             rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
@@ -63,6 +66,7 @@ def single_center_features(frames, hypers, order_nu, lcut=None, cg=None, **kwarg
         clebsch_gordan=cg,
         lcut=lcut,
         other_keys_match=["species_center"],
+        feature_names=kwargs.get("feature_names", None),
     )
     if kwargs.get("pca_final", False):
         warnings.warn("PCA final features")
@@ -82,6 +86,7 @@ def pair_features(
     both_centers: bool = False,
     lcut: int = 3,
     max_shift=None,
+    device=None,
     **kwargs,
 ):
     """
@@ -98,7 +103,7 @@ def pair_features(
         from mlelec.utils.symmetry import ClebschGordanReal
 
         L = max(lcut, hypers["max_angular"])
-        cg = ClebschGordanReal(lmax=L)
+        cg = ClebschGordanReal(lmax=L, device=device)
         # cg = ClebschGordanReal(lmax=lcut)
 
     calculator = PairExpansion(**hypers)
@@ -200,6 +205,7 @@ def pair_features(
             lcut=lcut,
             other_keys_match=["species_center"],
             clebsch_gordan=cg,
+            feature_names=kwargs.get("feature_names", None),
         )
 
         return rhonu_nupij
@@ -218,6 +224,7 @@ def twocenter_hermitian_features(
     pair: TensorMap,
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
+    print("HERE")
     keys = []
     blocks = []
     for k, b in single_center.items():
@@ -305,10 +312,12 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-
+    keys = np.pad(keys, ((0, 0), (0, 3)))
     return TensorMap(
         keys=Labels(
-            names=pair.keys.names + ["block_type"],
+            names=pair.keys.names
+            + ["block_type"]
+            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,

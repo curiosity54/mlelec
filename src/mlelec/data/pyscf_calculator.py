@@ -242,6 +242,55 @@ class calculator_PBC:
 import pyscf.pbc.gto as pbcgto
 from pyscf.pbc.tools.k2gamma import get_phase, kpts_to_kmesh, double_translation_indices
 from collections import defaultdict
+def wrap_translation(i,Nk):
+    r = i
+    if abs(i)>Nk/2:
+        r=i-np.sign(i)*np.floor(abs(i)/(Nk/2))*Nk
+    # NOT adding the following condition to maintain -T for each T
+    # elif abs(i) == Nk/2:
+    #     r = abs(i)
+        
+    # Implements the following:
+    # if i >= Nk/2:
+    #    r=i-np.floor(i/(Nk/2))*Nk
+    # elif i < -Nk/2:
+    #    r=i+np.floor(-i/(Nk/2))*Nk
+    if abs(i)>= Nk:
+        return wrap_translation(np.sign(i)*(abs(i)-Nk),Nk)
+    return int(r)
+def mic_translation(T:list[int,int,int],kmesh):
+    """Minimum image convention for translation vectors"""
+    n = []
+    for i in range(3):
+        n.append(int(wrap_translation(T[i],kmesh[i])))
+    return n
+
+def map_mic_translations(all_shifts, kmesh, matrices_translations:Optional[dict]=None):
+    # TODO: also return weights of each unique translation
+    unique_Ls = defaultdict(list)
+    if matrices_translations is not None:
+        assert list(matrices_translations.keys()) == all_shifts, "keys of matrices_translations must be the same as all_shifts"
+        unique_matrices = defaultdict(list)
+    for t in all_shifts:
+        s = mic_translation(t, kmesh) 
+        if s not in all_shifts:
+            print(s, t, all_shifts)
+            raise ValueError("wrapped key not found")
+        unique_Ls[tuple(s)].append(t)
+    for t in unique_Ls:
+        assert (-t[0], -t[1], -t[2]) in unique_Ls, ("Missing negative translation", t)    
+    
+    if matrices_translations is not None:   
+        for s in unique_Ls.keys():
+            unique_matrices[s] = matrices_translations[s]
+            for t in unique_Ls[s]:
+                norm = np.linalg.norm(matrices_translations[t] - unique_matrices[s])
+            if norm > 1e-8:
+                print(t, s, norm)
+                raise ValueError("Uh oh - mapped MIC translations dont have the same matrix")
+        
+        return unique_Ls, unique_matrices         
+    return unique_Ls
 
 
 def translation_vectors_for_kmesh(cell, kmesh, wrap_around=False, return_rel=False):

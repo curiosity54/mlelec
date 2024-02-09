@@ -10,6 +10,8 @@ from mlelec.utils.twocenter_utils import (
 )
 from metatensor import Labels, TensorMap, TensorBlock
 import mlelec.metrics as mlmetrics
+from mlelec.utils.metatensor_utils import labels_where
+import numpy as np
 
 
 def norm_over_components(x):
@@ -96,7 +98,10 @@ class MLP(nn.Module):
         device=None,
     ):
         super().__init__()
-        self.mlp = [nn.Linear(nin, nhidden, bias=bias)]
+        self.mlp = [
+            # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
+            nn.Linear(nin, nhidden, bias=bias),
+        ]
         if norm:
             norm_layer = NormLayer(nonlinearity=activation, device=device)
         for _ in range(nlayers - 1):
@@ -207,8 +212,8 @@ class LinearTargetModel(nn.Module):
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
         self.reconstructed_uncoupled = _to_uncoupled_basis(pred_tmap)
-        if batch_indices is  None:
-            #identify the frames in the batch
+        if batch_indices is None:
+            # identify the frames in the batch
             batch_indices = list(
                 set(
                     [
@@ -240,3 +245,125 @@ class LinearTargetModel(nn.Module):
             loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
 
         return loss
+
+
+class LinearModelPeriodic(nn.Module):
+    def __init__(
+        self,
+        twocfeat,
+        target_blocks,
+        frames,
+        orbitals,
+        device=None,
+        cell_shifts=None,
+        **kwargs,
+    ):
+        super().__init__()
+        self.feats = twocfeat
+        self.target_blocks = target_blocks
+        self.target_blocks = target_blocks
+        self.frames = frames
+        self.orbitals = orbitals
+        self.cell_shifts = cell_shifts
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.dummy_property = self.target_blocks[0].properties
+        self._submodels(**kwargs)
+        print(self.cell_shifts, len(self.cell_shifts))
+
+    def _submodels(self, **kwargs):
+        self.blockmodels = {}
+
+        for k in self.target_blocks.keys:
+            blockval = torch.linalg.norm(self.target_blocks[k].values)
+            if blockval > 1e-10:
+                feat = map_targetkeys_to_featkeys(self.feats, k)
+                self.blockmodels[str(tuple(k))] = MLP(
+                    nin=feat.values.shape[-1],
+                    nout=1,
+                    nhidden=kwargs.get("nhidden", 10),
+                    nlayers=kwargs.get("nlayers", 2),
+                )
+        self.model = torch.nn.ModuleDict(self.blockmodels)
+        self.model.to(self.device)
+
+    def forward(self, return_matrix=False):
+        self.recon = {}
+
+        pred_blocks = []
+
+        for k, block in self.target_blocks.items():
+            # print(k)
+            blockval = torch.linalg.norm(block.values)
+
+            if blockval > 1e-10:
+                sample_names = block.samples.names
+                feat = map_targetkeys_to_featkeys(self.feats, k)
+                featnorm = torch.linalg.norm(feat.values)
+                nsamples, ncomp, nprops = block.values.shape
+                # nsamples, ncomp, nprops = feat.values.shape
+                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                assert block.samples == feat.samples, (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
+                pred = self.blockmodels[str(tuple(k))](feat.values / featnorm)
+                # print(pred.shape, nsamples)
+
+                pred_blocks.append(
+                    TensorBlock(
+                        values=pred.reshape((nsamples, ncomp, 1)),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=self.dummy_property,
+                    )
+                )
+            else:
+                pred_blocks.append(block.copy())
+        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
+        self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
+        return self.recon_blocks
+        # _to_matrix(_to_uncoupled_basis(pred_sum_dict[s]), frames = self.frames, orbitals=self.orbitals)
+
+    def model_return(self, target: TensorMap, return_matrix=False):
+        recon_blocks = {}
+
+        for translation in self.cell_shifts:
+            blocks = []
+            for key, block in target.items():
+                _, i = labels_where(
+                    block.samples,
+                    Labels(
+                        ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                        values=np.asarray(
+                            [translation[0], translation[1], translation[2]]
+                        ).reshape(1, -1),
+                    ),
+                    return_idx=True,
+                )
+                blocks.append(
+                    TensorBlock(
+                        samples=Labels(
+                            target.sample_names[:-3],
+                            values=np.asarray(block.samples.values[i])[:, :-3],
+                        ),
+                        values=block.values[i],
+                        components=block.components,
+                        properties=block.properties,
+                    )
+                )
+            tmap = TensorMap(target.keys, blocks)
+            recon_blocks[tuple(translation)] = tmap
+
+        if return_matrix:
+            rmat = {}
+            for s in self.cell_shifts[:]:
+                rmat[tuple(s)] = _to_matrix(
+                    _to_uncoupled_basis(recon_blocks[tuple(s)]),
+                    frames=frames,
+                    orbitals=orbs,
+                    NH=True,
+                )  # DONT FORGET NH=True
+            return rmat
+        return recon_blocks
