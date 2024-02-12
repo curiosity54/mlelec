@@ -267,6 +267,8 @@ class LinearModelPeriodic(nn.Module):
         self.cell_shifts = cell_shifts
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device=device
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(**kwargs)
         print(self.cell_shifts, len(self.cell_shifts))
