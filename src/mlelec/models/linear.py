@@ -367,3 +367,54 @@ class LinearModelPeriodic(nn.Module):
                 )  # DONT FORGET NH=True
             return rmat
         return recon_blocks
+
+    def fit_ridge_analytical(self, return_matrix = False) -> None:
+        from sklearn.linear_model import RidgeCV
+        self.recon = {}
+
+        pred_blocks = []
+        ridges = []
+
+        for k, block in self.target_blocks.items():
+            # print(k)
+            blockval = torch.linalg.norm(block.values)
+
+            if blockval > 1e-10:
+                if k['L'] == 0:
+                    bias = True
+                else: 
+                    bias = False
+                sample_names = block.samples.names
+                feat = map_targetkeys_to_featkeys(self.feats, k)
+                featnorm = torch.linalg.norm(feat.values)
+                nsamples, ncomp, nprops = block.values.shape
+                # nsamples, ncomp, nprops = feat.values.shape
+                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
+                
+                x = feat.values.reshape(feat.values.shape[0]*feat.values.shape[1], -1).cpu().numpy()
+                y = block.values.reshape(block.values.shape[0]*block.values.shape[1], -1).cpu().numpy()
+
+                ridge = RidgeCV(alphas = np.logspace(-21, -1, 40), fit_intercept = bias).fit(x, y)
+                # print(pred.shape, nsamples)
+                pred = ridge.predict(x)
+                ridges.append(ridge)
+
+                pred_blocks.append(
+                    TensorBlock(
+                        values=pred.reshape((nsamples, ncomp, 1)),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=self.dummy_property,
+                    )
+                )
+            else:
+                pred_blocks.append(block.copy())
+        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
+        self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
+        
+        return self.recon_blocks, ridges
