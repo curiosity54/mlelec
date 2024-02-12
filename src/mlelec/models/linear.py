@@ -303,7 +303,7 @@ class LinearModelPeriodic(nn.Module):
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                assert block.samples == feat.samples, (
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
                     k,
                     block.samples.values.shape,
                     feat.samples.values.shape,
@@ -361,8 +361,8 @@ class LinearModelPeriodic(nn.Module):
             for s in self.cell_shifts[:]:
                 rmat[tuple(s)] = _to_matrix(
                     _to_uncoupled_basis(recon_blocks[tuple(s)]),
-                    frames=frames,
-                    orbitals=orbs,
+                    frames=self.frames,
+                    orbitals=self.orbitals,
                     NH=True,
                 )  # DONT FORGET NH=True
             return rmat

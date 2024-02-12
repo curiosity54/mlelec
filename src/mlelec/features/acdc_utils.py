@@ -10,6 +10,85 @@ import metatensor
 import metatensor.operations as operations
 
 from mlelec.utils.symmetry import ClebschGordanReal
+from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
+from mlelec.utils.metatensor_utils import labels_where
+
+
+def block_to_mic_translation(frame, block, kmesh):
+    # TODO: frame is a list corresponding to diff samples int he block
+    sample = np.asarray(
+        [
+            list(block.samples["center"]),
+            list(block.samples["neighbor"]),
+            list(block.samples["cell_shift_a"]),
+            list(block.samples["cell_shift_b"]),
+            list(block.samples["cell_shift_c"]),
+        ]
+    ).T
+    fixed_sample = []  # block.samples.values.copy()
+    # fixed_sample = np.pad(fixed_sample, ((0, 0), (0, 3)))
+
+    assert not np.any(
+        np.where(sample - block.samples.values[:, 1:])
+    ), "Sample and block samples are not the same"
+    retained_idx = []
+    val_idx = []  # track indx of [i,j,mic_x, mic_y, mic_z]
+    for smpidx, (i, j, x, y, z) in enumerate(sample):
+        # i is always in cell 0
+        if x >= 0 and y >= 0 and z >= 0:
+            if [x, y, z] == [0, 0, 0]:
+                continue
+            retained_idx.append(smpidx)
+            # print('------')
+            # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
+            # print(i, j, J,[x,y,z])
+            mic_x, mic_y, mic_z = scidx_to_mic_translation(
+                frame,
+                J=scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh),
+                kmesh=kmesh,
+            )
+            if [mic_x, mic_y, mic_z] != [x, y, z]:
+
+                _, mappedidx = labels_where(
+                    block.samples,
+                    Labels(
+                        [
+                            "structure",
+                            "center",
+                            "neighbor",
+                            "cell_shift_a",
+                            "cell_shift_b",
+                            "cell_shift_c",
+                        ],
+                        values=np.asarray(
+                            [
+                                block.samples["structure"][smpidx],
+                                i,
+                                j,
+                                mic_x,
+                                mic_y,
+                                mic_z,
+                            ]
+                        ).reshape(1, -1),
+                    ),
+                    return_idx=True,
+                )
+                assert len(mappedidx) == 1
+                val_idx.append(mappedidx[0])
+            else:
+                val_idx.append(smpidx)
+            # print(mic_x, mic_y, mic_z)
+            # fixed_sample[smpidx, -3:] = [mic_x, mic_y, mic_z]
+            fixed_sample.append(
+                [block.samples["structure"][smpidx], i, j, x, y, z, mic_x, mic_y, mic_z]
+            )
+            # print()
+    fixed_samples = Labels(
+        block.samples.names
+        + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
+        values=np.array(fixed_sample),
+    )
+    return fixed_samples, retained_idx, val_idx
 
 
 def fix_gij(rho0_ij):

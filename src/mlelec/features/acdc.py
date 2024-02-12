@@ -19,6 +19,7 @@ from mlelec.features.acdc_utils import (
     relabel_keys,
     fix_gij,
     drop_blocks_L,
+    block_to_mic_translation,
 )
 from typing import List, Optional, Union, Tuple
 
@@ -87,6 +88,9 @@ def pair_features(
     lcut: int = 3,
     max_shift=None,
     device=None,
+    kmesh=None,
+    desired_shifts=None,
+    mic=False,
     **kwargs,
 ):
     """
@@ -141,6 +145,58 @@ def pair_features(
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+    # ----- MIC mapping ------
+    if mic:
+        assert kmesh is not None, "kmesh must be specified for MIC mapping"
+        warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
+        blocks = []
+        for key, block in rho0_ij.items():
+            samples, retained_idx, validx = block_to_mic_translation(
+                frames[0], block, kmesh
+            )
+
+            blocks.append(
+                TensorBlock(
+                    values=block.values[validx],
+                    components=block.components,
+                    properties=block.properties,
+                    samples=samples,
+                ),
+            )
+
+        rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
+
+    # keep only the desired translations
+    if desired_shifts is not None:
+        from mlelec.utils.metatensor_utils import labels_where
+
+        blocks = []
+
+        for i, (k, b) in enumerate(rho0_ij.items()):
+
+            slab, sidx = labels_where(
+                b.samples,
+                selection=Labels(
+                    names=["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                    values=np.array(desired_shifts[:]).reshape(-1, 3),
+                ),
+                return_idx=True,
+            )  # only retain tranlsations that we want - DONT SKIP
+            # slab, sidx = labels_where(b.samples, selection=Labels(names=["cell_shift_a", "cell_shift_b", "cell_shift_c"], values=np.array(desired_shifts1[:]).reshape(-1,3)), return_idx=True) # only retain tranlsations that we want - DONT SKIP
+
+            blocks.append(
+                TensorBlock(
+                    values=b.values[sidx],
+                    components=b.components,
+                    samples=Labels(
+                        names=b.samples.names, values=np.asarray(b.samples.values[sidx])
+                    ),
+                    properties=b.properties,
+                )
+            )
+        rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
+    # ------------------------
+
     if isinstance(order_nu, list):
         assert (
             len(order_nu) == 2
@@ -224,7 +280,6 @@ def twocenter_hermitian_features(
     pair: TensorMap,
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
-    print("HERE")
     keys = []
     blocks = []
     for k, b in single_center.items():
@@ -312,12 +367,13 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-    keys = np.pad(keys, ((0, 0), (0, 3)))
+    keys = np.pad(keys, ((0, 0), (0, 6)))
     return TensorMap(
         keys=Labels(
             names=pair.keys.names
             + ["block_type"]
-            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"]
+            + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,
@@ -380,9 +436,26 @@ def twocenter_features_periodic_NH(
                     ]
                     # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
                     if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
-                    ):
+                        (
+                            b.samples["structure"][idx_up[smp_up]]
+                            != b.samples["structure"][idx_lo[smp_lo]]
+                        )
+                        or (
+                            b.samples["cell_shift_a"][idx_up[smp_up]]
+                            != b.samples["cell_shift_a"][idx_lo[smp_lo]]
+                        )
+                        or (
+                            b.samples["cell_shift_b"][idx_up[smp_up]]
+                            != b.samples["cell_shift_b"][idx_lo[smp_lo]]
+                        )
+                    ):  # Must also add checks for the translation here TODO
+                        print(np.array(b.samples.values)[idx_up])
+                        print("corresponf to")
+                        print(np.array(b.samples.values)[idx_lo])
+
+                        # print(b.samples["structure"][idx_up[smp_up]])
+                        # print("correspond to")
+                        # print(b.samples["structure"][idx_lo[smp_lo]])
                         raise ValueError(
                             f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
                         )

@@ -538,17 +538,20 @@ class PeriodicDataset(Dataset):
             self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
         self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
         # FIXME - works only for a uniform kgrid across structures
-        self.desired_shifts_sup = map_mic_translations(
-            self.desired_shifts_sup, self.kmesh[0]
-        )  ##<<<<<<
-        self.desired_shifts = []
-        for L in self.desired_shifts_sup:
-            lL = list(L)
-            lmL = list(-1 * np.array(lL))
-            if not (lL in self.desired_shifts):
-                if not (lmL in self.desired_shifts):
-                    self.desired_shifts.append(lL)
+        # ----MIC---- (Uncomment) TODO
+        # self.desired_shifts_sup = map_mic_translations(
+        #     self.desired_shifts_sup, self.kmesh[0]
+        # )  ##<<<<<<
 
+        # self.desired_shifts = []
+        # for L in self.desired_shifts_sup:
+        #     lL = list(L)
+        #     lmL = list(-1 * np.array(lL))
+        #     if not (lL in self.desired_shifts):
+        #         if not (lmL in self.desired_shifts):
+        #             self.desired_shifts.append(lL)
+
+        # ------------------------------
         if matrices_translation is not None:
             self.matrices_translation = {
                 tuple(t): [] for t in list(self.desired_shifts_sup)
@@ -712,6 +715,160 @@ class PeriodicDataset(Dataset):
             ), "matrix to discard non-hermiticity from must be a 2D matrix"
 
             self.target[target] = _reflect_hermitian(mat, retain_upper=retain_upper)
+
+    def __len__(self):
+        return self.nstructs
+
+
+class PySCFPeriodicDataset(Dataset):
+    # TODO: make format compatible with MolecularDataset
+    def __init__(
+        self,
+        frames,
+        frame_slice: slice = slice(None),
+        kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
+        matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
+        matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
+        target: List[str] = ["real_translation"],
+        aux: List[str] = ["real_overlap"],
+        use_precomputed: bool = True,
+        device="cuda",
+        orbs: str = "sto-3g",
+        desired_shifts: List = None,
+    ):
+        self.structures = frames
+        self.frame_slice = frame_slice
+        self.nstructs = len(frames)
+        self.kmesh = kgrid
+        self.kgrid_is_list = False
+        if isinstance(kgrid[0], list):
+            self.kgrid_is_list = True
+            assert (
+                len(self.kmesh) == self.nstructs
+            ), "If kgrid is a list, it must have the same length as the number of structures"
+        else:
+            self.kmesh = [
+                kgrid for _ in range(self.nstructs)
+            ]  # currently easiest to do
+
+        self.device = device
+        self.basis = orbs
+        self.use_precomputed = use_precomputed
+        if not use_precomputed:
+            raise NotImplementedError("You must use precomputed data for now.")
+
+        self.target_names = target
+        self.aux_names = aux
+        self.desired_shifts_sup = (
+            []
+        )  # track the negative counterparts of desired_shifts as well
+        self.cells = []
+        self.phase_matrices = []
+        self.supercells = []
+        self.all_relative_shifts = []  # allowed shifts of kmesh
+
+        for ifr, structure in enumerate(self.structures):
+            # if self.kgrid_is_list:
+            # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
+            # else:
+            cell, scell, phase = get_scell_phase(structure, self.kmesh[ifr])
+
+            self.cells.append(cell)
+
+            self.phase_matrices.append(phase)
+            self.all_relative_shifts.append(
+                translation_vectors_for_kmesh(
+                    cell, self.kmesh[ifr], return_rel=True
+                ).tolist()
+            )
+
+        if desired_shifts is not None:
+            self.desired_shifts = desired_shifts
+        else:
+
+            self.desired_shifts = np.unique(np.vstack(self.all_relative_shifts), axis=0)
+
+        for s in self.desired_shifts:
+            self.desired_shifts_sup.append(s)  # make this tuple(s)?
+            self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
+        self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
+
+        assert matrices_kpoint is not None
+        self.matrices_kpoint = matrices_kpoint
+        matrices_translation = self.kpts_to_translation_target(matrices_kpoint)
+        ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
+        self.matrices_translation = {key: [] for key in matrices_translation[0]}
+        [
+            self.matrices_translation[k].append(matrices_translation[ifr][k])
+            for ifr in range(self.nstructs)
+            for k in matrices_translation[ifr].keys()
+        ]
+        for k in self.matrices_translation.keys():
+            self.matrices_translation[k] = np.stack(self.matrices_translation[k])
+
+        self.target = {t: [] for t in self.target_names}
+        for t in self.target_names:
+            # keep only desired shifts
+            if t == "real_translation":
+                self.target[t] = self.matrices_translation
+            elif t == "kpoint":
+                self.target[t] = self.matrices_kpoint
+
+    def get_kpoint_target(self, translated_matrices):
+        """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
+        kmatrix = []
+        for ifr in range(self.nstructs):
+            framekmatrix = np.zeros_like(self.matrices_kpoint[0], dtype=np.complex128)
+            # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
+            for kpt in range(np.prod(self.kmesh[ifr])):
+                for i, t in enumerate(translated_matrices.keys()):
+                    # for i in range(len(translated_matrices)):
+                    framekmatrix[kpt] += (
+                        translated_matrices[t][ifr] * self.phase_matrices[ifr][i][kpt]
+                    )
+            kmatrix.append(framekmatrix)
+        return kmatrix
+
+    def kpts_to_translation_target(self, matrices_kpoint):
+        target = []
+        for ifr in range(self.nstructs):
+            rel_translations = translation_vectors_for_kmesh(
+                self.cells[ifr], self.kmesh[ifr], wrap_around=False, return_rel=True
+            )
+
+            rel_translations = [tuple(x) for x in rel_translations]
+
+            translated_matrices = np.zeros(
+                (
+                    len(self.phase_matrices[ifr]),
+                    self.cells[ifr].nao,
+                    self.cells[ifr].nao,
+                ),
+                dtype=np.complex128,
+            )
+
+            for i in range(len(self.phase_matrices[ifr])):
+                for kpt in range(np.prod(self.kmesh[ifr])):
+                    # km[i] +=  phase_diff[key][kpt] * phase_diff[key][kpt].conj() * gamma_to_trans[key] * weight[key] # This works
+                    translated_matrices[i] += (
+                        matrices_kpoint[ifr][kpt]
+                        * self.phase_matrices[ifr][i][kpt].conj()
+                    )
+
+            # translated_matrices = translated_matrices
+            assert np.all(
+                np.allclose(translated_matrices - translated_matrices.real, 0)
+            )
+
+            translated_matrices = {
+                k: v for k, v in zip(rel_translations, translated_matrices.real)
+            }
+            target.append(translated_matrices)
+        return target
+
+    def check_block_(self):
+        # mat -> blocks _> couple -> uncouple -> mat
+        pass
 
     def __len__(self):
         return self.nstructs
