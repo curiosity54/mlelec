@@ -775,12 +775,13 @@ class PySCFPeriodicDataset(Dataset):
 
             self.cells.append(cell)
 
-            self.phase_matrices.append(phase)
+            self.phase_matrices.append(torch.from_numpy(phase).to(self.device))
             self.all_relative_shifts.append(
                 translation_vectors_for_kmesh(
                     cell, self.kmesh[ifr], return_rel=True
                 ).tolist()
             )
+
 
         if desired_shifts is not None:
             self.desired_shifts = desired_shifts
@@ -794,17 +795,17 @@ class PySCFPeriodicDataset(Dataset):
         self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
 
         assert matrices_kpoint is not None
-        self.matrices_kpoint = matrices_kpoint
-        matrices_translation = self.kpts_to_translation_target(matrices_kpoint)
+        self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
+        matrices_translation = self.kpts_to_translation_target(self.matrices_kpoint)
         ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
         self.matrices_translation = {key: [] for key in matrices_translation[0]}
         [
-            self.matrices_translation[k].append(matrices_translation[ifr][k])
+            self.matrices_translation[tuple(k)].append(matrices_translation[ifr][tuple(k)])
             for ifr in range(self.nstructs)
-            for k in matrices_translation[ifr].keys()
+            for k in self.desired_shifts#matrices_translation[ifr].keys() TOCHECK
         ]
-        for k in self.matrices_translation.keys():
-            self.matrices_translation[k] = np.stack(self.matrices_translation[k])
+        for k in self.desired_shifts: #self.matrices_translation.keys(): TOCHECK
+            self.matrices_translation[tuple(k)] = torch.stack(self.matrices_translation[tuple(k)])
 
         self.target = {t: [] for t in self.target_names}
         for t in self.target_names:
@@ -818,7 +819,7 @@ class PySCFPeriodicDataset(Dataset):
         """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
         kmatrix = []
         for ifr in range(self.nstructs):
-            framekmatrix = np.zeros_like(self.matrices_kpoint[0], dtype=np.complex128)
+            framekmatrix = torch.zeros_like(torch.tensor(self.matrices_kpoint[0]), dtype=torch.complex128).to(self.device)
             # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
             for kpt in range(np.prod(self.kmesh[ifr])):
                 for i, t in enumerate(translated_matrices.keys()):
@@ -838,14 +839,14 @@ class PySCFPeriodicDataset(Dataset):
 
             rel_translations = [tuple(x) for x in rel_translations]
 
-            translated_matrices = np.zeros(
+            translated_matrices = torch.zeros(
                 (
                     len(self.phase_matrices[ifr]),
                     self.cells[ifr].nao,
                     self.cells[ifr].nao,
                 ),
-                dtype=np.complex128,
-            )
+                dtype=torch.complex128,
+            ).to(self.device)
 
             for i in range(len(self.phase_matrices[ifr])):
                 for kpt in range(np.prod(self.kmesh[ifr])):
@@ -856,9 +857,7 @@ class PySCFPeriodicDataset(Dataset):
                     )
 
             # translated_matrices = translated_matrices
-            assert np.all(
-                np.allclose(translated_matrices - translated_matrices.real, 0)
-            )
+            assert torch.isclose(torch.linalg.norm(translated_matrices-translated_matrices.real), torch.tensor(0.0).to(translated_matrices.real))
 
             translated_matrices = {
                 k: v for k, v in zip(rel_translations, translated_matrices.real)
