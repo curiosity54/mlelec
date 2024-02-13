@@ -320,148 +320,148 @@ def _matrix_to_blocks(
             ki_base += orbs_tot[ai]
     return block_builder.build()
 
-def _matrix_to_condon_shortley(
-    matrices: Union[List[torch.tensor], torch.tensor],
-    frames: Union[ase.Atoms, List[ase.Atoms]],
-    orbitals: dict,
-    device: str = None,
-):
-    # if not isinstance(frames, list):
-    #     assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
-    #     frames = [frames]
-    #     matrices = matrices.reshape(1, *matrices.shape)
-
-    orbs_tot, _ = _orbs_offsets(orbitals)
-
-    block_builder = TensorBuilder(
-        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
-        ["structure", "center", "neighbor"],
-        [["m1"], ["m2"]],
-        ["value"],
-    )
-    orbs_tot, _ = _orbs_offsets(orbitals)
-
-    matrices_cs=torch.zeros(matrices.shape)
-    print(matrices_cs.shape)
-    for A in range(len(frames)):
-        frame = frames[A]
-        ham = matrices[A]
-        ki_base = 0
-        for i, ai in enumerate(frame.numbers):
-            kj_base = 0
-            for j, aj in enumerate(frame.numbers):
-                if i == j:
-                    block_type = 0  # diagonal
-                elif ai == aj:
-                    #if i > j:
-                    #    kj_base += orbs_tot[aj]
-                    #    continue
-                    block_type = 1  # same-species
-                else:
-                    if ai > aj:  # only sorted element types
-                        kj_base += orbs_tot[aj]
-                        continue
-                    block_type = 2  # different species
-                if isinstance(ham, np.ndarray):
-                    block_data = torch.from_numpy(
-                        ham[
-                            ki_base : ki_base + orbs_tot[ai],
-                            kj_base : kj_base + orbs_tot[aj],
-                        ]
-                    )
-                elif isinstance(ham, torch.Tensor):
-                    block_data = ham[
-                        ki_base : ki_base + orbs_tot[ai],
-                        kj_base : kj_base + orbs_tot[aj],
-                    ]
-                else:
-                    raise ValueError
-
-                w=block_data.shape[0]
-                print(w)
-                cs=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w+(w/2)),int(w-(w/2-1)))]).to(device)
-                print(cs)
-                #print(L,Lterm, cs*Lterm)
-
-                #print('A, i,j, ai, aj, ki_base, kj_base,orbsai,orbsaj,block_data.shape')
-                #print(A, i,j, ai, aj, ki_base, kj_base, orbs_tot[ai],orbs_tot[aj],block_data.shape)
-                if block_type == 1:
-                    # print(block_data)
-                    block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
-                    block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
- #               elif block_type==0:
- #                   block_data = (block_data + block_data.T) *0.5
-#                elif block_type==0:
-#                    print(i,j,block_data)
-
-                ki_offset = 0
-                for ni, li, mi in orbitals[ai]:
-                    if (
-                        mi != -li
-                    ):  # picks the beginning of each (n,l) block and skips the other orbitals
-                        continue
-                    kj_offset = 0
-                    for nj, lj, mj in orbitals[aj]:
-                        if (
-                            mj != -lj
-                        ):  # picks the beginning of each (n,l) block and skips the other orbitals
-                            continue
-                        if ai == aj and (ni > nj or (ni == nj and li > lj)):
-                            kj_offset += 2 * lj + 1
-                            continue
-                        block_idx = (block_type, ai, ni, li, aj, nj, lj)
-                        if block_idx not in block_builder.blocks:
-                            block = block_builder.add_block(
-                                keys=block_idx,
-                                properties=np.asarray([[0]]),
-                                components=[_components_idx(li), _components_idx(lj)],
-                            )
-
-                            if block_type == 1:
-                                block_asym = block_builder.add_block(
-                                    keys=(-1,) + block_idx[1:],
-                                    properties=np.asarray([[0]]),
-                                    components=[
-                                        _components_idx(li),
-                                        _components_idx(lj),
-                                    ],
-                                )
-                        else:
-                            block = block_builder.blocks[block_idx]
-                            if block_type == 1:
-                                block_asym = block_builder.blocks[(-1,) + block_idx[1:]]
-
-                        islice = slice(ki_offset, ki_offset + 2 * li + 1)
-                        jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
-
-                        if block_type == 1:
-                            block.add_samples(
-                                labels=[(A, i, j)],
-                                data=block_data_plus[islice, jslice].reshape(
-                                    (1, 2 * li + 1, 2 * lj + 1, 1)
-                                ),
-                            )
-                            block_asym.add_samples(
-                                labels=[(A, i, j)],
-                                data=block_data_minus[islice, jslice].reshape(
-                                    (1, 2 * li + 1, 2 * lj + 1, 1)
-                                ),
-                            )
-
-                        else:
-                            block.add_samples(
-                                labels=[(A, i, j)],
-                                data=block_data[islice, jslice].reshape(
-                                    (1, 2 * li + 1, 2 * lj + 1, 1)
-                                ),
-                            )
-
-                        kj_offset += 2 * lj + 1
-                    ki_offset += 2 * li + 1
-                kj_base += orbs_tot[aj]
-
-            ki_base += orbs_tot[ai]
-    return block_builder.build()
+#def _matrix_to_condon_shortley(
+#    matrices: Union[List[torch.tensor], torch.tensor],
+#    frames: Union[ase.Atoms, List[ase.Atoms]],
+#    orbitals: dict,
+#    device: str = None,
+#):
+#    # if not isinstance(frames, list):
+#    #     assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
+#    #     frames = [frames]
+#    #     matrices = matrices.reshape(1, *matrices.shape)
+#
+#    orbs_tot, _ = _orbs_offsets(orbitals)
+#
+#    block_builder = TensorBuilder(
+#        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
+#        ["structure", "center", "neighbor"],
+#        [["m1"], ["m2"]],
+#        ["value"],
+#    )
+#    orbs_tot, _ = _orbs_offsets(orbitals)
+#
+#    matrices_cs=torch.zeros(matrices.shape)
+#    print(matrices_cs.shape)
+#    for A in range(len(frames)):
+#        frame = frames[A]
+#        ham = matrices[A]
+#        ki_base = 0
+#        for i, ai in enumerate(frame.numbers):
+#            kj_base = 0
+#            for j, aj in enumerate(frame.numbers):
+#                if i == j:
+#                    block_type = 0  # diagonal
+#                elif ai == aj:
+#                    #if i > j:
+#                    #    kj_base += orbs_tot[aj]
+#                    #    continue
+#                    block_type = 1  # same-species
+#                else:
+#                    if ai > aj:  # only sorted element types
+#                        kj_base += orbs_tot[aj]
+#                        continue
+#                    block_type = 2  # different species
+#                if isinstance(ham, np.ndarray):
+#                    block_data = torch.from_numpy(
+#                        ham[
+#                            ki_base : ki_base + orbs_tot[ai],
+#                            kj_base : kj_base + orbs_tot[aj],
+#                        ]
+#                    )
+#                elif isinstance(ham, torch.Tensor):
+#                    block_data = ham[
+#                        ki_base : ki_base + orbs_tot[ai],
+#                        kj_base : kj_base + orbs_tot[aj],
+#                    ]
+#                else:
+#                    raise ValueError
+#
+#                w=block_data.shape[0]
+#                print(w)
+#                cs=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w+(w/2)),int(w-(w/2-1)))]).to(device)
+#                print(cs)
+#                #print(L,Lterm, cs*Lterm)
+#
+#                #print('A, i,j, ai, aj, ki_base, kj_base,orbsai,orbsaj,block_data.shape')
+#                #print(A, i,j, ai, aj, ki_base, kj_base, orbs_tot[ai],orbs_tot[aj],block_data.shape)
+#                if block_type == 1:
+#                    # print(block_data)
+#                    block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
+#                    block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
+# #               elif block_type==0:
+# #                   block_data = (block_data + block_data.T) *0.5
+##                elif block_type==0:
+##                    print(i,j,block_data)
+#
+#                ki_offset = 0
+#                for ni, li, mi in orbitals[ai]:
+#                    if (
+#                        mi != -li
+#                    ):  # picks the beginning of each (n,l) block and skips the other orbitals
+#                        continue
+#                    kj_offset = 0
+#                    for nj, lj, mj in orbitals[aj]:
+#                        if (
+#                            mj != -lj
+#                        ):  # picks the beginning of each (n,l) block and skips the other orbitals
+#                            continue
+#                        if ai == aj and (ni > nj or (ni == nj and li > lj)):
+#                            kj_offset += 2 * lj + 1
+#                            continue
+#                        block_idx = (block_type, ai, ni, li, aj, nj, lj)
+#                        if block_idx not in block_builder.blocks:
+#                            block = block_builder.add_block(
+#                                keys=block_idx,
+#                                properties=np.asarray([[0]]),
+#                                components=[_components_idx(li), _components_idx(lj)],
+#                            )
+#
+#                            if block_type == 1:
+#                                block_asym = block_builder.add_block(
+#                                    keys=(-1,) + block_idx[1:],
+#                                    properties=np.asarray([[0]]),
+#                                    components=[
+#                                        _components_idx(li),
+#                                        _components_idx(lj),
+#                                    ],
+#                                )
+#                        else:
+#                            block = block_builder.blocks[block_idx]
+#                            if block_type == 1:
+#                                block_asym = block_builder.blocks[(-1,) + block_idx[1:]]
+#
+#                        islice = slice(ki_offset, ki_offset + 2 * li + 1)
+#                        jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
+#
+#                        if block_type == 1:
+#                            block.add_samples(
+#                                labels=[(A, i, j)],
+#                                data=block_data_plus[islice, jslice].reshape(
+#                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                ),
+#                            )
+#                            block_asym.add_samples(
+#                                labels=[(A, i, j)],
+#                                data=block_data_minus[islice, jslice].reshape(
+#                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                ),
+#                            )
+#
+#                        else:
+#                            block.add_samples(
+#                                labels=[(A, i, j)],
+#                                data=block_data[islice, jslice].reshape(
+#                                    (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                ),
+#                            )
+#
+#                        kj_offset += 2 * lj + 1
+#                    ki_offset += 2 * li + 1
+#                kj_base += orbs_tot[aj]
+#
+#            ki_base += orbs_tot[ai]
+#    return block_builder.build()
 
 def _to_matrix(
     blocks: TensorMap,
@@ -888,10 +888,10 @@ def rotate_matrix(
     )
     return rot_matrix
 
-def to_coupled_blocks(matrices, frames, orbs):
+def to_coupled_blocks(matrices, frames, orbs, device=None):
     q= {}
     for s in matrices.keys():
-        q[tuple(s)] = _to_coupled_basis(_matrix_to_blocks(matrices[tuple(s)], frames=frames, orbitals=orbs,), orbs) # uncouple -> coupled    
+        q[tuple(s)] = _to_coupled_basis(_matrix_to_blocks(matrices[tuple(s)], frames=frames, orbitals=orbs,), orbs, device=device) # uncouple -> coupled    
     return q
 
 def to_uncoupled_matrices(b,frames, orbs):
@@ -980,6 +980,84 @@ def symmetrize_matrices(q):
 #        H_inverse[tuple(shift)] = TensorMap(matrices[tuple(shift)].keys, blocks_inverse)    
 #    return H_inverse
 
+def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
+    matrix=torch.zeros(ham.shape, dtype=torch.float64)
+    ki_base = 0
+    for i, ai in enumerate(frame.numbers):
+        kj_base = 0
+        for j, aj in enumerate(frame.numbers):
+
+            if isinstance(ham, np.ndarray):
+                block_data = torch.from_numpy(
+                    ham[
+                        ki_base : ki_base + orbs_tot[ai],
+                        kj_base : kj_base + orbs_tot[aj],
+                    ]
+                )
+                block_data2 = torch.from_numpy(
+                    ham[
+                        kj_base : kj_base + orbs_tot[aj],
+                        ki_base : ki_base + orbs_tot[ai],
+
+                    ]
+                )
+            elif isinstance(ham, torch.Tensor):
+                block_data = ham[
+                    ki_base : ki_base + orbs_tot[ai],
+                    kj_base : kj_base + orbs_tot[aj],
+                ]
+                block_data2 = ham[
+                    kj_base : kj_base + orbs_tot[aj],
+                    ki_base : ki_base + orbs_tot[ai],
+                ]
+            else:
+                raise ValueError
+
+            ki_offset = 0
+            for ni, li, mi in orbitals[ai]:
+                if (
+                    mi != -li
+                ):  # picks the beginning of each (n,l) block and skips the other orbitals
+                    continue
+                kj_offset = 0
+                for nj, lj, mj in orbitals[aj]:
+                    if (
+                        mj != -lj
+                    ):  # picks the beginning of each (n,l) block and skips the other orbitals
+                        continue
+                    if ai == aj and (ni > nj or (ni == nj and li > lj)):
+                        kj_offset += 2 * lj + 1
+                        continue
+
+
+                    islice = slice(ki_offset, ki_offset + 2 * li + 1)
+                    jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
+
+                    w_i= 2 * li + 1
+                    w_j= 2 * lj + 1
+                    cs_i=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_i+(w_i/2)),int(w_i-(w_i/2-1)))]).to(device)
+                    cs_j=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_j+(w_j/2)),int(w_j-(w_j/2-1)))]).to(device)
+                    matrix[ki_base+ki_offset:ki_base+ki_offset+2 * li +1, kj_base+kj_offset:kj_base+kj_offset+2 * lj +1]=block_data[islice,jslice]*cs_i.unsqueeze(-1)*cs_j
+                    matrix[kj_base+kj_offset:kj_base+kj_offset+2 * lj +1,ki_base+ki_offset:ki_base+ki_offset+2 * li +1]=block_data2[jslice,islice]*cs_i*cs_j.unsqueeze(-1)
+                    
+                    kj_offset += 2 * lj + 1
+                ki_offset += 2 * li + 1
+            kj_base += orbs_tot[aj]
+
+        ki_base += orbs_tot[ai]
+    return matrix
+
+def _condon_shortley_to_fhiaims(
+    matrices: Union[List[torch.tensor], torch.tensor],
+    frames: Union[ase.Atoms, List[ase.Atoms]],
+    orbitals: dict,
+    device: str = None,
+):
+    '''
+    Converting from Condon Shortley convention to FHI-aims convention works the same way as the convention from FHI-aims convention to Condon Shortley convention. To check, which convention one is in, use the check_rotation function (Needs rotated image of data..). It works only for Condon Shortley convention.
+    '''
+    return _fhiaims_to_condon_shortley(matrices,frames,orbitals,device)
+
 def _fhiaims_to_condon_shortley(
     matrices: Union[List[torch.tensor], torch.tensor],
     frames: Union[ase.Atoms, List[ase.Atoms]],
@@ -994,7 +1072,7 @@ def _fhiaims_to_condon_shortley(
     To go to Condon Shortly convention, one has to multiply the even states with m>0 by -1.
     '''
 
-    orbs_tot, _ = _orbs_offsets(orbitals)
+#    orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
@@ -1004,73 +1082,25 @@ def _fhiaims_to_condon_shortley(
     )    
     orbs_tot, _ = _orbs_offsets(orbitals)
 
-    matrices_cs=torch.zeros(matrices.shape, dtype=torch.float64)
+    matrices_cs=torch.zeros((len(matrices), *matrices[0].shape), dtype=torch.float64)
+    if len(matrices_cs.shape)==4:
+        multiple_shifts=True
+    else:
+        multiple_shifts=False
+    #print(multiple_shifts)
     for A in range(len(frames)):
         frame = frames[A]
-        ham = matrices[A]
-        ki_base = 0
-        for i, ai in enumerate(frame.numbers):
-            kj_base = 0
-            for j, aj in enumerate(frame.numbers):
+        if multiple_shifts:
 
-                if isinstance(ham, np.ndarray):
-                    block_data = torch.from_numpy(
-                        ham[
-                            ki_base : ki_base + orbs_tot[ai],
-                            kj_base : kj_base + orbs_tot[aj],
-                        ]
-                    )
-                    block_data2 = torch.from_numpy(
-                        ham[
-                            kj_base : kj_base + orbs_tot[aj],
-                            ki_base : ki_base + orbs_tot[ai],
+            for shift in range(len(matrices[A])):
 
-                        ]
-                    )
-                elif isinstance(ham, torch.Tensor):
-                    block_data = ham[
-                        ki_base : ki_base + orbs_tot[ai],
-                        kj_base : kj_base + orbs_tot[aj],
-                    ]
-                    block_data2 = ham[
-                        kj_base : kj_base + orbs_tot[aj],
-                        ki_base : ki_base + orbs_tot[ai],
-                    ]
-                else:
-                    raise ValueError
+                ham = matrices[A][shift]
+                #print('shift', shift)
+                matrices_cs[A][shift]=_matrix_to_block_fhiaims_to_cs(ham,frame, orbitals,orbs_tot, device=device)
+        else:
+            ham = matrices[A]
+            matrices_cs[A]=_matrix_to_block_fhiaims_to_cs(ham,frame, orbitals,orbs_tot, device=device)
 
-                ki_offset = 0
-                for ni, li, mi in orbitals[ai]:
-                    if (
-                        mi != -li
-                    ):  # picks the beginning of each (n,l) block and skips the other orbitals
-                        continue
-                    kj_offset = 0
-                    for nj, lj, mj in orbitals[aj]:
-                        if (
-                            mj != -lj
-                        ):  # picks the beginning of each (n,l) block and skips the other orbitals
-                            continue
-                        if ai == aj and (ni > nj or (ni == nj and li > lj)):
-                            kj_offset += 2 * lj + 1
-                            continue
-
-
-                        islice = slice(ki_offset, ki_offset + 2 * li + 1)
-                        jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
-
-                        w_i= 2 * li + 1
-                        w_j= 2 * lj + 1
-                        cs_i=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_i+(w_i/2)),int(w_i-(w_i/2-1)))]).to(device)
-                        cs_j=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_j+(w_j/2)),int(w_j-(w_j/2-1)))]).to(device)
-                        matrices_cs[A,ki_base+ki_offset:ki_base+ki_offset+2 * li +1, kj_base+kj_offset:kj_base+kj_offset+2 * lj +1]=block_data[islice,jslice]*cs_i.unsqueeze(-1)*cs_j
-                        matrices_cs[A, kj_base+kj_offset:kj_base+kj_offset+2 * lj +1,ki_base+ki_offset:ki_base+ki_offset+2 * li +1]=block_data2[jslice,islice]*cs_i*cs_j.unsqueeze(-1)
-                        
-                        kj_offset += 2 * lj + 1
-                    ki_offset += 2 * li + 1
-                kj_base += orbs_tot[aj]
-
-            ki_base += orbs_tot[ai]
     return matrices_cs
 
 
@@ -1079,7 +1109,7 @@ def check_rotation(r1,  rotations, precision=10**-5):
     '''
 
     from mlelec.utils.metatensor_utils import labels_where  
-    from mlelec.utils.symmetry_fhiaims import _wigner_d_real
+    from mlelec.utils.symmetry import _wigner_d_real
     import numpy as np
     from metatensor import Labels
 
