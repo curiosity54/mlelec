@@ -92,7 +92,7 @@ def plot_bandstructure(frame,fock,ovl,cells, symmpoints, symmpoint_names,npoints
     ax_bands.set_ylim(-30,30)
 
 
-def plot_multiple_bandstructures(frames,focks,ovls,cell_shifts,symmpoints, symmpoint_names,npoints=50,energyshift=0):
+def plot_multiple_bandstructures(frames,focks,ovls,cell_shifts,symmpoints, symmpoint_names,npoints=50,energyshift=0, ymin=-30,ymax=30, lattice_from_first_frame=True):
 #note while this works for different cell vectors, it does not necessarily make sense to compare them, as the lengths between the symmetry points change
     
     #plt.rcParams['lines.linewidth'] = 1
@@ -101,14 +101,17 @@ def plot_multiple_bandstructures(frames,focks,ovls,cell_shifts,symmpoints, symmp
     colors = plt.cm.jet(np.linspace(0,1,len(frames)+2))
     klist=interpolate_kpoints(symmpoints, npoints)
 
+    symmpoints_x=get_xposition_of_symmpoints(symmpoints, frames[0].cell)
+    xlist=interpolate_kpoints(symmpoints_x, npoints)
 
     for ifr in range(len(frames)):
-        symmpoints_x=get_xposition_of_symmpoints(symmpoints, frames[ifr].cell)
-        xlist=interpolate_kpoints(symmpoints_x, npoints)
-        
+    
+        if (ifr>0 and not lattice_from_first_frame):    
+            symmpoints_x=get_xposition_of_symmpoints(symmpoints, frames[ifr].cell)
+            xlist=interpolate_kpoints(symmpoints_x, npoints)
+                
         rev=get_bandenergies(focks[ifr],ovls[ifr],cell_shifts[ifr],klist, npoints)
         ax_bands.plot(xlist,np.array(rev)+energyshift, color=colors[ifr])
-   #ax_bands.plot(xlist,np.array(rev)+9, 'rx-')
     
     labels=[(symmpoints_x[i],symmpoint_names[i]) for i in range(len(symmpoints_x))]
     
@@ -127,7 +130,7 @@ def plot_multiple_bandstructures(frames,focks,ovls,cell_shifts,symmpoints, symmp
     ax_bands.set_xlim(labels[0][0],labels[-1][0])
     ax_bands.set_xticks(tickx)
     ax_bands.set_xticklabels(tickl)
-    ax_bands.set_ylim(-30,30)
+    ax_bands.set_ylim(ymin,ymax)
 
 
 
