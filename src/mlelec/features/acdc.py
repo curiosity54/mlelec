@@ -367,13 +367,14 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-    keys = np.pad(keys, ((0, 0), (0, 6)))
+    keys = np.pad(keys, ((0, 0), (0, 3)))
+    #keys = np.pad(keys, ((0, 0), (0, 6)))
     return TensorMap(
         keys=Labels(
             names=pair.keys.names
             + ["block_type"]
-            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"]
-            + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
+            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+            #+ ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,
