@@ -19,34 +19,21 @@ def read_upper_half_realham(foldername):
         It returns the full (#cells, #BF, #BF) real space Hamiltonian along with the number of non-zero elements in the Hamiltonian.
     '''
 
-#    with open('{}/aims.out'.format(foldername)) as f:
-#        lines=f.readlines()
-#    for line in lines[1:]:
-#        if line.startswith('  | Maximum number of basis functions            :'):#       78
-#            m=[i for i in line.split(' ') if i!='']
-#            nbf=m[-1]
-#        if line.startswith('  | Number of super-cells in hamiltonian [n_cells_in_hamiltonian]:'):#         104
-#            m=[i for i in line.split('\n')[0].split(' ') if i!='']
-#            ncell=m[-1] 
     nbf, ncell=get_nbf_ncell(foldername)
 
-#    print(ncell,nbf)
     ham=np.zeros((int(ncell)-1, int(nbf), int(nbf))) 
-#    print(ham.shape)
-#    print(foldername)
     with open('{}/realspaceHam.txt'.format(foldername)) as f:
         lines=f.readlines()
     for line in lines[1:]:
         icell, ibf2, ibf1, idx_real, spin, ham_ij =list(filter(lambda x: x != '', line.split('\n')[0].split(' ')))
-#        print(icell, ibf2, ibf1, idx_real, spin, ham_ij)
         ham[int(icell)-1, int(ibf2)-1, int(ibf1)-1]=float(ham_ij)
-
 
     return ham, idx_real #idx_real is the number of non 0 elements in the real space hamiltonian
 
 
 def get_nbf_ncell(foldername):
-
+    ''' Function that reads the number of basis functions and number of translated cells from the aims.out file in the provided folder with the name foldername
+    '''
     with open('{}/aims.out'.format(foldername)) as f:
         lines=f.readlines()
     for line in lines[1:]:
@@ -83,20 +70,13 @@ def read_ovl(foldername):
     ''' Function that reads the overlap-matrix file as output by (the manipulated) FHI-aims. 
         It returns the (#BF, #BF) overlap matrix.
     '''
-    with open(foldername) as f:
-        lines=f.readlines()
-    nbf2, nbf1, ovl =list(filter(lambda x: x != '', lines[-1].split('\n')[0].split(' ')))
-#    print(ncell, nbf2, nbf2, idx_real, spin, ham)
-
-####nrb1/2 do not necessarily have to be largest number!! TODO: write this in a smarter way
-    ovl=np.zeros((int(nbf1), int(nbf2)))
+    nbf, ncell=get_nbf_ncell(foldername)
+    ovl=np.zeros((int(nbf), int(nbf)))
 #    print(ham.shape)
     for line in lines[:]:
         ibf2, ibf1, ovl_ij =list(filter(lambda x: x != '', line.split('\n')[0].split(' ')))
         ovl[int(ibf2)-1, int(ibf1)-1]=float(ovl_ij)
         ovl[int(ibf1)-1, int(ibf2)-1]=float(ovl_ij)
-
-#    sparse_ham = scipy.sparse.coo_array(ham)
 
     return ovl #idx_real is the number of non 0 elements in the real space hamiltonian
 
@@ -167,15 +147,12 @@ def get_cellidx(foldername):
     for line in lines:
         if ' cell idx' in line:# cell idx ham           0           0           0
             z=[i for i in line.split('\n')[0].split(' ') if i!='']
-#            print(z)
             cell_idx[n,0]=int(z[-3])
             cell_idx[n,1]=int(z[-2])
             cell_idx[n,2]=int(z[-1])
     
             n+=1
     
-    
-#    np.save('cell_idx',cell_idx)
     return cell_idx
 
 def get_all_cellidx(foldernames, suffix=''):
@@ -237,7 +214,6 @@ def read_realovls(foldernames, suffix=''):
         for n,shift in enumerate(cell_locs[-1][:]):
             #print('s',shift)
             iup.append(n)
-            #idxlo.append(cell_i_list.index([-shift[0],-shift[1],-shift[2]]))
             lo=[i for i,element in enumerate(cell_locs[-1][:]) if element[0]==-shift[0] and element[1]==-shift[1] and element[2]==-shift[2]]
             #print(lo)
             ilo.append(lo[0])
@@ -276,6 +252,8 @@ def get_ovls(foldernames):
 
 
 def get_kphase(foldernames, suffix=''):
+    '''Function that reads the kphases from the provided folder. Uses aims.out to get the number of kpoints in calculation.
+    '''
     klist=[]
     for foldername in foldernames[:]:
 
@@ -290,6 +268,8 @@ def get_kphase(foldernames, suffix=''):
     return klist
 
 def get_nr_kpts(filename):
+    '''Function that reads the number of kpoints from the provided aims.out file
+    '''
     with open(filename) as f:
         lines=f.readlines()     
     for line in lines:
@@ -300,6 +280,9 @@ def get_nr_kpts(filename):
 
 
 def get_kpts_and_weights(foldernames,suffix=''): 
+    '''Function that reads the kpoints and their weights from the aims.out file in the provided folder. 
+       FHI-aims keyword 'output full' has to be set in order for this to get printed in aims.out.
+    '''
     wlist=[]
     kpoints=[]
     for foldername in foldernames[:]:
@@ -349,12 +332,7 @@ def get_phaseshift(k, cell_locs):
     '''Get the kphase according to the kpoint (k) and the relevant cell shifts (cell_locs) for FHI-aims.
        This function returns the kphase with an error of about 10**-5 in comparison to FHI-aims, I (HT) could not figure out why. Precision of kphase in FHI-aims is COMPLEX*16, here we deal with integer kpoints and integer cell_locs. I guess the rounding in the kpoints is the error. One could try to compute the kpoint positions from the k grid to fix this problem.
     '''
-    kplist=[]
-    for n in range(len(cell_locs)):
-        #kp=np.exp(2*np.pi*1j*np.matmul(np.array(k),np.array(cell_locs[n]), dtype=np.complex128))
-        kp=np.exp(2*np.pi*1j*np.matmul(np.array(k),np.array(cell_locs[n]), dtype=np.complex64))#128))
-        kplist.append(kp)
-    return np.asarray(kplist)
+    return np.exp(2*np.pi*1j*np.dot(cell_locs,np.array(k).T)) #np.asarray(kplist)
 
 def get_translation_dict(cell_i_list, rh2,maxshift=3):
     '''Change the list of realspace Hs to dictionaries for the individual shifts with the shift values as keys
@@ -377,60 +355,43 @@ def Hk_to_rH(H_k,kpoints,weights, cell):#, kphase):
 
     '''
     newham=np.zeros((len(H_k),len(cell[0]),len(H_k[0][0]),len(H_k[0][0][0])), dtype=np.complex128)
-#    newham2=np.zeros((len(H_k),len(cell[0]),len(H_k[0][0]),len(H_k[0][0][0])), dtype=np.complex128)
-    #newham=np.zeros((len(H_k),len(fock[0]),H_k[0].shape[1],H_k[0].shape[2]), dtype=np.complex128)
     
     nrkpt=len(H_k[0])#.shape[0]
     
     for ifr in range(len(kpoints)):
         k=get_phaseshift(kpoints[ifr],cell[ifr]).conj()
-        #print(k.shape)
         for icell in range(len(cell[ifr])): #fock
             for kpt in range(nrkpt):
-                #newham[ifr][icell]+=H_k[ifr][kpt]*kphase[ifr][kpt][icell].conj()*weights[ifr][kpt]
                 newham[ifr][icell]+=H_k[ifr][kpt]*k[icell][kpt]*weights[ifr][kpt]
 
     return np.real(newham)#, np.real(newham2)
 
-def rH_to_Hk(fock, kpoint,kphase,cells):
+def rH_to_Hk(fock, kpoint, cells):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
 
     '''
     newham=np.zeros((fock.shape[1],fock.shape[2]), dtype=np.complex_)
     
-    #for ifr in range(len(fock[:])):
-    #k=get_phaseshift(kpoint,cells)#.conj()
+    k=get_phaseshift(kpoint,cells)#.conj()
     for icell in range(len(fock)):
-        #print(icell)
-       # if (np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt])>10**-5 and kpt<20):
-       #     print(ifr,kpt,icell, kphase[ifr][kpt][icell],k[icell][kpt], np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt]))
-        newham+=fock[icell]*kphase[icell]
-        #newham[ifr][kpt]+=fock[ifr][icell]*k[icell][kpt]#kphase[ifr][icell][kpt]
+        newham+=fock[icell]*k[icell]#kphase[icell]
     return newham
 
-def rH_to_Hks(fock, kpoints,kphase,cells):
+def rH_to_Hks(fock, kpoints,cells):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
 
     '''
     newham=np.zeros((len(kpoints),fock.shape[1],fock.shape[2]), dtype=np.complex_)
     
-    #for ifr in range(len(fock[:])):
-    k=get_phaseshift(kpoints,cells)#.conj()
     nrkpts=len(kpoints)
     for kpt in range(nrkpts):
-        newham[kpt]=rH_to_Hk(fock,kpt,kphase[kpt],cells)
-#        for icell in range(len(fock)):
-#            #print(icell)
-#           # if (np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt])>10**-5 and kpt<20):
-#           #     print(ifr,kpt,icell, kphase[ifr][kpt][icell],k[icell][kpt], np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt]))
-#            newham[kpt]+=fock[icell]*kphase[kpt][icell]
-#            #newham[ifr][kpt]+=fock[ifr][icell]*k[icell][kpt]#kphase[ifr][icell][kpt]
+        newham[kpt]=rH_to_Hk(fock,kpoints[kpt],cells)
     return newham
 
 
-def rHs_to_Hks(fock, kpoints,kphase,cells):
+def rHs_to_Hks(fock, kpoints,cells):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
 
@@ -438,19 +399,7 @@ def rHs_to_Hks(fock, kpoints,kphase,cells):
 
     hams=[]
     for ifr in range(len(fock)):
-        newham=rH_to_Hks(fock[ifr], kpoints[ifr],kphase[ifr],cells[ifr])
-#        newham=np.zeros((len(kpoints[0]),fock[0].shape[1],fock[0].shape[2]), dtype=np.complex_)
-#    
-#        #for ifr in range(len(fock[:])):
-#        k=get_phaseshift(kpoints[ifr],cell[ifr])#.conj()
-#        nrkpts=len(kpoints[ifr])
-#        for kpt in range(nrkpts):
-#            for icell in range(len(fock[ifr])):
-#                #print(icell)
-#               # if (np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt])>10**-5 and kpt<20):
-#               #     print(ifr,kpt,icell, kphase[ifr][kpt][icell],k[icell][kpt], np.linalg.norm(kphase[ifr][kpt][icell]-k[icell][kpt]))
-#                newham[kpt]+=fock[ifr][icell]*kphase[ifr][kpt][icell]
-#                #newham[ifr][kpt]+=fock[ifr][icell]*k[icell][kpt]#kphase[ifr][icell][kpt]
+        newham=rH_to_Hks(fock[ifr], kpoints[ifr],cells[ifr])
         hams.append(newham.copy())    
     return hams
 
@@ -466,6 +415,10 @@ def check_shift_hermicity(translated_matrices,normval=10**-10):
 
 
 if __name__=='__main__':
+    '''If executed, this script collects all the necessary data to machine learn the Hamiltonian matrix from the FHI-folders starting with 'struc' and writes them as npz files.
+    '''
+
+
     foldernames=glob('struc*')
     
 #    foldernames=['structure_{:05d}'.format(i) for i in range(3)]#174)]
