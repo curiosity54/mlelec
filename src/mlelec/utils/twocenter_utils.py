@@ -794,9 +794,10 @@ def _to_uncoupled_basis(
     cg: Optional[ClebschGordanReal] = None,
     device: str = None,
 ):
+
     if cg is None:
         lmax = max(blocks.keys["L"])
-        cg = ClebschGordanReal(lmax)
+        cg = ClebschGordanReal(lmax, device=device)
 
     block_builder = TensorBuilder(
         # last key name is L, we remove it here
