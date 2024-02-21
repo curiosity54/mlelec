@@ -96,6 +96,7 @@ def pair_features(
     kmesh=None,
     desired_shifts=None,
     mic=False,
+    return_rho0ij=False,
     **kwargs,
 ):
     """
@@ -179,8 +180,8 @@ def pair_features(
             for s in all_samples:
                 ifr, i, j, x, y, z = s
 
-                # if [x, y, z] == [0, 0, 0]:
-                # continue
+                if i == j and [x, y, z] == [0, 0, 0]:
+                    continue
 
                 # print('------')
                 # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
@@ -215,30 +216,7 @@ def pair_features(
                     ).reshape(1, -1),
                 )[0]
                 mappedidx = block.samples.position(mic_label)
-                # _, mappedidx = labels_where(
-                #         block.samples,
-                #         Labels(
-                #             [
-                #                 "structure",
-                #                 "center",
-                #                 "neighbor",
-                #                 "cell_shift_a",
-                #                 "cell_shift_b",
-                #                 "cell_shift_c",
-                #             ],
-                #             values=np.asarray(
-                #                 [
-                #                     ifr,
-                #                     i,
-                #                     j,
-                #                     mic_x,
-                #                     mic_y,
-                #                     mic_z,
-                #                 ]
-                #             ).reshape(1, -1),
-                #         ),
-                #         return_idx=True,
-                #     )
+
                 assert isinstance(mappedidx, int), (mappedidx, mic_label)
                 value_indices.append(mappedidx)
                 fixed_sample.append(
@@ -308,26 +286,7 @@ def pair_features(
             )
 
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-        # rho0_ij = _standardize(rho0_ij)
-        # rho0_ij =  _pca(rho0_ij)
-        # ----OLD-----
-        # blocks = []
-        # for key, block in rho0_ij.items():
-        #     samples, retained_idx, validx = block_to_mic_translation(
-        #         frames[0], block, kmesh  # <<<< ASSUMES UNIFORM KMESH ACROSS STRUCTURES
-        #     )
 
-        #     blocks.append(
-        #         TensorBlock(
-        #             values=block.values[validx],
-        #             components=block.components,
-        #             properties=block.properties,
-        #             samples=samples,
-        #         ),
-        #     )
-
-        # rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-        # ----OLD ----
     # keep only the desired translations
     if desired_shifts is not None:
 
@@ -356,6 +315,8 @@ def pair_features(
                 )
             )
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
+        if return_rho0ij:
+            return rho0_ij
     # ------------------------
 
     if isinstance(order_nu, list):
@@ -377,25 +338,23 @@ def pair_features(
             frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
         # rhonu_i = _standardize(rhonu_i)
+    # if not both_centers:
+    rhonu_ij = cg_combine(
+        rhonu_i,
+        rho0_ij,
+        clebsch_gordan=cg,
+        other_keys_match=["species_center"],
+        lcut=lcut,
+        feature_names=kwargs.get("feature_names", None),
+    )
     if not both_centers:
-        rhonu_ij = cg_combine(
-            rhonu_i,
-            rho0_ij,
-            clebsch_gordan=cg,
-            other_keys_match=["species_center"],
-            lcut=lcut,
-            feature_names=kwargs.get("feature_names", None),
-        )
         return rhonu_ij
 
     else:
-        # # build the feature with atom-centered density on both centers
-        # # rho_ij = rho_i x gij x rho_j
         if "order_nu_j" not in locals():
             warnings.warn("nu_j not defined, using nu_i for nu_j as well")
             order_nu_j = order_nu_i
         if order_nu_j != order_nu_i:
-            # compire
             rhonup_j = single_center_features(
                 frames,
                 order_nu=order_nu_j,
@@ -408,24 +367,27 @@ def pair_features(
             rhonup_j = rhonu_i.copy()
 
         rhoj = relabel_keys(rhonup_j, "species_neighbor")
+
         # build rhoj x gij
-        rhonuij = cg_combine(
+        rhonu_nupij = cg_combine(
             rhoj,
-            rho0_ij,
+            rhonu_ij,
+            # rhoj,
             lcut=lcut,
             other_keys_match=["species_neighbor"],
             clebsch_gordan=cg,
             mp=True,  # for combining with neighbor
-        )
-        # combine with rhoi
-        rhonu_nupij = cg_combine(
-            rhonu_i,
-            rhonuij,
-            lcut=lcut,
-            other_keys_match=["species_center"],
-            clebsch_gordan=cg,
             feature_names=kwargs.get("feature_names", None),
         )
+        # combine with rhoi
+        # rhonu_nupij = cg_combine(
+        #     rhonu_i,
+        #     rhonuij,
+        #     lcut=lcut,
+        #     other_keys_match=["species_center"],
+        #     clebsch_gordan=cg,
+        #     feature_names=kwargs.get("feature_names", None),
+        # )
 
         return rhonu_nupij
 
@@ -446,31 +408,33 @@ def twocenter_hermitian_features(
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
     blocks = []
-    for k, b in single_center.items():
-        keys.append(
-            tuple(k)
-            + (
-                k["species_center"],
-                0,
+    if single_center is not None:
+
+        for k, b in single_center.items():
+            keys.append(
+                tuple(k)
+                + (
+                    k["species_center"],
+                    0,
+                )
             )
-        )
-        # `Try to handle the case of no computed features
-        if len(list(b.samples.values)) == 0:
-            samples_array = b.samples
-        else:
-            samples_array = np.asarray(b.samples.values)
-            samples_array = np.hstack([samples_array, samples_array[:, -1:]])
-        blocks.append(
-            TensorBlock(
-                samples=Labels(
-                    names=b.samples.names + ["neighbor"],
-                    values=samples_array,
-                ),
-                components=b.components,
-                properties=b.properties,
-                values=b.values,
+            # `Try to handle the case of no computed features
+            if len(list(b.samples.values)) == 0:
+                samples_array = b.samples
+            else:
+                samples_array = np.asarray(b.samples.values)
+                samples_array = np.hstack([samples_array, samples_array[:, -1:]])
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names + ["neighbor"],
+                        values=samples_array,
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=b.values,
+                )
             )
-        )
 
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
@@ -599,37 +563,25 @@ def twocenter_features_periodic_NH(
                 & (b.samples["cell_shift_b"] != 0)
                 & (b.samples["cell_shift_c"] != 0)
             )[0]
-            # idx = [
-            #     i
-            #     for i in idxij
-            #     if b.samples["cell_shift_a"][i] != 0
-            #     and b.samples["cell_shift_b"][i] != 0
-            #     and b.samples["cell_shift_c"][i] != 0
-            # ]
-
-            if len(idx) == 0:
+            if len(idx) != 0:
                 # SHOULD BE ZERO
-                print(k.values, "skipped for btype0")
-                continue
-            keys.append(tuple(k) + (0,))
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values[idx],
-                )
-            )
+                raise ValueError("btype0 should be zero for pair")
         else:
             raise NotImplementedError  # Handle periodic case for different species
 
     for k, b in pair.items():
+        positive_shifts_idx = []
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
-            idx_up = np.where(b.samples["center"] <= b.samples["neighbor"])[0]
+            idx_up = np.where(
+                (b.samples["center"] <= b.samples["neighbor"])
+                & (b.samples["cell_shift_a"] >= 0)
+                & (b.samples["cell_shift_b"] >= 0)
+                & (b.samples["cell_shift_c"] >= 0)
+            )[0]
+            # zeroshift_idx = np.argwhere(np.all(np.array(b.samples.values.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"])==[0,0,0]), axis=1))
+            # if b.samples["center"]
+            print(len(idx_up))
             if len(idx_up) == 0:
                 continue
             idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
@@ -645,77 +597,24 @@ def twocenter_features_periodic_NH(
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             idx_ji = []
-            samplecopy = np.array(
-                b.samples.view(
-                    [
-                        "structure",
-                        "center",
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c",
-                        "cell_shift_a_MIC",
-                        "cell_shift_b_MIC",
-                        "cell_shift_c_MIC",
-                    ]
-                ).values
-            )
+            samplecopy = np.array(b.samples.values)
 
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
-                structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.view(
-                    [
-                        "structure",
-                        "center",
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c",
-                        "cell_shift_a_MIC",
-                        "cell_shift_b_MIC",
-                        "cell_shift_c_MIC",
-                    ]
-                ).values[idx_up[smp_up]]
+
+                structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
+                    idx_up[smp_up]
+                ]
+
+                # ).values[idx_up[smp_up]]
                 # ji_entry = Labels(b.samples.names[:-3], values = np.array([[structure, j, i, Tx, Ty, Tz]]))
+                # if np.sum([Tx, Ty, Tz]) > 0:
+                #     positive_shifts_idx.append(smp_up)
                 ji_entry = np.array([structure, j, i, -Tx, -Ty, -Tz, -Mx, -My, -Mz])
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis=1))
                 assert where_ji.shape == (1, 1), where_ji.shape
                 where_ji = where_ji[0, 0]
                 idx_ji.append(where_ji)
-
-                # for smp_lo in range(smp_up, len(idx_lo)):
-                #     ij_lo = b.samples.view(["neighbor", "center"]).values[
-                #         idx_lo[smp_lo]
-                #     ]
-                #     # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
-                #     if (
-                #         (
-                #             b.samples["structure"][idx_up[smp_up]]
-                #             != b.samples["structure"][idx_lo[smp_lo]]
-                #         )
-                #         or (
-                #             b.samples["cell_shift_a"][idx_up[smp_up]]
-                #             != b.samples["cell_shift_a"][idx_lo[smp_lo]]
-                #         )
-                #         or (
-                #             b.samples["cell_shift_b"][idx_up[smp_up]]
-                #             != b.samples["cell_shift_b"][idx_lo[smp_lo]]
-                #         )
-                #         or (b.samples["cell_shift_c"][idx_up[smp_up]] != b.samples["cell_shift_c"][idx_lo[smp_lo]])
-                #     ):  # Must also add checks for the translation here TODO
-                #         print(np.array(b.samples.values)[idx_up])
-                #         print("corresponf to")
-                #         print(np.array(b.samples.values)[idx_lo])
-
-                #         # print(b.samples["structure"][idx_up[smp_up]])
-                #         # print("correspond to")
-                #         # print(b.samples["structure"][idx_lo[smp_lo]])
-                #         raise ValueError(
-                #             f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
-                #         )
-                #     if tuple(ij) == tuple(ij_lo):
-                #         idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
-                #         break
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
@@ -725,22 +624,29 @@ def twocenter_features_periodic_NH(
                 TensorBlock(
                     samples=Labels(
                         names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
+                        values=np.asarray(
+                            b.samples.values[idx_up]  # [positive_shifts_idx]
+                        ),
                     ),
                     components=b.components,
                     properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_ji]) / 2,  # idx_lo
+                    # values=b.values[idx_up],
+                    values=(b.values[idx_up] + b.values[idx_ji]),
+                    # / 2,  # idx_lo
                 )
             )
             blocks.append(
                 TensorBlock(
                     samples=Labels(
                         names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
+                        values=np.asarray(
+                            b.samples.values[idx_up]  # [positive_shifts_idx]
+                        ),
                     ),
                     components=b.components,
                     properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_ji]) / 2,  # idx_lo
+                    # values=b.values[idx_ji],  ##[idx_ji],
+                    values=(b.values[idx_up] - b.values[idx_ji]),
                 )
             )
 
@@ -756,6 +662,9 @@ def twocenter_features_periodic_NH(
         ),
         blocks=blocks,
     )
+
+
+# retain only positive shifts in the end
 
 
 def twocenter_hermitian_features_periodic(
@@ -901,7 +810,7 @@ from mlelec.targets import SingleCenter, TwoCenter
 from mlelec.data.dataset import MLDataset
 
 
-def compute_features_for_target(dataset: MLDataset, **kwargs):
+def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     hypers = kwargs.get("hypers", None)
     # if dataset.molecule_data.pbc:
     if hypers is None:
@@ -916,19 +825,24 @@ def compute_features_for_target(dataset: MLDataset, **kwargs):
             "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
         }
     single = single_center_features(
-        dataset.structures, hypers, order_nu=2, lcut=hypers["max_angular"]
+        dataset.structures,
+        hypers,
+        order_nu=2,
+        lcut=hypers["max_angular"],
+        device=device,
     )
     if isinstance(dataset.target, SingleCenter):
         features = single
-    elif isinstance(dataset.target, TwoCenter):
+    elif isinstance(dataset.target, TwoCenter) or issubclass(dataset.target, TwoCenter):
         pairs = pair_features(
             dataset.structures,
             hypers,
             order_nu=1,
             lcut=hypers["max_angular"],
             feature_names=single[0].properties.names,
+            device=device,
         )
-        features = twocenter_hermitian_features(single, pairs)
+        features = twocenter_hermitian_features(single, pairs, device=device)
     else:
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features

@@ -298,7 +298,6 @@ class LinearModelPeriodic(nn.Module):
         else:
             self.device = device
         self.dummy_property = self.target_blocks[0].properties
-        print(kwargs.get("bias", False))
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
         print(self.cell_shifts, len(self.cell_shifts))
 
@@ -334,6 +333,7 @@ class LinearModelPeriodic(nn.Module):
             if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
+
                 featnorm = torch.linalg.norm(feat.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
@@ -362,12 +362,14 @@ class LinearModelPeriodic(nn.Module):
         # _to_matrix(_to_uncoupled_basis(pred_sum_dict[s]), frames = self.frames, orbitals=self.orbitals)
 
     def model_return(self, target: TensorMap, return_matrix=False):
+        if not return_matrix:
+            return target
         recon_blocks = {}
 
         for translation in self.cell_shifts:
             blocks = []
             for key, block in target.items():
-                #TODO: replace labels_where 
+                # TODO: replace labels_where
                 _, i = labels_where(
                     block.samples,
                     Labels(
@@ -409,7 +411,6 @@ class LinearModelPeriodic(nn.Module):
         from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
 
-
         # set_bias will set bias=True for the invariant model
         self.recon = {}
 
@@ -420,11 +421,13 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
-            if blockval > 1e-10:
+            if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
+                featkey = map_targetkeys_to_featkeys(self.feats, k, return_key=True)
+
                 featnorm = torch.linalg.norm(feat.values)
                 targetnorm = torch.linalg.norm(block.values)
                 nsamples, ncomp, nprops = block.values.shape
@@ -446,7 +449,7 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                kernel = x@x.T
+                kernel = x @ x.T
                 kernels.append(kernel)
                 y = (
                     (
@@ -458,10 +461,10 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                #ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
-                #ridge = ridge.fit(x,y)
+                # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
+                # ridge = ridge.fit(x,y)
                 ridge = RidgeCV(
-                    alphas=np.logspace(-10, -1, 40), fit_intercept=bias
+                    alphas=np.logspace(-15, -1, 40), fit_intercept=bias
                 ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
@@ -472,21 +475,30 @@ class LinearModelPeriodic(nn.Module):
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
-                            self.device
-                        ),
+                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
+                        .to(self.device)
+                        .to(torch.float32),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
                     )
                 )
             else:
-                pred_blocks.append(block.copy())
-        
+                pred_blocks.append(
+                    TensorBlock(
+                        values=block.values.to(torch.float32),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=block.properties,
+                    )
+                )
+
+                # block.copy())
+
         pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
         self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
 
-        return self.recon_blocks, ridges, kernels 
+        return self.recon_blocks, ridges, kernels
 
     def regularization_loss(self, regularization):
         return (

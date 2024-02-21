@@ -203,6 +203,7 @@ class MLDataset(Dataset):
         **kwargs,
     ):
         super().__init__()
+        self.device = device
         self.nstructs = len(molecule_data.structures)
         self.rng = None
         if shuffle:
@@ -212,7 +213,7 @@ class MLDataset(Dataset):
         self.molecule_data = copy.deepcopy(molecule_data)
         # self.molecule_data.shuffle(self.indices)
         # self.molecule_data = molecule_data
-        self.device = device
+
         self.structures = self.molecule_data.structures
         self.target = self.molecule_data.target
         # print(self.target, next(iter(self.target.values())))
@@ -239,12 +240,13 @@ class MLDataset(Dataset):
         self.val_frac = kwargs.get("val_frac", 0.2)
 
     def _shuffle(self, random_seed: int = None):
+        print(self.device)
         if random_seed is None:
             self.rng = torch.default_generator
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-        self.indices = torch.randperm(self.nstructs, generator=self.rng)
+        self.indices = torch.randperm(self.nstructs, generator=self.rng).to(self.device)
 
         # update self.structures to reflect shuffling
         # self.structures_original = self.structures.copy()
@@ -733,8 +735,10 @@ class PySCFPeriodicDataset(Dataset):
         aux: List[str] = ["real_overlap"],
         use_precomputed: bool = True,
         device="cuda",
-        orbs: str = "sto-3g",
+        orbs_name: str = "sto-3g",
+        orbs: List = None,
         desired_shifts: List = None,
+        nao: int = None,
     ):
         self.structures = frames
         self.frame_slice = frame_slice
@@ -752,7 +756,8 @@ class PySCFPeriodicDataset(Dataset):
             ]  # currently easiest to do
 
         self.device = device
-        self.basis = orbs
+        self.basis = orbs  # actual orbitals
+        self.basis_name = orbs_name
         self.use_precomputed = use_precomputed
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
@@ -771,8 +776,9 @@ class PySCFPeriodicDataset(Dataset):
             # if self.kgrid_is_list:
             # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
             # else:
-            cell, scell, phase = get_scell_phase(structure, self.kmesh[ifr])
-
+            cell, scell, phase = get_scell_phase(
+                structure, self.kmesh[ifr], basis=self.basis_name
+            )
             self.cells.append(cell)
 
             self.phase_matrices.append(torch.from_numpy(phase).to(self.device))
@@ -795,7 +801,9 @@ class PySCFPeriodicDataset(Dataset):
 
         assert matrices_kpoint is not None
         self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
-        matrices_translation = self.kpts_to_translation_target(self.matrices_kpoint)
+        matrices_translation = self.kpts_to_translation_target(
+            self.matrices_kpoint, nao
+        )
         ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
         self.matrices_translation = {key: [] for key in matrices_translation[0]}
         [
@@ -835,7 +843,7 @@ class PySCFPeriodicDataset(Dataset):
             kmatrix.append(framekmatrix)
         return kmatrix
 
-    def kpts_to_translation_target(self, matrices_kpoint):
+    def kpts_to_translation_target(self, matrices_kpoint, nao=None):
         target = []
         for ifr in range(self.nstructs):
             rel_translations = translation_vectors_for_kmesh(
@@ -843,12 +851,13 @@ class PySCFPeriodicDataset(Dataset):
             )
 
             rel_translations = [tuple(x) for x in rel_translations]
-
+            if nao is None:
+                nao = self.cells[ifr].nao
             translated_matrices = torch.zeros(
                 (
                     len(self.phase_matrices[ifr]),
-                    self.cells[ifr].nao,
-                    self.cells[ifr].nao,
+                    nao,
+                    nao,
                 ),
                 dtype=torch.complex128,
             ).to(self.device)
@@ -863,6 +872,9 @@ class PySCFPeriodicDataset(Dataset):
             assert torch.isclose(
                 torch.linalg.norm(translated_matrices - translated_matrices.real),
                 torch.tensor(0.0).to(translated_matrices.real),
+            ), (
+                "error to real",
+                torch.linalg.norm(translated_matrices - translated_matrices.real),
             )
 
             translated_matrices = {

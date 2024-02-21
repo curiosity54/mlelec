@@ -132,6 +132,8 @@ def _orbs_offsets(orbs):
 
 def _atom_blocks_idx(frames, orbs_tot):
     """position of the hamiltonian subblocks for each atom in each frame"""
+    if isinstance(frames, ase.Atoms):
+        frames = [frames]
     atom_blocks_idx = {}
     for A, f in enumerate(frames):
         ki = 0
@@ -163,7 +165,9 @@ def _to_blocks(
             "Matrix is neither hermitian nor antihermitian - attempting to use _toblocks for NH"
         )
 
-        nh_blocks = _matrix_to_blocks_NH(matrices, frames, orbitals, device)
+        nh_blocks = _matrix_to_blocks_NH_translations(
+            matrices, frames, orbitals, device
+        )
         return nh_blocks
 
     else:
@@ -191,8 +195,142 @@ def _to_blocks(
         # return symm_blocks, antisymm_blocks
 
 
-def _matrix_to_blocks_NH(
-    matrices: Union[List[torch.tensor], torch.tensor],
+# def _matrix_to_blocks_NH(
+#     matrices: Union[List[torch.tensor], torch.tensor],
+#     frames: Union[ase.Atoms, List[ase.Atoms]],
+#     orbitals: dict,
+#     device: str = None,
+# ):
+#     orbs_tot, _ = _orbs_offsets(orbitals)
+
+#     block_builder = TensorBuilder(
+#         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
+#         ["structure", "center", "neighbor"],
+#         [["m1"], ["m2"]],
+#         ["value"],
+#     )
+#     orbs_tot, _ = _orbs_offsets(orbitals)
+#     for A in range(len(frames)):
+#         frame = frames[A]
+#         ham = matrices[A]
+#         ki_base = 0
+#         for i, ai in enumerate(frame.numbers):
+#             kj_base = 0
+#             for j, aj in enumerate(frame.numbers):
+#                 if i == j:
+#                     block_type = 0  # diagonal
+#                 elif ai == aj:
+#                     if i > j:  # order i< j
+#                         kj_base += orbs_tot[aj]
+#                         continue
+#                     block_type = 1  # same-species
+#                 else:
+#                     if (
+#                         ai > aj
+#                     ):  # only sorted element types - #TODO this doesnt hold i think
+
+#                         kj_base += orbs_tot[aj]
+#                         # continue
+#                     block_type = 2  # different species
+#                 bdata = ham[
+#                     ki_base : ki_base + orbs_tot[ai],
+#                     kj_base : kj_base + orbs_tot[aj],
+#                 ]
+#                 bdata_ij = ham[
+#                     kj_base : kj_base + orbs_tot[aj], ki_base : ki_base + orbs_tot[ai]
+#                 ]
+#                 # print(i, j, slice(ki_base, ki_base + orbs_tot[ai]), slice(kj_base, kj_base + orbs_tot[aj]))
+
+#                 if isinstance(ham, np.ndarray):
+#                     block_data = torch.from_numpy(bdata).to(device)
+#                     block_data_ij = torch.from_numpy(bdata_ij).to(device)
+#                 elif isinstance(ham, torch.Tensor):
+#                     block_data = bdata.to
+#                     block_data_ij = bdata_ij
+#                 else:
+#                     raise ValueError
+#                 if block_type == 1:
+#                     block_data_plus = (block_data + block_data_ij) * ISQRT_2
+#                     block_data_minus = (block_data - block_data_ij) * ISQRT_2
+#                 ki_offset = 0
+#                 for ni, li, mi in orbitals[ai]:
+#                     if (
+#                         mi != -li
+#                     ):  # picks the beginning of each (n,l) block and skips the other orbitals
+#                         continue
+#                     kj_offset = 0
+#                     for nj, lj, mj in orbitals[aj]:
+#                         if (
+#                             mj != -lj
+#                         ):  # picks the beginning of each (n,l) block and skips the other orbitals
+#                             continue
+#                         # if ai == aj and (ni > nj or (ni == nj and li > lj)): # order orbitals
+#                         #     kj_offset += 2 * lj + 1
+#                         #     continue
+#                         block_idx = (block_type, ai, ni, li, aj, nj, lj)
+#                         if block_idx not in block_builder.blocks:
+#                             block = block_builder.add_block(
+#                                 keys=block_idx,
+#                                 properties=np.asarray([[0]]),
+#                                 components=[_components_idx(li), _components_idx(lj)],
+#                             )
+
+#                             if block_type == 1:
+#                                 block_asym = block_builder.add_block(
+#                                     keys=(-1,) + block_idx[1:],
+#                                     properties=np.asarray([[0]]),
+#                                     components=[
+#                                         _components_idx(li),
+#                                         _components_idx(lj),
+#                                     ],
+#                                 )
+#                         else:
+#                             block = block_builder.blocks[block_idx]
+#                             if block_type == 1:
+#                                 block_asym = block_builder.blocks[(-1,) + block_idx[1:]]
+
+#                         islice = slice(ki_offset, ki_offset + 2 * li + 1)
+#                         jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
+#                         # print(i, islice, "I")
+#                         # print(j, jslice, "J")
+#                         # print("block_type", block_type)
+#                         # print(ni, li, nj, lj)
+
+#                         if block_type == 1:
+#                             block.add_samples(
+#                                 labels=[(A, i, j)],
+#                                 data=block_data_plus[islice, jslice].reshape(
+#                                     (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                 ),
+#                             )
+#                             block_asym.add_samples(
+#                                 labels=[(A, i, j)],
+#                                 data=block_data_minus[islice, jslice].reshape(
+#                                     (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                 ),
+#                             )
+
+#                         else:
+#                             # print(
+#                             #     i, j, block_data[islice, jslice], 2 * li + 1, 2 * lj + 1
+#                             # )
+#                             block.add_samples(
+#                                 labels=[(A, i, j)],
+#                                 data=block_data[islice, jslice].reshape(
+#                                     (1, 2 * li + 1, 2 * lj + 1, 1)
+#                                 ),
+#                             )
+
+#                         kj_offset += 2 * lj + 1
+#                     ki_offset += 2 * li + 1
+#                 kj_base += orbs_tot[aj]
+
+#             ki_base += orbs_tot[ai]
+#     return block_builder.build()
+
+
+def _matrix_to_blocks_NH_translations(
+    matrices: dict,  # Union[List[torch.tensor], torch.tensor],
     frames: Union[ase.Atoms, List[ase.Atoms]],
     orbitals: dict,
     device: str = None,
@@ -238,8 +376,8 @@ def _matrix_to_blocks_NH(
                 # print(i, j, slice(ki_base, ki_base + orbs_tot[ai]), slice(kj_base, kj_base + orbs_tot[aj]))
 
                 if isinstance(ham, np.ndarray):
-                    block_data = torch.from_numpy(bdata)
-                    block_data_ij = torch.from_numpy(bdata_ij)
+                    block_data = torch.from_numpy(bdata).to(device)
+                    block_data_ij = torch.from_numpy(bdata_ij).to(device)
                 elif isinstance(ham, torch.Tensor):
                     block_data = bdata
                     block_data_ij = bdata_ij
@@ -266,14 +404,14 @@ def _matrix_to_blocks_NH(
                         block_idx = (block_type, ai, ni, li, aj, nj, lj)
                         if block_idx not in block_builder.blocks:
                             block = block_builder.add_block(
-                                keys=block_idx,
+                                key=block_idx,
                                 properties=np.asarray([[0]]),
                                 components=[_components_idx(li), _components_idx(lj)],
                             )
 
                             if block_type == 1:
                                 block_asym = block_builder.add_block(
-                                    keys=(-1,) + block_idx[1:],
+                                    key=(-1,) + block_idx[1:],
                                     properties=np.asarray([[0]]),
                                     components=[
                                         _components_idx(li),
@@ -398,14 +536,14 @@ def _matrix_to_blocks(
                         block_idx = (block_type, ai, ni, li, aj, nj, lj)
                         if block_idx not in block_builder.blocks:
                             block = block_builder.add_block(
-                                keys=block_idx,
+                                key=block_idx,
                                 properties=np.asarray([[0]]),
                                 components=[_components_idx(li), _components_idx(lj)],
                             )
 
                             if block_type == 1:
                                 block_asym = block_builder.add_block(
-                                    keys=(-1,) + block_idx[1:],
+                                    key=(-1,) + block_idx[1:],
                                     properties=np.asarray([[0]]),
                                     components=[
                                         _components_idx(li),
@@ -725,6 +863,7 @@ def _to_coupled_basis(
     cg: Optional[ClebschGordanReal] = None,
     device: str = None,
     skip_symmetry: bool = False,
+    translations: bool = False,
 ):
     if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
@@ -733,13 +872,32 @@ def _to_coupled_basis(
     if cg is None:
         lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
         cg = ClebschGordanReal(lmax, device=device)
-
-    block_builder = TensorBuilder(
-        ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
-        ["structure", "center", "neighbor"],
-        [["M"]],
-        ["value"],
-    )
+    if not translations:
+        block_builder = TensorBuilder(
+            ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+            ["structure", "center", "neighbor"],
+            [["M"]],
+            ["value"],
+        )
+    else:
+        block_builder = TensorBuilder(
+            [
+                "block_type",
+                "species_i",
+                "n_i",
+                "l_i",
+                "species_j",
+                "n_j",
+                "l_j",
+                "cell_shift_a",
+                "cell_shift_b",
+                "cell_shift_c",
+                "L",
+            ],
+            ["structure", "center", "neighbor"],
+            [["M"]],
+            ["value"],
+        )
     for idx, block in blocks.items():
         block_type = idx["block_type"]
         ai = idx["species_i"]
@@ -773,7 +931,7 @@ def _to_coupled_basis(
                     continue
 
             new_block = block_builder.add_block(
-                keys=block_idx,
+                key=block_idx,
                 properties=np.asarray([[0]], dtype=np.int32),
                 components=[_components_idx(L).reshape(-1, 1)],
             )
@@ -793,6 +951,7 @@ def _to_uncoupled_basis(
     # orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
     device: str = None,
+    translations: bool = False,
 ):
 
     if cg is None:
@@ -819,9 +978,22 @@ def _to_uncoupled_basis(
         nj = idx["n_j"]
         lj = idx["l_j"]
         L = idx["L"]
-
-        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
         block_idx = (block_type, ai, ni, li, aj, nj, lj)
+        if translations:
+            block_idx = (
+                block_type,
+                ai,
+                ni,
+                li,
+                aj,
+                nj,
+                lj,
+                idx["cell_shift_a"],
+                idx["cell_shift_b"],
+                idx["cell_shift_c"],
+            )
+        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+
         if block_idx in block_builder.blocks:
             continue
         coupled = {}
@@ -834,7 +1006,7 @@ def _to_uncoupled_basis(
         decoupled = cg.decouple({(li, lj): coupled})
 
         new_block = block_builder.add_block(
-            keys=block_idx,
+            key=block_idx,
             properties=np.asarray([[0]], dtype=np.int32),
             components=[_components_idx(li), _components_idx(lj)],
         )

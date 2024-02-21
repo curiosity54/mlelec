@@ -71,3 +71,394 @@ def scidx_to_mic_translation(
 # int
 # )  # adding noise to avoid numerical issues
 # This sometimes returns [-3,-2,0] for [1 2 0] which is correect based on the distance
+
+from mlelec.utils.metatensor_utils import TensorBuilder
+from mlelec.utils.twocenter_utils import (
+    _components_idx,
+    ISQRT_2,
+    _orbs_offsets,
+    _atom_blocks_idx,
+)
+import torch
+
+
+def matrix_to_blocks(dataset, device=None):
+    if device is None:
+        device = dataset.device
+
+    key_names = [
+        "block_type",
+        "species_i",
+        "n_i",
+        "l_i",
+        "species_j",
+        "n_j",
+        "l_j",
+        "cell_shift_a",
+        "cell_shift_b",
+        "cell_shift_c",
+    ]
+    sample_names = ["structure", "center", "neighbor"]
+    property_names = ["dummy"]
+    property_values = np.asarray([[0]])
+    component_names = [["m_i"], ["m_j"]]
+    # multiplicity
+    orbs_mult = {}
+    for species in dataset.basis:
+        _, orbidx, count = np.unique(
+            np.asarray(dataset.basis[species])[:, :2],
+            axis=0,
+            return_counts=True,
+            return_index=True,
+        )
+        idx = np.argsort(orbidx)
+        unique_orbs = np.asarray(dataset.basis[species])[orbidx[idx]][:, :2]
+        orbs_mult[species] = {tuple(k): v for k, v in zip(unique_orbs, count[idx])}
+
+    ##-- returns SORTED
+    # orbs_mult = {
+    #     species: {
+    #         tuple(k): v
+    #         for k, v in zip(
+    #             *np.unique(
+    #                 np.asarray(dataset.basis[species])[:, :2],
+    #                 axis=0,
+    #                 return_counts=True,
+    #             )
+    #         )
+    #     }
+    #     for species in dataset.basis
+    # }
+    # print(orbs_mult,'A')
+    kmesh = dataset.kmesh
+    block_builder = TensorBuilder(
+        key_names,
+        sample_names,
+        component_names,
+        property_names,
+    )
+    orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
+    matrices = dataset.matrices_translation
+    for T in dataset.desired_shifts:
+        for A in range(len(dataset.structures)):
+            frame = dataset.structures[A]
+            matrixT = matrices[tuple(T)][A]
+            matrixmT = matrices[tuple(np.mod(-np.array(T), kmesh[A]))][A]
+            if isinstance(matrixT, np.ndarray):
+                matrixT = torch.from_numpy(matrixT).to(device)
+                matrixmT = torch.from_numpy(matrixmT).to(device)
+            else:
+                matrixT = matrixT.to(device)
+                matrixmT = matrixmT.to(device)
+
+            i_start = 0
+            for i, ai in enumerate(frame.numbers):
+                orbs_i = orbs_mult[ai]
+                j_start = 0
+                for j, aj in enumerate(frame.numbers):
+                    orbs_j = orbs_mult[aj]
+                    # add what kind of blocks we expect in the tensormap
+                    n1l1n2l2 = np.concatenate(
+                        [[k2 + k1 for k1 in orbs_i] for k2 in orbs_j]
+                    )
+
+                    # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
+                    block_ij = matrixT[
+                        i_start : i_start + orbs_tot[ai],
+                        j_start : j_start + orbs_tot[aj],
+                    ]
+                    block_split = [
+                        torch.split(blocki, list(orbs_j.values()), dim=1)
+                        for blocki in torch.split(
+                            block_ij, list(orbs_i.values()), dim=0
+                        )
+                    ]
+                    block_split = [
+                        y for x in block_split for y in x
+                    ]  # flattening the list of lists above
+
+                    for iorbital, ((ni, li, nj, lj), value) in enumerate(
+                        zip(n1l1n2l2, block_split)
+                    ):
+
+                        if i == j and np.linalg.norm(T) == 0:
+                            block_type = 0
+                            key = (block_type, ai, ni, li, aj, nj, lj, *T)
+
+                        elif (ai == aj) or (i == j and T != [0, 0, 0]):
+                            block_type = 1
+                            key = (block_type, ai, ni, li, aj, nj, lj, *T)
+                            block_jimT = matrixmT[
+                                j_start : j_start + orbs_tot[aj],
+                                i_start : i_start + orbs_tot[ai],
+                            ]
+                            # print(block_jimT.shape, block_ij.shape, iorbital, i, j, ai, aj, ni, li, nj, lj, T, matrixT.shape, matrixmT.shape)
+                            block_jimT_split = [
+                                torch.split(blocki, list(orbs_i.values()), dim=1)
+                                for blocki in torch.split(
+                                    block_jimT, list(orbs_j.values()), dim=0
+                                )
+                            ]
+                            block_jimT_split = [
+                                y for x in block_jimT_split for y in x
+                            ]  # flattening the list of lists above
+                            value_ji = block_jimT_split[
+                                iorbital
+                            ]  # same orbital in the ji subblock
+                        else:
+                            # skip ai>aj
+                            block_type = 2
+                            key = (block_type, ai, ni, li, nj, lj, *T)
+                            raise NotImplementedError
+
+                        if key not in block_builder.blocks:
+                            # add blocks if not already present
+                            block = block_builder.add_block(
+                                key=key,
+                                properties=property_values,
+                                components=[_components_idx(li), _components_idx(lj)],
+                            )
+                            if block_type == 1:
+                                block = block_builder.add_block(
+                                    key=(-1,) + key[1:],
+                                    properties=property_values,
+                                    components=[
+                                        _components_idx(li),
+                                        _components_idx(lj),
+                                    ],
+                                )
+
+                        # add samples to the blocks when present
+                        block = block_builder.blocks[key]
+                        if block_type == 1:
+                            block_asym = block_builder.blocks[(-1,) + key[1:]]
+
+                        if block_type == 1:
+                            if i > j:  # keep only (i,j) and not (j,i)
+                                continue
+                            # bplus = value
+                            bplus = (value + value_ji) * ISQRT_2
+                            # bminus = value_ji
+                            bminus = (value - value_ji) * ISQRT_2
+
+                            block.add_samples(
+                                labels=[(A, i, j)],
+                                data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                            )
+
+                            block_asym.add_samples(
+                                labels=[(A, i, j)],
+                                data=bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                            )
+
+                        elif block_type == 0:
+                            block.add_samples(
+                                labels=[(A, i, j)],
+                                data=value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                            )
+                        else:
+                            raise ValueError("Block type not implemented")
+                    j_start += orbs_tot[aj]
+
+                i_start += orbs_tot[ai]
+    return block_builder.build()
+
+
+def blocks_to_matrix(blocks, dataset, device=None):
+    if device is None:
+        device = dataset.device
+    kmesh = dataset.kmesh
+    rmatrices = {tuple(T): [] for T in dataset.desired_shifts}
+    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
+    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_mult = {
+        species: {
+            tuple(k): v
+            for k, v in zip(
+                *np.unique(
+                    np.asarray(dataset.basis[species])[:, :2],
+                    axis=0,
+                    return_counts=True,
+                )
+            )
+        }
+        for species in dataset.basis
+    }
+    for T in dataset.desired_shifts:
+
+        for A in range(len(dataset.structures)):
+            norbs = 0
+            for ai in dataset.structures[A].numbers:
+                norbs += orbs_tot[ai]  # total number of orbitals in the frame
+            matrix = torch.zeros(norbs, norbs, device=device)
+            rmatrices[tuple(T)].append(matrix)
+
+    # loops over block types
+    for key, block in blocks.items():
+        # dense idx and cur_A track the frame
+        mat_idx = -1
+        iframe = -1
+        block_type = key["block_type"]
+        ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
+        aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
+        Tx, Ty, Tz = key["cell_shift_a"], key["cell_shift_b"], key["cell_shift_c"]
+        orbs_i = orbs_mult[ai]
+        orbs_j = orbs_mult[aj]
+        shapes = {
+            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
+            for k1 in orbs_i
+            for k2 in orbs_j
+        }
+        ioffset = orbs_offset[(ai, ni, li)]
+        joffset = orbs_offset[(aj, nj, lj)]
+
+        j_end = joffset + shapes[(ni, li, nj, lj)][1]
+        # loops over samples (structure, i, j)
+        for sample, blockval in zip(block.samples, block.values):
+            A = sample["structure"]
+            i = sample["center"]
+            j = sample["neighbor"]
+            # check if we have to update the frame and index
+            if i == j and np.linalg.norm([Tx, Ty, Tz]) > 0:
+                # if i==j and np.linalg.norm([Tx,Ty,Tz])>0:
+                # we are writing to the matrix twice when T =T and T = mT
+                factor = 2
+            else:
+                factor = 1
+            if A != iframe:
+                iframe = A
+                mat_idx += 1
+
+            matrixT = rmatrices[Tx, Ty, Tz][mat_idx]
+            matrixmT = rmatrices[tuple(np.mod(-np.array([Tx, Ty, Tz]), kmesh[A]))][
+                mat_idx
+            ]
+            i_start, j_start = atom_blocks_idx[(A, i, j)]
+            i_end = shapes[(ni, li, nj, lj)][0]  # orb end
+            j_end = shapes[(ni, li, nj, lj)][1]  # orb end
+
+            # print(Tx,Ty, Tz, block_type, (ni,li, nj,lj), i_start+ioffset, i_start+ioffset+i_end, j_start+joffset, j_start+joffset+j_end)
+
+            values = blockval[:, :, 0].clone()
+            values = values.reshape(2 * li + 1, 2 * lj + 1)
+            values = values / factor
+
+            # position of the orbital within this block
+
+            if block_type == 0 or block_type == 2:
+                matrixT[
+                    i_start + ioffset : i_start + ioffset + i_end,
+                    j_start + joffset : j_start + joffset + j_end,
+                ] = values
+            if abs(block_type) == 1:
+                values *= ISQRT_2
+                if block_type == 1:
+                    matrixT[
+                        i_start + ioffset : i_start + ioffset + i_end,
+                        j_start + joffset : j_start + joffset + j_end,
+                    ] += values
+                    matrixmT[
+                        j_start + ioffset : j_start + ioffset + i_end,
+                        i_start + joffset : i_start + joffset + j_end,
+                    ] += values
+                else:
+                    matrixT[
+                        i_start + ioffset : i_start + ioffset + i_end,
+                        j_start + joffset : j_start + joffset + j_end,
+                    ] += values
+                    matrixmT[
+                        j_start + ioffset : j_start + ioffset + i_end,
+                        i_start + joffset : i_start + joffset + j_end,
+                    ] -= values
+
+    return rmatrices
+
+
+from mlelec.utils.symmetry import ClebschGordanReal
+
+from metatensor import equal, equal_metadata, allclose, allclose_block, sort, sort_block
+
+
+def cg_combine(
+    x_a,
+    x_b,
+    feature_names=None,
+    clebsch_gordan=None,
+    lcut=None,
+    filter_sigma=[-1, 1],
+    other_keys_match=None,
+    mp=False,
+    device=None,
+):
+    """
+    modified cg_combine from acdc_mini.py to add the MP contraction, that contracts over NOT the center but the neighbor yielding |rho_j> |g_ij>, can be merged
+    """
+
+    # determines the cutoff in the new features
+    lmax_a = max(x_a.keys["spherical_harmonics_l"])
+    lmax_b = max(x_b.keys["spherical_harmonics_l"])
+    if lcut is None:
+        lcut = lmax_a + lmax_b + 1
+
+    if clebsch_gordan is None:
+        clebsch_gordan = ClebschGordanReal(max(lcut, lmax_a, lmax_b) + 1, device=device)
+
+    other_keys_a = tuple(
+        name
+        for name in x_a.keys.names
+        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
+    )
+    other_keys_b = tuple(
+        name
+        for name in x_b.keys.names
+        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
+    )
+
+    if other_keys_match is None:
+        OTHER_KEYS = [k + "_a" for k in other_keys_a] + [k + "_b" for k in other_keys_b]
+    else:
+        OTHER_KEYS = (
+            other_keys_match
+            + [
+                k + ("_a" if k in other_keys_b else "")
+                for k in other_keys_a
+                if k not in other_keys_match
+            ]
+            + [
+                k + ("_b" if k in other_keys_a else "")
+                for k in other_keys_b
+                if k not in other_keys_match
+            ]
+        )
+
+    if feature_names is None:
+        NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
+        feature_names = (
+            tuple(n + "_a" for n in x_a.property_names)
+            + ("k_" + str(NU),)
+            + tuple(n + "_b" for n in x_b.property_names)
+            + ("l_" + str(NU),)
+        )
+
+    X_idx = {}
+    X_blocks = {}
+    X_samples = {}
+
+    for index_a, block_a in x_a.items():
+        block_a = sort_block(block_a, axes="samples")
+
+        lam_a = index_a["spherical_harmonics_l"]
+        sigma_a = index_a["inversion_sigma"]
+        order_a = index_a["order_nu"]
+        properties_a = (
+            block_a.properties
+        )  # pre-extract this block as accessing a c property has a non-zero cost
+
+        samples_a = block_a.samples
+        for index_b, block_b in x_b.items():
+            block_b = sort_block(block_b)
+            lam_b = index_b["spherical_harmonics_l"]
+            sigma_b = index_b["inversion_sigma"]
+            order_b = index_b["order_nu"]
+            properties_b = block_b.properties
+            samples_b = block_b.samples

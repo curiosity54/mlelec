@@ -262,6 +262,9 @@ def flatten(x):
         return flat_list_tuples
 
 
+from metatensor import equal, equal_metadata, allclose, allclose_block, sort, sort_block
+
+
 # Serious TODO: Cleanup please FIXME
 def cg_combine(
     x_a,
@@ -361,6 +364,7 @@ def cg_combine(
     X_grads = {}
 
     for index_a, block_a in x_a.items():
+        block_a = sort_block(block_a, axes="samples")
         lam_a = index_a["spherical_harmonics_l"]
         sigma_a = index_a["inversion_sigma"]
         order_a = index_a["order_nu"]
@@ -369,7 +373,7 @@ def cg_combine(
         )  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
         for index_b, block_b in x_b.items():
-            # block_b = metatensor.sort_block(block_b)
+            block_b = sort_block(block_b, axes="samples")
             lam_b = index_b["spherical_harmonics_l"]
             sigma_b = index_b["inversion_sigma"]
             order_b = index_b["order_nu"]
@@ -914,21 +918,27 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
 
     return rhoMPi
 
-def _standardize(feat:TensorMap):
+
+def _standardize(feat: TensorMap):
     blocks = []
-    for k,b in feat.items():
+    for k, b in feat.items():
         x = b.values.clone()
         vshape = x.shape
-        x = x.reshape(x.shape[0]*x.shape[1], x.shape[2])
-        std = torch.std(x,axis=0)
+        x = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
+        std = torch.std(x, axis=0)
         std[np.isclose(std, 0)] = 1
         print(std.shape, x.shape)
-        x = x/std[None,:]
-        blocks.append(TensorBlock(components = b.components, 
-            properties = b.properties, 
-            values = x.reshape(vshape),
-            samples = b.samples))
+        x = x / std[None, :]
+        blocks.append(
+            TensorBlock(
+                components=b.components,
+                properties=b.properties,
+                values=x.reshape(vshape),
+                samples=b.samples,
+            )
+        )
     return TensorMap(feat.keys, blocks)
+
 
 def compute_rhoi_pca(
     rhoi,
@@ -960,12 +970,12 @@ def compute_rhoi_pca(
         nsamples = len(block.samples)
         ncomps = len(block.components[0])
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
-        #print(xl)
-        #standardize features here <<<<<<< 
-        std = torch.std(xl,axis=0)
+        # print(xl)
+        # standardize features here <<<<<<<
+        std = torch.std(xl, axis=0)
         std[np.isclose(std, 0)] = 1
         assert ~np.isclose(torch.min(torch.abs(std)), 0), "STD is zero!"
-        xl= xl/std[None, :]
+        xl = xl / std[None, :]
         u, s, vh = torch.linalg.svd(xl, full_matrices=False)
         eigs = torch.pow(s, 2) / (xl.shape[0] - 1)
         eigs_ratio = eigs / torch.sum(eigs)
@@ -1046,7 +1056,9 @@ def apply_pca(rhoi, pca_tmap):
         sigma = key["inversion_sigma"]
         l = key["spherical_harmonics_l"]
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
-        vt = pca_tmap.block(key).values#spherical_harmonics_l=l, inversion_sigma=sigma).values
+        vt = pca_tmap.block(
+            key
+        ).values  # spherical_harmonics_l=l, inversion_sigma=sigma).values
         xl_pca = (xl @ vt).reshape((len(block.samples), len(block.components[0]), -1))
         #         print(xl_pca.shape)
         pblock = TensorBlock(
