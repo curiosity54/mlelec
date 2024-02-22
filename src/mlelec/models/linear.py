@@ -133,7 +133,7 @@ class MLP(nn.Module):
         ]
         if norm:
             norm_layer = NormLayer(nonlinearity=activation, device=device)
-        for _ in range(nlayers - 1):
+        for _ in range(nlayers - 2):
             self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
             if activation is not None:
                 self.mlp.append(activation)
@@ -159,32 +159,38 @@ class LinearTargetModel(nn.Module):
 
         # FIXME: generalize to other targets
         super().__init__()
-        self._submodels(self.dataset.features, **kwargs)
+        self._submodels(
+            self.dataset.features, set_bias=kwargs.get("bias", False), **kwargs
+        )
         self.dummy_property = self.dataset.target.blocks[0].properties
 
-    def _submodels(self, features, **kwargs):
+    def _submodels(self, features, set_bias=False, **kwargs):
         self.submodels = {}
         # return 1 model if no subtargets present, else spawn
         # multiple models
         if len(self.dataset.target.block_keys) == 1:
             self.model = MLP(
-                nlayers=1,
+                nlayers=kwargs.get("nlayers", 2),
                 nin=features.values.shape[-1],
                 nout=1,
-                nhidden=10,
-                bias=False,
+                nhidden=kwargs.get("nhidden", 10),
+                bias=set_bias,
                 device=self.device,
             )
         else:
             for k in self.dataset.target.block_keys:
+                bias = False
                 feat = map_targetkeys_to_featkeys(features, k)
                 # print(feat,tuple(k))
                 # print(feat.values.device, self.device)
+                if k["L"] == 0 and set_bias:
+                    bias = True
                 self.submodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
-                    device=self.device,
-                    # nout=1,
-                    **kwargs,
+                    nout=1,
+                    nhidden=kwargs.get("nhidden", 10),
+                    nlayers=kwargs.get("nlayers", 2),
+                    bias=bias,
                 )
 
                 # print(k, self.submodels[str(tuple(k))])
@@ -240,7 +246,9 @@ class LinearTargetModel(nn.Module):
             )
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
-        self.reconstructed_uncoupled = _to_uncoupled_basis(pred_tmap)
+        self.reconstructed_uncoupled = _to_uncoupled_basis(
+            pred_tmap, device=self.device
+        )
         if batch_indices is None:
             # identify the frames in the batch
             batch_indices = list(
@@ -251,7 +259,7 @@ class LinearTargetModel(nn.Module):
                     ]
                 )
             )
-            print(batch_indices)
+            # print(batch_indices)
             # fr_idx = [list(i)[0] for i in fr_idx]
             # print(batch_indices)
             batch_indices = list(batch_indices[0])
@@ -274,6 +282,101 @@ class LinearTargetModel(nn.Module):
             loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
 
         return loss
+
+    def fit_ridge_analytical(
+        self, features, return_matrix=False, set_bias=False
+    ) -> None:
+        from sklearn.linear_model import RidgeCV
+        from sklearn.kernel_ridge import KernelRidge
+
+        print(self.dataset.target.blocks)
+        # set_bias will set bias=True for the invariant model
+        self.recon = {}
+
+        pred_blocks = []
+        ridges = []
+        # kernels = []
+        for k, block in self.dataset.target.blocks.items():
+            # print(k)
+            blockval = torch.linalg.norm(block.values)
+            bias = False
+            if True:  # blockval > 1e-10:
+                if k["L"] == 0 and set_bias:
+                    bias = True
+                sample_names = block.samples.names
+                feat = map_targetkeys_to_featkeys(features, k)
+
+                # featnorm = torch.linalg.norm(feat.values)
+                targetnorm = torch.linalg.norm(block.values)
+                nsamples, ncomp, nprops = block.values.shape
+                # nsamples, ncomp, nprops = feat.values.shape
+                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                assert np.all(block.samples.values == feat.samples.values), (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
+
+                x = (
+                    (
+                        feat.values.reshape(
+                            (feat.values.shape[0] * feat.values.shape[1], -1)
+                        )
+                        / 1
+                    )
+                    .cpu()
+                    .numpy()
+                )
+                # kernel = x @ x.T
+                # kernels.append(kernel)
+                y = (
+                    (
+                        block.values.reshape(
+                            block.values.shape[0] * block.values.shape[1], -1
+                        )
+                        / 1
+                    )
+                    .cpu()
+                    .numpy()
+                )
+                # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
+                # ridge = ridge.fit(x,y)
+                ridge = RidgeCV(
+                    alphas=np.logspace(-15, -1, 40), fit_intercept=bias
+                ).fit(x, y)
+                # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
+                # print(pred.shape, nsamples)
+                pred = ridge.predict(x)
+                # if k['L']==0:
+                #     print('SCORE', ridge.score(x,y) )
+                ridges.append(ridge)
+
+                pred_blocks.append(
+                    TensorBlock(
+                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
+                        .to(self.device)
+                        .to(torch.float32),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=self.dummy_property,
+                    )
+                )
+            else:
+                pred_blocks.append(
+                    TensorBlock(
+                        values=block.values.to(torch.float32),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=block.properties,
+                    )
+                )
+
+                # block.copy())
+
+        pred_tmap = TensorMap(self.dataset.target.blocks.keys, pred_blocks)
+        self.recon_blocks = pred_tmap  # return_matrix=return_matrix)
+
+        return self.recon_blocks, ridges
 
 
 class LinearModelPeriodic(nn.Module):
@@ -303,12 +406,12 @@ class LinearModelPeriodic(nn.Module):
 
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
-        bias = False
         for k in self.target_blocks.keys:
+            bias = False
             if k["L"] == 0 and set_bias:
                 bias = True
             blockval = torch.linalg.norm(self.target_blocks[k].values)
-            if blockval > 1e-10:
+            if True:  # blockval > 1e-10:
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 self.blockmodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
@@ -329,8 +432,8 @@ class LinearModelPeriodic(nn.Module):
         for k, block in self.target_blocks.items():
             # print(k)
             blockval = torch.linalg.norm(block.values)
-
-            if blockval > 1e-10:
+            if True:
+                # if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
 

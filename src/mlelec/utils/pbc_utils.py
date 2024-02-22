@@ -38,6 +38,43 @@ def scidx_to_mic_translation(
     ifprint=False,
     return_distance=False,
 ):
+    def fix_translation_sign(frame, mic_T, i, j):
+        """Return the "correct mic_T"""
+        cell = frame.cell.array.T
+
+        # Vector joining atoms i and j in the unit cell
+        rij_in_cell = frame.positions[j] - frame.positions[i]
+
+        # i-j MIC distance in the supercell
+        rij_T = cell @ mic_T + rij_in_cell
+
+        # same thing, but the sign of T is reversed
+        rij_mT = -cell @ mic_T + rij_in_cell
+
+        # Check whether the two distances are the same
+        equal_distance = np.isclose(np.linalg.norm(rij_T), np.linalg.norm(rij_mT))
+
+        if not equal_distance:
+            return mic_T, False
+            # # Return the T that gives the shortest distance
+            # if np.linalg.norm(rij_T) < np.linalg.norm(rij_mT):
+            #     return mic_T
+            # else:
+            #     return -np.asarray(mic_T)
+        else:
+            # If the distances are equal, choose the T that has the first non-zero component posiviely signed
+            idx = np.where(~(np.sign(rij_T) == np.sign(rij_mT)))
+
+            if len(idx[0]) == 0:
+                assert np.linalg.norm(mic_T) == 0, mic_T
+                return mic_T, False
+            else:
+                idx = idx[0][0]
+                if np.sign(mic_T[idx]) == 1:
+                    return mic_T, False
+                else:
+                    return -np.asarray(mic_T), True
+
     """Find the minimum image convention translation vector from atom I to atom J in the supercell of size kmesh"""
     assert frame.cell is not None, "Cell must be defined"
     cell_inv = np.linalg.inv(frame.cell.array.T)
@@ -54,16 +91,31 @@ def scidx_to_mic_translation(
     ), "I and J must be less than the number of atoms in the supercell"
     # this works correctly only when I<J - J should not be greater than I anyway as I always in 000 cell
     d = superframe.get_distance(I, J, mic=True, vector=True).T
-    d += frame.positions[I] - frame.positions[j]
+    p_i = frame.positions[I]
+    p_j = frame.positions[j]
+    dplus = p_i + d - p_j  # from i to J to the origin of that (unit) cell
+    dminus = p_j - d - p_i  # from j to I to the origin of that (unit) cell
+    # print(
+    # cell_inv @ dplus, cell_inv @ dminus, cell_inv @ (dplus + dminus), "mict,micmt"
+    # )
+    mic_T = np.round(cell_inv @ dplus + epsilon).astype(int)
+    mic_minusT = np.round(cell_inv @ dminus + epsilon).astype(int)
+    # print("bef", mic_T, mic_minusT, end=" ")
+    mic_T, fixed_plus = fix_translation_sign(frame, mic_T, I, j)
+    mic_minusT, fixed_minus = fix_translation_sign(frame, mic_minusT, j, I)
+    # print("aft", mic_T, mic_minusT)
     if ifprint:
         print(cell_inv @ d)
         print(d)
     if return_distance:
         distance = superframe.get_distance(I, J, mic=True, vector=False)
-        return np.round(cell_inv @ d + epsilon).astype(int), distance
+        return mic_T, mic_minusT, fixed_plus, fixed_minus, distance
     else:
-        return np.round(cell_inv @ d + epsilon).astype(
-            int
+        return (
+            mic_T,
+            mic_minusT,
+            fixed_plus,
+            fixed_minus,
         )  # adding noise to avoid numerical issues
 
 

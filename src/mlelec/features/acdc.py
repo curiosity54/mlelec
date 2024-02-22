@@ -128,7 +128,7 @@ def pair_features(
             [np.max(f.get_all_distances(mic=True)) / factor for f in frames]
         ):
             hypers_allpairs["cutoff"] = np.ceil(
-                np.max([np.max(f.get_all_distances(mic=True)) / factor for f in frames])
+                np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
             )
             # nmax = int(
             #     hypers_allpairs["max_radial"]
@@ -140,9 +140,10 @@ def pair_features(
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max(
-                    [np.max(f.get_all_distances(mic=True)) / factor for f in repframes]
+                    [np.max(f.get_all_distances(mic=mic)) / factor for f in repframes]
                 )
             )
+            # FIXME - miic = mic
             warnings.warn(
                 f"Using cutoff {hypers_allpairs['cutoff']} for all pairs feature"
             )
@@ -167,9 +168,14 @@ def pair_features(
         blocks = []
 
         for key, block in rho0_ij.items():
+            if key["spherical_harmonics_l"] % 2 == 1:
+                mic_phase = -1
+            else:
+                mic_phase = 1
             all_frIJ = np.unique(block.samples.values[:, :3], axis=0)
             value_indices = []
             fixed_sample = []
+            fixed_mic = []
             all_samples = [
                 (*a, x, y, z)
                 for a in all_frIJ
@@ -183,10 +189,12 @@ def pair_features(
                 if i == j and [x, y, z] == [0, 0, 0]:
                     continue
 
-                # print('------')
-                # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
-                # print(i, j, J,[x,y,z])
-                mic_x, mic_y, mic_z = scidx_to_mic_translation(
+                (
+                    (mic_x, mic_y, mic_z),
+                    (mic_mx, mic_my, mic_mz),
+                    fixed_plus,
+                    fixed_minus,
+                ) = scidx_to_mic_translation(
                     frames[ifr],
                     I=i,
                     J=scidx_from_unitcell(
@@ -194,6 +202,19 @@ def pair_features(
                     ),  # TODO - kmesh[ifr] - nonunofrm kmesh across structrues
                     j=j,
                     kmesh=kmesh,
+                )
+                print(
+                    ifr,
+                    i,
+                    j,
+                    "mic",
+                    mic_x,
+                    mic_y,
+                    mic_z,
+                    "m_mic",
+                    mic_mx,
+                    mic_my,
+                    mic_mz,
                 )
                 mic_label = Labels(
                     [
@@ -218,6 +239,7 @@ def pair_features(
                 mappedidx = block.samples.position(mic_label)
 
                 assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                fixed_mic.append(mic_phase**fixed_plus)
                 value_indices.append(mappedidx)
                 fixed_sample.append(
                     [
@@ -248,15 +270,16 @@ def pair_features(
                                 ifr,
                                 j,
                                 i,
-                                -mic_x,
-                                -mic_y,
-                                -mic_z,
+                                mic_mx,
+                                mic_my,
+                                mic_mz,
                             ]
                         ).reshape(1, -1),
                     )[0]
                     mappedidx = block.samples.position(mic_label)
 
                     assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                    fixed_mic.append(mic_phase**fixed_minus)
                     value_indices.append(mappedidx)
                     fixed_sample.append(
                         [
@@ -266,15 +289,19 @@ def pair_features(
                             -x,
                             -y,
                             -z,
-                            -mic_x,
-                            -mic_y,
-                            -mic_z,
+                            mic_mx,
+                            mic_my,
+                            mic_mz,
                         ]
                     )
 
             blocks.append(
                 TensorBlock(
-                    values=block.values[value_indices],
+                    values=torch.einsum(
+                        "scp,s-> scp",
+                        block.values[value_indices],
+                        torch.tensor(fixed_mic),
+                    ),
                     samples=Labels(
                         block.samples.names
                         + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
@@ -597,7 +624,7 @@ def twocenter_features_periodic_NH(
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             idx_ji = []
-            samplecopy = np.array(b.samples.values)
+            samplecopy = np.array(b.samples.values[:, :6])
 
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
@@ -606,16 +633,13 @@ def twocenter_features_periodic_NH(
                     idx_up[smp_up]
                 ]
 
-                # ).values[idx_up[smp_up]]
-                # ji_entry = Labels(b.samples.names[:-3], values = np.array([[structure, j, i, Tx, Ty, Tz]]))
-                # if np.sum([Tx, Ty, Tz]) > 0:
-                #     positive_shifts_idx.append(smp_up)
-                ji_entry = np.array([structure, j, i, -Tx, -Ty, -Tz, -Mx, -My, -Mz])
+                ji_entry = np.array(
+                    [structure, j, i, -Tx, -Ty, -Tz]
+                )  # , -Mx, -My, -Mz])
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis=1))
                 assert where_ji.shape == (1, 1), where_ji.shape
                 where_ji = where_ji[0, 0]
                 idx_ji.append(where_ji)
-
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
@@ -827,7 +851,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     single = single_center_features(
         dataset.structures,
         hypers,
-        order_nu=2,
+        order_nu=kwargs.get("order_nu", 2),
         lcut=hypers["max_angular"],
         device=device,
     )
@@ -837,12 +861,13 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
         pairs = pair_features(
             dataset.structures,
             hypers,
-            order_nu=1,
+            order_nu=kwargs.get("order_nu_pair", 1),
             lcut=hypers["max_angular"],
             feature_names=single[0].properties.names,
             device=device,
+            both_centers=kwargs.get("both_centers", False),
         )
-        features = twocenter_hermitian_features(single, pairs, device=device)
+        features = twocenter_hermitian_features(single, pairs)
     else:
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features

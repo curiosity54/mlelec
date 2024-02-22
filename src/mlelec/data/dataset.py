@@ -113,7 +113,9 @@ class MoleculeDataset(Dataset):
                 self.path + "/{}.xyz".format(self.mol_name), index=self.frame_slice
             )
         except:
-            raise FileNotFoundError("No structures found at the given path")
+            raise FileNotFoundError(
+                "No structures found at {}".format(self.path + f"/{self.mol_name}.xyz")
+            )
 
     def load_target(self, target_data: Optional[dict] = None):
         # TODO: ensure that all keys of self.target names are filled even if they are not provided in target_data
@@ -240,13 +242,14 @@ class MLDataset(Dataset):
         self.val_frac = kwargs.get("val_frac", 0.2)
 
     def _shuffle(self, random_seed: int = None):
-        print(self.device)
         if random_seed is None:
             self.rng = torch.default_generator
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-        self.indices = torch.randperm(self.nstructs, generator=self.rng).to(self.device)
+        self.indices = torch.randperm(
+            self.nstructs, generator=self.rng
+        )  # .to(self.device)
 
         # update self.structures to reflect shuffling
         # self.structures_original = self.structures.copy()
@@ -255,6 +258,7 @@ class MLDataset(Dataset):
         # self.molecule_data.shuffle(self.indices)
 
     def _get_subset(self, y: TensorMap, indices: torch.tensor):
+        indices = indices.cpu().numpy()
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
