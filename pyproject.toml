@@ -10,7 +10,14 @@ description = "TODO"
 
 requires-python = ">=3.7"
 dependencies = [
-    # TODO
+    "pyscf >= 2.3.0",
+    "metatensor", 
+    "rascaline@git+https://github.com/Luthaf/rascaline.git",
+    "wigners",
+    "torch",
+    "scikit-learn",
+    "numpy",
+    "hickle",
 ]
 
 keywords = [] # TODO
