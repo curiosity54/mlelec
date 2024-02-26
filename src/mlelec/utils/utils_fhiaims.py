@@ -366,19 +366,34 @@ def Hk_to_rH(H_k,kpoints,weights, cell):#, kphase):
 
     return np.real(newham)#, np.real(newham2)
 
-def rH_to_Hk(fock, kpoint, cells):
+def rH_to_Hk(fock, kpoint, cells, kphase=None):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
 
     '''
     newham=np.zeros((fock.shape[1],fock.shape[2]), dtype=np.complex_)
     
-    k=get_phaseshift(kpoint,cells)#.conj()
+
+    try:
+        w=kphase[0]
+        k=kphase#.conj()
+        if k.shape[0]!=fock.shape[0]:
+            print('Make sure the kphase is provided in shape [iframes, ikpt, icells]')
+
+
+    except:
+        k=get_phaseshift(kpoint,cells)#.conj()
+
+
+
+    #k2=get_phaseshift(kpoint,cells)
+    #print('wanted',k2.shape)
+    #print('is',k.shape)
     for icell in range(len(fock)):
         newham+=fock[icell]*k[icell]#kphase[icell]
     return newham
 
-def rH_to_Hks(fock, kpoints,cells):
+def rH_to_Hks(fock, kpoints,cells, kphase=None):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
 
@@ -387,19 +402,33 @@ def rH_to_Hks(fock, kpoints,cells):
     
     nrkpts=len(kpoints)
     for kpt in range(nrkpts):
-        newham[kpt]=rH_to_Hk(fock,kpoints[kpt],cells)
+
+        try:
+            k=kphase[kpt]
+        except:
+            k=None
+
+        newham[kpt]=rH_to_Hk(fock,kpoints[kpt],cells, kphase=k)
     return newham
 
 
-def rHs_to_Hks(fock, kpoints,cells):
+def rHs_to_Hks(fock, kpoints,cells,kphases=None):
     '''Function to get the k-dependent H from the realspace H for provided kpoints and cell shifts
        Difference here has to do with the calculation of the kphase, TODO: find out how to exactly get the kphase values from FHI-aims
-
+       Providing a 
     '''
+
 
     hams=[]
     for ifr in range(len(fock)):
-        newham=rH_to_Hks(fock[ifr], kpoints[ifr],cells[ifr])
+
+        try:
+            k=kphases[ifr]
+            #print('ifr',k.shape)
+        except:
+            k=None
+
+        newham=rH_to_Hks(fock[ifr], kpoints[ifr],cells[ifr], kphase=k)
         hams.append(newham.copy())    
     return hams
 

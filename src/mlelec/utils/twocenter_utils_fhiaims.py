@@ -981,7 +981,7 @@ def symmetrize_matrices(q):
 #    return H_inverse
 
 def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
-    matrix=torch.zeros(ham.shape, dtype=torch.float64)
+    matrix=torch.zeros(ham.shape, dtype=torch.tensor(ham[0]).dtype)
     ki_base = 0
     for i, ai in enumerate(frame.numbers):
         kj_base = 0
@@ -1082,7 +1082,7 @@ def _fhiaims_to_condon_shortley(
     )    
     orbs_tot, _ = _orbs_offsets(orbitals)
 
-    matrices_cs=torch.zeros((len(matrices), *matrices[0].shape), dtype=torch.float64)
+    matrices_cs=torch.zeros((len(matrices), *matrices[0].shape), dtype=torch.tensor(matrices)[0][0].dtype)
     if len(matrices_cs.shape)==4:
         multiple_shifts=True
     else:
