@@ -12,6 +12,7 @@ import metatensor.operations as operations
 from mlelec.utils.symmetry import ClebschGordanReal
 from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
 from mlelec.utils.metatensor_utils import labels_where
+from tqdm.notebook import tqdm  # <<< change this
 
 
 def block_to_mic_translation(frame, block, kmesh):
@@ -33,56 +34,74 @@ def block_to_mic_translation(frame, block, kmesh):
     ), "Sample and block samples are not the same"
     retained_idx = []
     val_idx = []  # track indx of [i,j,mic_x, mic_y, mic_z]
-    for smpidx, (i, j, x, y, z) in enumerate(sample):
-        # i is always in cell 0
-        if x >= 0 and y >= 0 and z >= 0:
-            if [x, y, z] == [0, 0, 0]:
-                continue
-            retained_idx.append(smpidx)
-            # print('------')
-            # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
-            # print(i, j, J,[x,y,z])
-            mic_x, mic_y, mic_z = scidx_to_mic_translation(
-                frame,
-                J=scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh),
-                kmesh=kmesh,
-            )
-            if [mic_x, mic_y, mic_z] != [x, y, z]:
-
-                _, mappedidx = labels_where(
-                    block.samples,
-                    Labels(
-                        [
-                            "structure",
-                            "center",
-                            "neighbor",
-                            "cell_shift_a",
-                            "cell_shift_b",
-                            "cell_shift_c",
-                        ],
-                        values=np.asarray(
-                            [
-                                block.samples["structure"][smpidx],
-                                i,
-                                j,
-                                mic_x,
-                                mic_y,
-                                mic_z,
-                            ]
-                        ).reshape(1, -1),
-                    ),
-                    return_idx=True,
+    with tqdm(
+        total=len(sample),
+        bar_format="{bar}{r_bar} [ time left: {remaining}, time spent: {elapsed}]",
+    ) as pbar:
+        for smpidx, (i, j, x, y, z) in enumerate(sample):
+            # i is always in cell 0
+            pbar.update(1)
+            if x >= 0 and y >= 0 and z >= 0:
+                if [x, y, z] == [0, 0, 0]:
+                    continue
+                retained_idx.append(smpidx)
+                # print('------')
+                # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
+                # print(i, j, J,[x,y,z])
+                mic_x, mic_y, mic_z = scidx_to_mic_translation(
+                    frame,
+                    I=i,
+                    J=scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh),
+                    j=j,
+                    kmesh=kmesh,
                 )
-                assert len(mappedidx) == 1
-                val_idx.append(mappedidx[0])
-            else:
-                val_idx.append(smpidx)
-            # print(mic_x, mic_y, mic_z)
-            # fixed_sample[smpidx, -3:] = [mic_x, mic_y, mic_z]
-            fixed_sample.append(
-                [block.samples["structure"][smpidx], i, j, x, y, z, mic_x, mic_y, mic_z]
-            )
-            # print()
+
+                if [mic_x, mic_y, mic_z] != [x, y, z]:
+
+                    _, mappedidx = labels_where(
+                        block.samples,
+                        Labels(
+                            [
+                                "structure",
+                                "center",
+                                "neighbor",
+                                "cell_shift_a",
+                                "cell_shift_b",
+                                "cell_shift_c",
+                            ],
+                            values=np.asarray(
+                                [
+                                    block.samples["structure"][smpidx],
+                                    i,
+                                    j,
+                                    mic_x,
+                                    mic_y,
+                                    mic_z,
+                                ]
+                            ).reshape(1, -1),
+                        ),
+                        return_idx=True,
+                    )
+                    assert len(mappedidx) == 1
+                    val_idx.append(mappedidx[0])
+                else:
+                    val_idx.append(smpidx)
+                # print(mic_x, mic_y, mic_z)
+                # fixed_sample[smpidx, -3:] = [mic_x, mic_y, mic_z]
+                fixed_sample.append(
+                    [
+                        block.samples["structure"][smpidx],
+                        i,
+                        j,
+                        x,
+                        y,
+                        z,
+                        mic_x,
+                        mic_y,
+                        mic_z,
+                    ]
+                )
+                # print()
     fixed_samples = Labels(
         block.samples.names
         + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
@@ -243,6 +262,9 @@ def flatten(x):
         return flat_list_tuples
 
 
+from metatensor import equal, equal_metadata, allclose, allclose_block, sort, sort_block
+
+
 # Serious TODO: Cleanup please FIXME
 def cg_combine(
     x_a,
@@ -342,6 +364,7 @@ def cg_combine(
     X_grads = {}
 
     for index_a, block_a in x_a.items():
+        block_a = sort_block(block_a, axes="samples")
         lam_a = index_a["spherical_harmonics_l"]
         sigma_a = index_a["inversion_sigma"]
         order_a = index_a["order_nu"]
@@ -350,7 +373,7 @@ def cg_combine(
         )  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
         for index_b, block_b in x_b.items():
-            # block_b = metatensor.sort_block(block_b)
+            block_b = sort_block(block_b, axes="samples")
             lam_b = index_b["spherical_harmonics_l"]
             sigma_b = index_b["inversion_sigma"]
             order_b = index_b["order_nu"]
@@ -896,6 +919,27 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
     return rhoMPi
 
 
+def _standardize(feat: TensorMap):
+    blocks = []
+    for k, b in feat.items():
+        x = b.values.clone()
+        vshape = x.shape
+        x = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
+        std = torch.std(x, axis=0)
+        std[np.isclose(std, 0)] = 1
+        print(std.shape, x.shape)
+        x = x / std[None, :]
+        blocks.append(
+            TensorBlock(
+                components=b.components,
+                properties=b.properties,
+                values=x.reshape(vshape),
+                samples=b.samples,
+            )
+        )
+    return TensorMap(feat.keys, blocks)
+
+
 def compute_rhoi_pca(
     rhoi,
     npca: Optional[Union[float, List[float]]] = None,
@@ -926,6 +970,12 @@ def compute_rhoi_pca(
         nsamples = len(block.samples)
         ncomps = len(block.components[0])
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
+        # print(xl)
+        # standardize features here <<<<<<<
+        std = torch.std(xl, axis=0)
+        std[np.isclose(std, 0)] = 1
+        assert ~np.isclose(torch.min(torch.abs(std)), 0), "STD is zero!"
+        xl = xl / std[None, :]
         u, s, vh = torch.linalg.svd(xl, full_matrices=False)
         eigs = torch.pow(s, 2) / (xl.shape[0] - 1)
         eigs_ratio = eigs / torch.sum(eigs)
@@ -1006,7 +1056,9 @@ def apply_pca(rhoi, pca_tmap):
         sigma = key["inversion_sigma"]
         l = key["spherical_harmonics_l"]
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
-        vt = pca_tmap.block(spherical_harmonics_l=l, inversion_sigma=sigma).values
+        vt = pca_tmap.block(
+            key
+        ).values  # spherical_harmonics_l=l, inversion_sigma=sigma).values
         xl_pca = (xl @ vt).reshape((len(block.samples), len(block.components[0]), -1))
         #         print(xl_pca.shape)
         pblock = TensorBlock(
