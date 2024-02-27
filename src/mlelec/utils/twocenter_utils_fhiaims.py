@@ -981,14 +981,7 @@ def symmetrize_matrices(q):
 #    return H_inverse
 
 def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
-
-    if isinstance(ham, np.ndarray):
-        matrix = torch.from_numpy(np.zeros_like(ham)) #.shape, dtype=torch.float64)
-    elif isinstance(ham, torch.Tensor):
-        matrix = torch.zeros_like(ham)#.shape, dtype=torch.float64)
-    else:
-        raise ValueError("ham should either be a np.ndarray or a torch.Tensor.")
-
+    matrix=torch.zeros(ham.shape, dtype=torch.tensor(ham[0]).dtype)
     ki_base = 0
     for i, ai in enumerate(frame.numbers):
         kj_base = 0
@@ -1089,17 +1082,7 @@ def _fhiaims_to_condon_shortley(
     )    
     orbs_tot, _ = _orbs_offsets(orbitals)
 
-    if matrices[0].dtype == torch.complex128 or matrices[0].dtype == np.complex128:
-        dtype = torch.complex128
-    elif matrices[0].dtype == torch.float64 or matrices[0].dtype == np.float64:
-        dtype = torch.float64
-    elif matrices[0].dtype == torch.float32 or matrices[0].dtype == np.float32:
-        dtype = torch.float32
-    else:
-        raise TypeError(f'dtype={matrices[0].dtype} not supported')
-    
-    matrices_cs = torch.zeros((len(matrices), *matrices[0].shape), dtype=dtype)
-
+    matrices_cs=torch.zeros((len(matrices), *matrices[0].shape), dtype=torch.tensor(matrices)[0][0].dtype)
     if len(matrices_cs.shape)==4:
         multiple_shifts=True
     else:

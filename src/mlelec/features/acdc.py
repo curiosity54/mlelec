@@ -31,7 +31,7 @@ use_native = True  # True for rascaline
 
 
 def single_center_features(
-    frames, hypers, order_nu, lcut=None, cg=None, device=None, **kwargs
+    frames, hypers, order_nu, lcut=None, cg=None, device="cpu", **kwargs
 ):
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
@@ -92,7 +92,7 @@ def pair_features(
     both_centers: bool = False,
     lcut: int = 3,
     max_shift=None,
-    device=None,
+    device="cpu",
     kmesh=None,
     desired_shifts=None,
     mic=False,

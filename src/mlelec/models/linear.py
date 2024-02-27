@@ -151,7 +151,7 @@ class LinearTargetModel(nn.Module):
     def __init__(
         self,
         dataset: MLDataset,
-        device=None,
+        device="cpu",
         **kwargs,
     ):
         self.dataset = dataset
@@ -246,57 +246,54 @@ class LinearTargetModel(nn.Module):
             )
             pred_blocks.append(pred_block)
         pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
-        self.reconstructed_uncoupled = _to_uncoupled_basis(
-            pred_tmap, device=self.device
-        )
-        if batch_indices is None:
-            # identify the frames in the batch
-            batch_indices = list(
-                set(
-                    [
-                        tuple(set(b.samples["structure"].tolist()))
-                        for (k, b) in pred_tmap.items()
-                    ]
-                )
-            )
-            # print(batch_indices)
-            # fr_idx = [list(i)[0] for i in fr_idx]
-            # print(batch_indices)
-            batch_indices = list(batch_indices[0])
-            # print(batch_indices)
-        batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
-        # batch_frames = self.dataset.target.frames
-        self.reconstructed_tensor = _to_matrix(
-            self.reconstructed_uncoupled,
-            batch_frames,
-            self.dataset.target.orbitals,
-            device=self.device,
-        )
         if return_type == "coupled_blocks":
             return pred_tmap
         elif return_type == "uncoupled_blocks":
+            self.reconstructed_uncoupled = _to_uncoupled_basis(
+                pred_tmap, device=self.device
+            )
             return self.reconstructed_uncoupled
         elif return_type == "tensor":
+            if batch_indices is None:
+                # identify the frames in the batch
+                batch_indices = list(
+                    set(
+                        [
+                            tuple(set(b.samples["structure"].tolist()))
+                            for (k, b) in pred_tmap.items()
+                        ]
+                    )
+                )
+                # print(batch_indices)
+                # fr_idx = [list(i)[0] for i in fr_idx]
+                # print(batch_indices)
+                batch_indices = list(batch_indices[0])
+                # print(batch_indices)
+            batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
+            # batch_frames = self.dataset.target.frames
+            self.reconstructed_tensor = _to_matrix(
+                self.reconstructed_uncoupled,
+                batch_frames,
+                self.dataset.target.orbitals,
+                device=self.device,
+            )
             return self.reconstructed_tensor
         elif return_type == "loss":
             loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
-
+        else:
+            raise NotImplementedError("return_type not implemented")
         return loss
 
-    def fit_ridge_analytical(
-        self, features, return_matrix=False, set_bias=False
-    ) -> None:
+    def fit_ridge_analytical(self, set_bias=False) -> None:
         from sklearn.linear_model import RidgeCV
-        from sklearn.kernel_ridge import KernelRidge
 
-        print(self.dataset.target.blocks)
         # set_bias will set bias=True for the invariant model
         self.recon = {}
 
         pred_blocks = []
-        ridges = []
+        self.ridges = []
         # kernels = []
-        for k, block in self.dataset.target.blocks.items():
+        for k, block in self.dataset.target_train.items():
             # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
@@ -304,7 +301,7 @@ class LinearTargetModel(nn.Module):
                 if k["L"] == 0 and set_bias:
                     bias = True
                 sample_names = block.samples.names
-                feat = map_targetkeys_to_featkeys(features, k)
+                feat = map_targetkeys_to_featkeys(self.dataset.feat_train, k)
 
                 # featnorm = torch.linalg.norm(feat.values)
                 targetnorm = torch.linalg.norm(block.values)
@@ -327,8 +324,6 @@ class LinearTargetModel(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                # kernel = x @ x.T
-                # kernels.append(kernel)
                 y = (
                     (
                         block.values.reshape(
@@ -349,7 +344,7 @@ class LinearTargetModel(nn.Module):
                 pred = ridge.predict(x)
                 # if k['L']==0:
                 #     print('SCORE', ridge.score(x,y) )
-                ridges.append(ridge)
+                self.ridges.append(ridge)
 
                 pred_blocks.append(
                     TensorBlock(
@@ -376,7 +371,46 @@ class LinearTargetModel(nn.Module):
         pred_tmap = TensorMap(self.dataset.target.blocks.keys, pred_blocks)
         self.recon_blocks = pred_tmap  # return_matrix=return_matrix)
 
-        return self.recon_blocks, ridges
+        return self.recon_blocks, self.ridges
+
+    def predict_ridge_analytical(self, return_matrix=False) -> None:
+        from sklearn.linear_model import RidgeCV
+
+        # set_bias will set bias=True for the invariant model
+        self.recon_val = {}
+
+        pred_blocks_val = []
+        # kernels = []
+        for imdl, tkey in enumerate(self.dataset.target_val.keys):
+            target = self.dataset.target_val.block(tkey)
+            nsamples, ncomp, nprops = target.values.shape
+
+            feat = map_targetkeys_to_featkeys(self.dataset.feat_val, tkey)
+            x = (
+                (
+                    feat.values.reshape(
+                        (feat.values.shape[0] * feat.values.shape[1], -1)
+                    )
+                    / 1
+                )
+                .cpu()
+                .numpy()
+            )
+            pred = self.ridges[imdl].predict(x)
+            pred_blocks_val.append(
+                TensorBlock(
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
+                    .to(self.device)
+                    .to(torch.float32),
+                    samples=target.samples,
+                    components=target.components,
+                    properties=self.dummy_property,
+                )
+            )
+
+        pred_tmap_val = TensorMap(self.dataset.target.blocks.keys, pred_blocks_val)
+        self.recon_blocks_val = pred_tmap_val
+        return self.recon_blocks_val
 
 
 class LinearModelPeriodic(nn.Module):

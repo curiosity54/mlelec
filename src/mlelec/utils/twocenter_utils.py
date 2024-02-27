@@ -861,7 +861,7 @@ def _to_coupled_basis(
     blocks: Union[torch.tensor, TensorMap],
     orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
-    device: str = None,
+    device: str = "cpu",
     skip_symmetry: bool = False,
     translations: bool = False,
 ):
@@ -913,11 +913,11 @@ def _to_coupled_basis(
         )
 
         # selects the (only) key in the coupled dictionary (l1 and l2
-        # that gave birth to the coupled terms L, with L going from
+        # that contribute to the coupled terms L, with L going from
         # |l1 - l2| up to |l1 + l2|
         coupled = cg.couple(decoupled)[(li, lj)]
-        # if ai == aj==6 and ni == nj==2 and li == lj==1 and block_type == 0:
-        #     print(idx, coupled)#decoupled)
+        # if ai == aj == 1 and block_type == -1:
+        #     print(idx, coupled)  # decoupled)
 
         for L in coupled:
             block_idx = tuple(idx) + (L,)
@@ -950,7 +950,7 @@ def _to_uncoupled_basis(
     blocks: TensorMap,
     # orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
-    device: str = None,
+    device: str = "cpu",
     translations: bool = False,
 ):
 
@@ -1162,3 +1162,15 @@ def discard_nonhermiticity(matrices, retain="upper"):
         ), "matrix to discard non-hermiticity from must be a 2D matrix"
         fixed[i] = _reflect_hermitian(mat, retain_upper=retain_upper)
     return fixed
+import scipy
+import ase 
+def compute_eigenval(fock, overlap, eV=False):
+    
+    eigenval=scipy.linalg.eigvals(fock,overlap)#,UPLO='U')
+    eigval=sorted(eigenval)
+    e_shift=np.array(eigval)
+    if eV:
+        from ase.units import Hartree
+        return e_shift*Hartree
+ 
+    return e_shift

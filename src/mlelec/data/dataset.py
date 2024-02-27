@@ -94,7 +94,7 @@ class MoleculeDataset(Dataset):
         self.aux_data_names = aux
         if "fock" in target:
             if self.aux_data_names is None:
-                self.aux_data_names = ["overlap"]
+                self.aux_data_names = ["overlap", "orbitals"]
             elif "overlap" not in self.aux_data_names:
                 self.aux_data_names.append("overlap")
 
@@ -313,21 +313,20 @@ class MLDataset(Dataset):
         #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
         # ), "Split indices not generated properly"
 
-        self.train_idx = self.indices[
-            : int(self.train_frac * self.nstructs)
-        ]  # .sort()[0]
+        self.train_idx = self.indices[: int(self.train_frac * self.nstructs)].sort()[0]
         self.val_idx = self.indices[
             int(self.train_frac * self.nstructs) : int(
                 (self.train_frac + self.val_frac) * self.nstructs
             )
-        ]  # .sort()[0]
+        ].sort()[0]
         self.test_idx = self.indices[
             int((self.train_frac + self.val_frac) * self.nstructs) :
-        ]  # .sort()[0]
-        assert (
-            len(self.test_idx)
-            > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-        ), "Split indices not generated properly"
+        ].sort()[0]
+        if self.test_frac>0:
+            assert (
+                len(self.test_idx)
+                > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+            ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
@@ -735,6 +734,8 @@ class PySCFPeriodicDataset(Dataset):
         kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
         matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
         matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
+        overlap_kpoint: Union[torch.tensor, np.ndarray] = None,
+        overlap_translation: Union[Dict, torch.tensor, np.ndarray] = None,
         target: List[str] = ["real_translation"],
         aux: List[str] = ["real_overlap"],
         use_precomputed: bool = True,
@@ -805,6 +806,7 @@ class PySCFPeriodicDataset(Dataset):
 
         assert matrices_kpoint is not None
         self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
+        
         matrices_translation = self.kpts_to_translation_target(
             self.matrices_kpoint, nao
         )
@@ -817,10 +819,31 @@ class PySCFPeriodicDataset(Dataset):
             for ifr in range(self.nstructs)
             for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
         ]
+
         for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
             self.matrices_translation[tuple(k)] = torch.stack(
                 self.matrices_translation[tuple(k)]
             )
+        # DO the same for the overlap 
+        if overlap_kpoint is not None:
+            self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
+            overlap_translation = self.kpts_to_translation_target(
+                self.overlap_kpoint, nao
+            )
+            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
+            self.overlap_translation = {key: [] for key in overlap_translation[0]}
+            [
+                self.overlap_translation[tuple(k)].append(
+                    overlap_translation[ifr][tuple(k)]
+                )
+                for ifr in range(self.nstructs)
+                for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
+            ]
+
+            for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
+                self.overlap_translation[tuple(k)] = torch.stack(
+                    self.overlap_translation[tuple(k)]
+                )
 
         self.target = {t: [] for t in self.target_names}
         for t in self.target_names:
