@@ -22,7 +22,7 @@ class TensorBuilder:
         self._property_names = property_names
 
     def add_block(
-        self, keys, gradient_samples=None, *, samples=None, components, properties=None
+        self, key, gradient_samples=None, *, samples=None, components, properties=None
     ):
         if samples is None and properties is None:
             raise Exception("can not have both samples & properties unset")
@@ -67,10 +67,11 @@ class TensorBuilder:
                 samples, components, self._property_names, gradient_samples
             )
 
-        self.blocks[keys] = block
+        self.blocks[key] = block
         return block
 
     def build(self):
+
         keys = Labels(
             self._key_names,
             np.array(list(self.blocks.keys()), dtype=np.int32),
@@ -116,7 +117,7 @@ class TensorBuilderPerSamples:
 
         if len(data.shape) == 2:
             data = data.reshape(1, data.shape[0], data.shape[1])
-        assert data.shape[0] == labels.shape[0]
+        assert data.shape[0] == labels.shape[0], ("data.shape[0]", data.shape[0], "labelsshape", labels.shape[0])
 
         self._samples.append(labels)
         self._data.append(data)

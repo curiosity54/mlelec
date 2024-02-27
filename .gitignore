@@ -1,4 +1,7 @@
 src/mlelec.egg-info/
 
 *.pt
-tmp* 
+tmp*
+__pycache__
+build
+venv

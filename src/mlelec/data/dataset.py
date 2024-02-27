@@ -94,7 +94,7 @@ class MoleculeDataset(Dataset):
         self.aux_data_names = aux
         if "fock" in target:
             if self.aux_data_names is None:
-                self.aux_data_names = ["overlap"]
+                self.aux_data_names = ["overlap", "orbitals"]
             elif "overlap" not in self.aux_data_names:
                 self.aux_data_names.append("overlap")
 
@@ -113,7 +113,9 @@ class MoleculeDataset(Dataset):
                 self.path + "/{}.xyz".format(self.mol_name), index=self.frame_slice
             )
         except:
-            raise FileNotFoundError("No structures found at the given path")
+            raise FileNotFoundError(
+                "No structures found at {}".format(self.path + f"/{self.mol_name}.xyz")
+            )
 
     def load_target(self, target_data: Optional[dict] = None):
         # TODO: ensure that all keys of self.target names are filled even if they are not provided in target_data
@@ -203,6 +205,7 @@ class MLDataset(Dataset):
         **kwargs,
     ):
         super().__init__()
+        self.device = device
         self.nstructs = len(molecule_data.structures)
         self.rng = None
         if shuffle:
@@ -212,7 +215,7 @@ class MLDataset(Dataset):
         self.molecule_data = copy.deepcopy(molecule_data)
         # self.molecule_data.shuffle(self.indices)
         # self.molecule_data = molecule_data
-        self.device = device
+
         self.structures = self.molecule_data.structures
         self.target = self.molecule_data.target
         # print(self.target, next(iter(self.target.values())))
@@ -244,7 +247,9 @@ class MLDataset(Dataset):
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-        self.indices = torch.randperm(self.nstructs, generator=self.rng)
+        self.indices = torch.randperm(
+            self.nstructs, generator=self.rng
+        )  # .to(self.device)
 
         # update self.structures to reflect shuffling
         # self.structures_original = self.structures.copy()
@@ -253,6 +258,7 @@ class MLDataset(Dataset):
         # self.molecule_data.shuffle(self.indices)
 
     def _get_subset(self, y: TensorMap, indices: torch.tensor):
+        indices = indices.cpu().numpy()
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
@@ -307,21 +313,20 @@ class MLDataset(Dataset):
         #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
         # ), "Split indices not generated properly"
 
-        self.train_idx = self.indices[
-            : int(self.train_frac * self.nstructs)
-        ]  # .sort()[0]
+        self.train_idx = self.indices[: int(self.train_frac * self.nstructs)].sort()[0]
         self.val_idx = self.indices[
             int(self.train_frac * self.nstructs) : int(
                 (self.train_frac + self.val_frac) * self.nstructs
             )
-        ]  # .sort()[0]
+        ].sort()[0]
         self.test_idx = self.indices[
             int((self.train_frac + self.val_frac) * self.nstructs) :
-        ]  # .sort()[0]
-        assert (
-            len(self.test_idx)
-            > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-        ), "Split indices not generated properly"
+        ].sort()[0]
+        if self.test_frac>0:
+            assert (
+                len(self.test_idx)
+                > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+            ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
@@ -729,12 +734,16 @@ class PySCFPeriodicDataset(Dataset):
         kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
         matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
         matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
+        overlap_kpoint: Union[torch.tensor, np.ndarray] = None,
+        overlap_translation: Union[Dict, torch.tensor, np.ndarray] = None,
         target: List[str] = ["real_translation"],
         aux: List[str] = ["real_overlap"],
         use_precomputed: bool = True,
         device="cuda",
-        orbs: str = "sto-3g",
+        orbs_name: str = "sto-3g",
+        orbs: List = None,
         desired_shifts: List = None,
+        nao: int = None,
     ):
         self.structures = frames
         self.frame_slice = frame_slice
@@ -752,7 +761,8 @@ class PySCFPeriodicDataset(Dataset):
             ]  # currently easiest to do
 
         self.device = device
-        self.basis = orbs
+        self.basis = orbs  # actual orbitals
+        self.basis_name = orbs_name
         self.use_precomputed = use_precomputed
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
@@ -771,8 +781,9 @@ class PySCFPeriodicDataset(Dataset):
             # if self.kgrid_is_list:
             # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
             # else:
-            cell, scell, phase = get_scell_phase(structure, self.kmesh[ifr])
-
+            cell, scell, phase = get_scell_phase(
+                structure, self.kmesh[ifr], basis=self.basis_name
+            )
             self.cells.append(cell)
 
             self.phase_matrices.append(torch.from_numpy(phase).to(self.device))
@@ -781,7 +792,6 @@ class PySCFPeriodicDataset(Dataset):
                     cell, self.kmesh[ifr], return_rel=True
                 ).tolist()
             )
-
 
         if desired_shifts is not None:
             self.desired_shifts = desired_shifts
@@ -796,16 +806,44 @@ class PySCFPeriodicDataset(Dataset):
 
         assert matrices_kpoint is not None
         self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
-        matrices_translation = self.kpts_to_translation_target(self.matrices_kpoint)
+        
+        matrices_translation = self.kpts_to_translation_target(
+            self.matrices_kpoint, nao
+        )
         ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
         self.matrices_translation = {key: [] for key in matrices_translation[0]}
         [
-            self.matrices_translation[tuple(k)].append(matrices_translation[ifr][tuple(k)])
+            self.matrices_translation[tuple(k)].append(
+                matrices_translation[ifr][tuple(k)]
+            )
             for ifr in range(self.nstructs)
-            for k in self.desired_shifts#matrices_translation[ifr].keys() TOCHECK
+            for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
         ]
-        for k in self.desired_shifts: #self.matrices_translation.keys(): TOCHECK
-            self.matrices_translation[tuple(k)] = torch.stack(self.matrices_translation[tuple(k)])
+
+        for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
+            self.matrices_translation[tuple(k)] = torch.stack(
+                self.matrices_translation[tuple(k)]
+            )
+        # DO the same for the overlap 
+        if overlap_kpoint is not None:
+            self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
+            overlap_translation = self.kpts_to_translation_target(
+                self.overlap_kpoint, nao
+            )
+            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
+            self.overlap_translation = {key: [] for key in overlap_translation[0]}
+            [
+                self.overlap_translation[tuple(k)].append(
+                    overlap_translation[ifr][tuple(k)]
+                )
+                for ifr in range(self.nstructs)
+                for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
+            ]
+
+            for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
+                self.overlap_translation[tuple(k)] = torch.stack(
+                    self.overlap_translation[tuple(k)]
+                )
 
         self.target = {t: [] for t in self.target_names}
         for t in self.target_names:
@@ -819,7 +857,9 @@ class PySCFPeriodicDataset(Dataset):
         """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
         kmatrix = []
         for ifr in range(self.nstructs):
-            framekmatrix = torch.zeros_like(torch.tensor(self.matrices_kpoint[0]), dtype=torch.complex128).to(self.device)
+            framekmatrix = torch.zeros_like(
+                torch.tensor(self.matrices_kpoint[0]), dtype=torch.complex128
+            ).to(self.device)
             # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
             for kpt in range(np.prod(self.kmesh[ifr])):
                 for i, t in enumerate(translated_matrices.keys()):
@@ -830,7 +870,7 @@ class PySCFPeriodicDataset(Dataset):
             kmatrix.append(framekmatrix)
         return kmatrix
 
-    def kpts_to_translation_target(self, matrices_kpoint):
+    def kpts_to_translation_target(self, matrices_kpoint, nao=None):
         target = []
         for ifr in range(self.nstructs):
             rel_translations = translation_vectors_for_kmesh(
@@ -838,26 +878,31 @@ class PySCFPeriodicDataset(Dataset):
             )
 
             rel_translations = [tuple(x) for x in rel_translations]
-
+            if nao is None:
+                nao = self.cells[ifr].nao
             translated_matrices = torch.zeros(
                 (
                     len(self.phase_matrices[ifr]),
-                    self.cells[ifr].nao,
-                    self.cells[ifr].nao,
+                    nao,
+                    nao,
                 ),
                 dtype=torch.complex128,
             ).to(self.device)
-
             for i in range(len(self.phase_matrices[ifr])):
                 for kpt in range(np.prod(self.kmesh[ifr])):
-                    # km[i] +=  phase_diff[key][kpt] * phase_diff[key][kpt].conj() * gamma_to_trans[key] * weight[key] # This works
                     translated_matrices[i] += (
                         matrices_kpoint[ifr][kpt]
                         * self.phase_matrices[ifr][i][kpt].conj()
                     )
 
             # translated_matrices = translated_matrices
-            assert torch.isclose(torch.linalg.norm(translated_matrices-translated_matrices.real), torch.tensor(0.0).to(translated_matrices.real))
+            assert torch.isclose(
+                torch.linalg.norm(translated_matrices - translated_matrices.real),
+                torch.tensor(0.0).to(translated_matrices.real),
+            ), (
+                "error to real",
+                torch.linalg.norm(translated_matrices - translated_matrices.real),
+            )
 
             translated_matrices = {
                 k: v for k, v in zip(rel_translations, translated_matrices.real)
