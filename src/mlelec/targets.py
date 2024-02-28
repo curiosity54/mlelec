@@ -8,7 +8,8 @@ import warnings
 
 
 class ModelTargets:  # generic class for different targets
-    def __init__(self, name: str = "hamiltonian"):
+    def __init__(self, name: str = "hamiltonian", device: str = None):
+        self.device = device
         if name == "hamiltonian" or name == "fock":
             name = "hamiltonian"
         name = name.capitalize()
@@ -57,9 +58,9 @@ class TwoCenter:  # class for second-rank tensors
         self.frames = frames
         self.device = device
 
-    def _to_blocks(self):
+    def _to_blocks(self, device="cpu"):
         self.blocks = twocenter_utils._to_blocks(
-            self.tensor, self.frames, self.orbitals, device=self.device
+            self.tensor, self.frames, self.orbitals, device=device
         )
         return self.blocks
 
@@ -87,9 +88,15 @@ class TwoCenter:  # class for second-rank tensors
 
 class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def __init__(
-        self, tensor, orbitals, frames, model_strategy: str = "coupled", **kwargs
+        self,
+        tensor,
+        orbitals,
+        frames,
+        model_strategy: str = "coupled",
+        device="cpu",
+        **kwargs,
     ):
-        device = kwargs.get("device", "cpu")
+        # device = kwargs.get("device", "cpu")
         model_strategy = model_strategy.lower()
         assert model_strategy in ["coupled", "uncoupled"]
 
@@ -115,11 +122,13 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         self.device = device
 
     def _to_blocks(self):
-        self.blocks_uncoupled = super()._to_blocks()
+        self.blocks_uncoupled = super()._to_blocks(device=self.device)
         self.uncoupled_keys = self.blocks_uncoupled.keys
 
     def _couple_blocks(self):
-        self.blocks_coupled = twocenter_utils._to_coupled_basis(self.blocks)
+        self.blocks_coupled = twocenter_utils._to_coupled_basis(
+            self.blocks, device=self.device
+        )
         self.coupled_keys = self.blocks_coupled.keys
 
     def orthogonalize(self, overlap: torch.tensor):
@@ -130,25 +139,26 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         pass
 
 
-class Eigenvalues:  # eigval of a second rank tensor
-    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
-        self.tensor = tensor
-        self.overlap = overlap
-        assert len(tensor.shape) == 2
-        if overlap is not None:
-            assert tensor.shape == overlap.shape
-        assert tensor.shape[0] == tensor.shape[1]  # square matrix
-        # TODO : handle non symmetric matrices
-
-        self.eigvals = torch.tensor(
-            scipy.linalg.eigvalsh(self.tensor, self.overlap)
-        )  # FIXME this breaks the autograd chain
-
-    def eigvalues(self, first: int = 0, last: int = -1):
-        return self.eigvals[first:last]
-
-    def eigvectors(self, first: int = 0, last: int = -1):
-        return scipy.linalg.eigh[first:last][-1]
+# class Eigenvalues:  # eigval of a second rank tensor
+#    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
+#        self.tensor = tensor
+#        self.overlap = overlap
+#        assert len(tensor.shape) == 2
+#        if overlap is not None:
+#            assert tensor.shape == overlap.shape
+#        assert tensor.shape[0] == tensor.shape[1]  # square matrix
+#        # TODO : handle non symmetric matrices
+#
+#        self.eigvals = torch.tensor(
+#            scipy.linalg.eigvalsh(self.tensor, self.overlap)
+#        )  # FIXME this breaks the autograd chain
+#
+#    def eigvalues(self, first: int = 0, last: int = -1):
+#        return self.eigvals[first:last]
+#
+#    def eigvectors(self, first: int = 0, last: int = -1):
+#        return scipy.linalg.eigh[first:last][-1]
+#
 
 
 class PBCHamiltonian(TwoCenter):
@@ -158,10 +168,11 @@ class PBCHamiltonian(TwoCenter):
         hamiltonian: torch.tensor,
         orbitals: Dict,
         frames: List[ase.Atoms] = None,
-        k_grid: List[int] = None,
+        kgrid: List[int] = None,
         translations: List[int] = None,
     ):
         super().__init__(hamiltonian, orbitals, frames)
+        pass
 
     def combine_phase():
         pass
