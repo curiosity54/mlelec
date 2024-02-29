@@ -666,19 +666,19 @@ def twocenter_features_periodic_NH(
             # print("\n\n")
             sample_label_ij = Labels(
                 b.samples.names,
-                np.array([[0, 0, 1, 1, 7, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 1, 1, 4, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 1, 7, 1, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, 4, 0, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, 1, 0, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 1, 4, 0, 0, 4, 0, 0]]),
+                np.array([[0, 0, 1, 4, 0, 0, 4, 0, 0]]),
             )
             sample_label_ji = Labels(
                 b.samples.names,
-                np.array([[0, 1, 0, -1, -7, 0, 0, 0, 0]]),
+                # np.array([[0, 1, 0, -1, -4, 0, 0, 0, 0]]),
                 # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
-                # np.array([[0, 1, 0, -4, 0, 0, 4, 0, 0]]),
+                np.array([[0, 1, 0, -4, 0, 0, 4, 0, 0]]),
             )
             pos_ij = np.where(
                 np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
@@ -690,6 +690,7 @@ def twocenter_features_periodic_NH(
             )[0]
 
             print("l", k["spherical_harmonics_l"])
+            print("k", k.values)
             print(
                 "values",
                 torch.norm(
@@ -698,13 +699,13 @@ def twocenter_features_periodic_NH(
                 ),
                 torch.norm(b.values[pos_ij] - b.values[pos_ji]),
                 torch.norm(b.values[pos_ij] + b.values[pos_ji]),
-                b.values[pos_ij],
-                b.values[pos_ji],
+                # b.values[pos_ij],
+                # b.values[pos_ji],
                 torch.norm(b.values[pos_ij]),
                 torch.norm(b.values[pos_ji]),
-                pos_ij,
+                # pos_ij,
                 b.samples.values[pos_ij],
-                pos_ji,
+                # pos_ji,
                 b.samples.values[pos_ji],
             )
             blocks.append(

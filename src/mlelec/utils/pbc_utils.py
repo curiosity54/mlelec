@@ -99,10 +99,12 @@ def scidx_to_mic_translation(
     # cell_inv @ dplus, cell_inv @ dminus, cell_inv @ (dplus + dminus), "mict,micmt"
     # )
     mic_T = np.round(cell_inv @ dplus + epsilon).astype(int)
-    mic_minusT = np.round(cell_inv @ dminus + epsilon).astype(int)
+    # mic_minusT = np.round(cell_inv @ dminus + epsilon).astype(int)
     # print("bef", mic_T, mic_minusT, end=" ")
     mic_T, fixed_plus = fix_translation_sign(frame, mic_T, I, j)
-    mic_minusT, fixed_minus = fix_translation_sign(frame, mic_minusT, j, I)
+    mic_minusT = -1 * mic_T
+    fixed_minus = fixed_plus
+    # mic_minusT, fixed_minus = fix_translation_sign(frame, mic_minusT, j, I)
     # fixed_plus = fixed_minus = False
     # print("aft", mic_T, mic_minusT)
     if ifprint:
