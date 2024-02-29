@@ -804,12 +804,14 @@ class PySCFPeriodicDataset(Dataset):
             self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
         self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
 
-        assert matrices_kpoint is not None
         self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
         
-        matrices_translation = self.kpts_to_translation_target(
-            self.matrices_kpoint, nao
-        )
+        if matrices_translation is None:
+            assert matrices_kpoint is not None
+            matrices_translation = self.kpts_to_translation_target(
+                self.matrices_kpoint, nao
+            )
+        
         ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
         self.matrices_translation = {key: [] for key in matrices_translation[0]}
         [
@@ -913,6 +915,23 @@ class PySCFPeriodicDataset(Dataset):
     def check_block_(self):
         # mat -> blocks _> couple -> uncouple -> mat
         pass
+
+    def set_matrices_translation(self, matrices_translation):
+        self.matrices_translation = {key: [] for key in matrices_translation[0]}
+        [
+            self.matrices_translation[tuple(k)].append(
+                matrices_translation[ifr][tuple(k)]
+            )
+            for ifr in range(self.nstructs)
+            for k in matrices_translation[0]  # matrices_translation[ifr].keys() TOCHECK
+        ]
+
+        for k in matrices_translation[0]:  # self.matrices_translation.keys(): TOCHECK
+            self.matrices_translation[tuple(k)] = torch.stack(
+                self.matrices_translation[tuple(k)]
+            )
+
+        self.desired_shifts = list(matrices_translation[0].keys())
 
     def __len__(self):
         return self.nstructs

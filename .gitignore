@@ -1,5 +1,5 @@
 src/mlelec.egg-info/
-__pycache__
+*__pycache__*
 *.pt
 tmp* 
 *.pyc
