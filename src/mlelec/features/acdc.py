@@ -157,6 +157,8 @@ def pair_features(
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+    if not mic and return_rho0ij:
+        return rho0_ij
     # ----- MIC mapping ------
     if mic:
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
@@ -169,7 +171,7 @@ def pair_features(
 
         for key, block in rho0_ij.items():
             if key["spherical_harmonics_l"] % 2 == 1:
-                mic_phase = -1
+                mic_phase = -1  # FIXME: should be -1
             else:
                 mic_phase = 1
             all_frIJ = np.unique(block.samples.values[:, :3], axis=0)
@@ -188,7 +190,10 @@ def pair_features(
 
                 if i == j and [x, y, z] == [0, 0, 0]:
                     continue
-
+                if x < 0 or y < 0 or z < 0:
+                    continue
+                if i == 0 and j == 0 and x == 4 and y == 0 and z == 0:
+                    print("here")
                 (
                     (mic_x, mic_y, mic_z),
                     (mic_mx, mic_my, mic_mz),
@@ -203,19 +208,19 @@ def pair_features(
                     j=j,
                     kmesh=kmesh,
                 )
-                print(
-                    ifr,
-                    i,
-                    j,
-                    "mic",
-                    mic_x,
-                    mic_y,
-                    mic_z,
-                    "m_mic",
-                    mic_mx,
-                    mic_my,
-                    mic_mz,
-                )
+                # print(
+                #     ifr,
+                #     i,
+                #     j,
+                #     "mic",
+                #     mic_x,
+                #     mic_y,
+                #     mic_z,
+                #     "m_mic",
+                #     mic_mx,
+                #     mic_my,
+                #     mic_mz,
+                # )
                 mic_label = Labels(
                     [
                         "structure",
@@ -316,11 +321,11 @@ def pair_features(
 
     # keep only the desired translations
     if desired_shifts is not None:
+        # print("Desired shifts", desired_shifts)
 
         blocks = []
 
         for i, (k, b) in enumerate(rho0_ij.items()):
-
             slab, sidx = labels_where(
                 b.samples,
                 selection=Labels(
@@ -477,6 +482,7 @@ def twocenter_hermitian_features(
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
                 ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
+
                 for smp_lo in range(smp_up, len(idx_lo)):
                     ij_lo = b.samples.view(["neighbor", "center"]).values[
                         idx_lo[smp_lo]
@@ -600,7 +606,7 @@ def twocenter_features_periodic_NH(
         positive_shifts_idx = []
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
-            idx_up = np.where(
+            idx_ij = np.where(
                 (b.samples["center"] <= b.samples["neighbor"])
                 & (b.samples["cell_shift_a"] >= 0)
                 & (b.samples["cell_shift_b"] >= 0)
@@ -608,54 +614,111 @@ def twocenter_features_periodic_NH(
             )[0]
             # zeroshift_idx = np.argwhere(np.all(np.array(b.samples.values.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"])==[0,0,0]), axis=1))
             # if b.samples["center"]
-            print(len(idx_up))
-            if len(idx_up) == 0:
+            # print(len(idx_up))
+            if len(idx_ij) == 0:
                 continue
-            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
-            if len(idx_lo) == 0:
+
+            if len(np.where(b.samples["center"] > b.samples["neighbor"])[0]) == 0:
                 print(
                     "Corresponding swapped pair not found",
-                    np.array(b.samples.values)[idx_up],
+                    np.array(b.samples.values)[idx_ij],
                 )
 
-            # else:
-            # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            smp_up, smp_lo = 0, 0
+
             idx_ji = []
             samplecopy = np.array(b.samples.values[:, :6])
 
-            for smp_up in range(len(idx_up)):
-                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+            # for smp_up in range(len(idx_up)):
+            for idx in idx_ij:
+                # Sample values except the MIC cell shifts
+                structure, i, j, Tx, Ty, Tz, _, _, _ = b.samples.values[idx]
 
-                structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
-                    idx_up[smp_up]
-                ]
+                # Invert i, j, and translation vector to define new sample
+                ji_entry = np.array([structure, j, i, -Tx, -Ty, -Tz])
 
-                ji_entry = np.array(
-                    [structure, j, i, -Tx, -Ty, -Tz]
-                )  # , -Mx, -My, -Mz])
+                # Find the index of the corresponding sample index in the block
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis=1))
+
+                # Ensure that there is only one matching sample
                 assert where_ji.shape == (1, 1), where_ji.shape
-                where_ji = where_ji[0, 0]
-                idx_ji.append(where_ji)
+                idx_ji.append(where_ji[0, 0])
+
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
 
+            # print("SHAPE", np.shape(idx_up), b.samples.values.shape)
+            # print("--------------------------------------")
+            # print("l", k["spherical_harmonics_l"])
+            # print(list(np.array(b.samples.values[idx_ij])[:3]))
+            # print(list(np.array(b.values[idx_ij])[:3]))
+            # print(list(np.array(b.samples.values[idx_ji])[:3]))
+            # print(list(np.array(b.values[idx_ji])[:3]))
+            # normdiff = torch.norm(b.values[idx_ij] - b.values[idx_ji], dim=(1, 2))
+            # wherediff = torch.where(normdiff != 0)
+            # assert torch.norm(b.values[idx_ij] - b.values[idx_ji]) == 0, (
+            #     b.samples.values[idx_ij][wherediff],
+            #     b.samples.values[idx_ji][wherediff],
+            #     torch.norm(b.values[idx_ij][wherediff] + b.values[idx_ji][wherediff]),
+            # )
+            # print("\n\n")
+            sample_label_ij = Labels(
+                b.samples.names,
+                np.array([[0, 0, 1, 1, 7, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 1, 7, 1, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 0, 4, 0, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 0, 1, 0, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 1, 4, 0, 0, 4, 0, 0]]),
+            )
+            sample_label_ji = Labels(
+                b.samples.names,
+                np.array([[0, 1, 0, -1, -7, 0, 0, 0, 0]]),
+                # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
+                # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
+                # np.array([[0, 1, 0, -4, 0, 0, 4, 0, 0]]),
+            )
+            pos_ij = np.where(
+                np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
+            )[0]
+
+            # pos_ij = b.samples.position(sample_label_ij[0])
+            pos_ji = np.where(
+                np.all(b.samples.values[:, :6] == sample_label_ji.values[:, :6], axis=1)
+            )[0]
+
+            print("l", k["spherical_harmonics_l"])
+            print(
+                "values",
+                torch.norm(
+                    b.values[pos_ij]
+                    - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji]
+                ),
+                torch.norm(b.values[pos_ij] - b.values[pos_ji]),
+                torch.norm(b.values[pos_ij] + b.values[pos_ji]),
+                b.values[pos_ij],
+                b.values[pos_ji],
+                torch.norm(b.values[pos_ij]),
+                torch.norm(b.values[pos_ji]),
+                pos_ij,
+                b.samples.values[pos_ij],
+                pos_ji,
+                b.samples.values[pos_ji],
+            )
             blocks.append(
                 TensorBlock(
                     samples=Labels(
                         names=b.samples.names,
                         values=np.asarray(
-                            b.samples.values[idx_up]  # [positive_shifts_idx]
+                            b.samples.values[idx_ij]  # [positive_shifts_idx]
                         ),
                     ),
                     components=b.components,
                     properties=b.properties,
                     # values=b.values[idx_up],
-                    values=(b.values[idx_up] + b.values[idx_ji]),
+                    values=(b.values[idx_ij] + b.values[idx_ji]),
                     # / 2,  # idx_lo
                 )
             )
@@ -664,13 +727,13 @@ def twocenter_features_periodic_NH(
                     samples=Labels(
                         names=b.samples.names,
                         values=np.asarray(
-                            b.samples.values[idx_up]  # [positive_shifts_idx]
+                            b.samples.values[idx_ij]  # [positive_shifts_idx]
                         ),
                     ),
                     components=b.components,
                     properties=b.properties,
                     # values=b.values[idx_ji],  ##[idx_ji],
-                    values=(b.values[idx_up] - b.values[idx_ji]),
+                    values=(b.values[idx_ij] - b.values[idx_ji]),
                 )
             )
 

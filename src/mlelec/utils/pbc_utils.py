@@ -63,7 +63,7 @@ def scidx_to_mic_translation(
             #     return -np.asarray(mic_T)
         else:
             # If the distances are equal, choose the T that has the first non-zero component posiviely signed
-            idx = np.where(~(np.sign(rij_T) == np.sign(rij_mT)))
+            idx = np.where(~(np.sign(mic_T) == np.sign(-np.asarray(mic_T))))
 
             if len(idx[0]) == 0:
                 assert np.linalg.norm(mic_T) == 0, mic_T
@@ -103,6 +103,7 @@ def scidx_to_mic_translation(
     # print("bef", mic_T, mic_minusT, end=" ")
     mic_T, fixed_plus = fix_translation_sign(frame, mic_T, I, j)
     mic_minusT, fixed_minus = fix_translation_sign(frame, mic_minusT, j, I)
+    # fixed_plus = fixed_minus = False
     # print("aft", mic_T, mic_minusT)
     if ifprint:
         print(cell_inv @ d)
