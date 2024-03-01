@@ -95,6 +95,7 @@ def pair_features(
     device="cpu",
     kmesh=None,
     desired_shifts=None,
+    counter = None,
     mic=False,
     return_rho0ij=False,
     **kwargs,
@@ -120,6 +121,7 @@ def pair_features(
     calculator = PairExpansion(**hypers_pair)
     rho0_ij = calculator.compute(frames, use_native_system=use_native)
     factor = 1
+
     if all_pairs:
         if mic:
             factor = 1  # we only need half the cell - so we use half the cutoff
@@ -130,12 +132,7 @@ def pair_features(
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
             )
-            # nmax = int(
-            #     hypers_allpairs["max_radial"]
-            #     / hypers["cutoff"]
-            #     * hypers_allpairs["cutoff"]
-            # )
-            # hypers_allpairs["max_radial"] = nmax
+           
         elif max_shift is not None:
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
@@ -152,7 +149,7 @@ def pair_features(
         print("hypers_pair", hypers_allpairs)
         calculator_allpairs = PairExpansion(**hypers_allpairs)
 
-        rho0_ij = calculator_allpairs.compute(frames, use_native_system=use_native)
+        rho0_ij = calculator_allpairs.compute(frames, use_native_system = use_native)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
@@ -170,97 +167,41 @@ def pair_features(
         blocks = []
 
         for key, block in rho0_ij.items():
-            if key["spherical_harmonics_l"] % 2 == 1:
-                mic_phase = -1  # FIXME: should be -1
-            else:
-                mic_phase = 1
+            
             all_frIJ = np.unique(block.samples.values[:, :3], axis=0)
             value_indices = []
             fixed_sample = []
-            fixed_mic = []
-            all_samples = [
-                (*a, x, y, z)
-                for a in all_frIJ
-                for x in range(kmesh[0])
-                for y in range(kmesh[1])
-                for z in range(kmesh[2])
-            ]
-            for s in all_samples:
-                ifr, i, j, x, y, z = s
+            # all_samples = [
+            #     (*a, x, y, z)
+            #     for a in all_frIJ
+            #     # for x in range(kmesh[0])
+            #     # for y in range(kmesh[1])
+            #     # for z in range(kmesh[2])
+            #     for x,y,z in desired_shifts[frame_idx]
+            # ]
+            # for s in all_samples:
+            for ifr, i, j in all_frIJ:
+                
+                # for x, y, z in desired_shifts[ifr]:
+                T_keys = list(counter.keys())
+                T_is_allowed = True
+                for iT, T in enumerate(T_keys):
+                    if not T_is_allowed:
+                        T_is_allowed = True
+                        continue
+                    # print(iT,T)
 
-                if i == j and [x, y, z] == [0, 0, 0]:
-                    continue
-                if x < 0 or y < 0 or z < 0:
-                    continue
-                if i == 0 and j == 0 and x == 4 and y == 0 and z == 0:
-                    print("here")
-                (
-                    (mic_x, mic_y, mic_z),
-                    (mic_mx, mic_my, mic_mz),
-                    fixed_plus,
-                    fixed_minus,
-                ) = scidx_to_mic_translation(
-                    frames[ifr],
-                    I=i,
-                    J=scidx_from_unitcell(
-                        frames[ifr], j=j, T=[x, y, z], kmesh=kmesh
-                    ),  # TODO - kmesh[ifr] - nonunofrm kmesh across structrues
-                    j=j,
-                    kmesh=kmesh,
-                )
-                # print(
-                #     ifr,
-                #     i,
-                #     j,
-                #     "mic",
-                #     mic_x,
-                #     mic_y,
-                #     mic_z,
-                #     "m_mic",
-                #     mic_mx,
-                #     mic_my,
-                #     mic_mz,
-                # )
-                mic_label = Labels(
-                    [
-                        "structure",
-                        "center",
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c",
-                    ],
-                    values=np.asarray(
-                        [
-                            ifr,
-                            i,
-                            j,
-                            mic_x,
-                            mic_y,
-                            mic_z,
-                        ]
-                    ).reshape(1, -1),
-                )[0]
-                mappedidx = block.samples.position(mic_label)
+                    if i == j and list(T) == [0, 0, 0]:
+                        continue
 
-                assert isinstance(mappedidx, int), (mappedidx, mic_label)
-                fixed_mic.append(mic_phase**fixed_plus)
-                value_indices.append(mappedidx)
-                fixed_sample.append(
-                    [
-                        ifr,
-                        i,
-                        j,
-                        x,
-                        y,
-                        z,
-                        mic_x,
-                        mic_y,
-                        mic_z,
-                    ]
-                )
-
-                if [x, y, z] != [0, 0, 0]:
+                    if counter[T][i,j] != 0:
+                        x, y, z = T
+                    else:
+                        print(iT,T,i,j)
+                        assert counter[T_keys[iT+1]][i,j] != 0, (T_keys[iT+1], i, j, counter[T_keys[iT+1]][i,j])
+                        x, y, z = T_keys[iT+1]
+                        T_is_allowed = False
+                    
                     mic_label = Labels(
                         [
                             "structure",
@@ -273,43 +214,70 @@ def pair_features(
                         values=np.asarray(
                             [
                                 ifr,
-                                j,
                                 i,
-                                mic_mx,
-                                mic_my,
-                                mic_mz,
+                                j,
+                                x,
+                                y,
+                                z
                             ]
                         ).reshape(1, -1),
                     )[0]
                     mappedidx = block.samples.position(mic_label)
 
                     assert isinstance(mappedidx, int), (mappedidx, mic_label)
-                    fixed_mic.append(mic_phase**fixed_minus)
                     value_indices.append(mappedidx)
                     fixed_sample.append(
                         [
                             ifr,
-                            j,
                             i,
-                            -x,
-                            -y,
-                            -z,
-                            mic_mx,
-                            mic_my,
-                            mic_mz,
+                            j,
+                            T[0], # Here we still label features with the original T
+                            T[1],
+                            T[2],
                         ]
                     )
 
+                    if [x, y, z] != [0, 0, 0]:
+                        mic_label = Labels(
+                            [
+                                "structure",
+                                "center",
+                                "neighbor",
+                                "cell_shift_a",
+                                "cell_shift_b",
+                                "cell_shift_c",
+                            ],
+                            values=np.asarray(
+                                [
+                                    ifr,
+                                    j,
+                                    i,
+                                    -x,
+                                    -y,
+                                    -z,
+                                ]
+                            ).reshape(1, -1),
+                        )[0]
+                        mappedidx = block.samples.position(mic_label)
+
+                        assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                        value_indices.append(mappedidx)
+                        fixed_sample.append(
+                            [
+                                ifr,
+                                j,
+                                i,
+                                -T[0],
+                                -T[1],
+                                -T[2],
+                            ]
+                        )
+
             blocks.append(
                 TensorBlock(
-                    values=torch.einsum(
-                        "scp,s-> scp",
-                        block.values[value_indices],
-                        torch.tensor(fixed_mic),
-                    ),
+                    values=block.values[value_indices],
                     samples=Labels(
-                        block.samples.names
-                        + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
+                        block.samples.names,
                         np.asarray(fixed_sample),
                     ),
                     components=block.components,
@@ -318,38 +286,6 @@ def pair_features(
             )
 
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-
-    # keep only the desired translations
-    if desired_shifts is not None:
-        # print("Desired shifts", desired_shifts)
-
-        blocks = []
-
-        for i, (k, b) in enumerate(rho0_ij.items()):
-            slab, sidx = labels_where(
-                b.samples,
-                selection=Labels(
-                    names=["cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                    values=np.array(desired_shifts[:]).reshape(-1, 3),
-                ),
-                return_idx=True,
-            )  # only retain tranlsations that we want - DONT SKIP
-            # slab, sidx = labels_where(b.samples, selection=Labels(names=["cell_shift_a", "cell_shift_b", "cell_shift_c"], values=np.array(desired_shifts1[:]).reshape(-1,3)), return_idx=True) # only retain tranlsations that we want - DONT SKIP
-
-            blocks.append(
-                TensorBlock(
-                    values=b.values[sidx],
-                    components=b.components,
-                    samples=Labels(
-                        names=b.samples.names, values=np.asarray(b.samples.values[sidx])
-                    ),
-                    properties=b.properties,
-                )
-            )
-        rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-        if return_rho0ij:
-            return rho0_ij
-    # ------------------------
 
     if isinstance(order_nu, list):
         assert (

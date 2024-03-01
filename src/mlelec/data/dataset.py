@@ -917,21 +917,34 @@ class PySCFPeriodicDataset(Dataset):
         pass
 
     def set_matrices_translation(self, matrices_translation):
-        self.matrices_translation = {key: [] for key in matrices_translation[0]}
-        [
-            self.matrices_translation[tuple(k)].append(
-                matrices_translation[ifr][tuple(k)]
-            )
-            for ifr in range(self.nstructs)
-            for k in matrices_translation[0]  # matrices_translation[ifr].keys() TOCHECK
-        ]
+        # self.matrices_translation = matrices_translation
+        # [
+        #     self.matrices_translation[tuple(k)].append(
+        #         matrices_translation[ifr][tuple(k)]
+        #     )
+        #     for ifr in range(self.nstructs)
+        #     for k in matrices_translation[0]  # matrices_translation[ifr].keys() TOCHECK
+        # ]
 
-        for k in matrices_translation[0]:  # self.matrices_translation.keys(): TOCHECK
-            self.matrices_translation[tuple(k)] = torch.stack(
-                self.matrices_translation[tuple(k)]
-            )
+        # for k in matrices_translation[0]:  # self.matrices_translation.keys(): TOCHECK
+        #     self.matrices_translation[tuple(k)] = torch.stack(
+        #         self.matrices_translation[tuple(k)]
+        #     )
 
-        self.desired_shifts = list(matrices_translation[0].keys())
+        self.matrices_translation = []
+        for m in matrices_translation:
+            self.matrices_translation.append({})
+            for k in m:
+                if isinstance(m[k], torch.Tensor):
+                    self.matrices_translation[-1][k] = m[k]
+                elif isinstance(m[k], np.ndarray):
+                    self.matrices_translation[-1][k] = torch.from_numpy(m[k])
+                elif isinstance(m[k], list):
+                    self.matrices_translation[-1][k] = torch.tensor(m[k])
+                else:
+                    raise ValueError('matrices_translation should be one among torch.tensor, numpy.ndarray, or list')
+        
+        self.desired_shifts = [list(matrices_translation.keys()) for matrices_translation in self.matrices_translation]
 
     def __len__(self):
         return self.nstructs
