@@ -1,7 +1,9 @@
 src/mlelec.egg-info/
-*__pycache__*
+**/*.ipynb_checkpoints
+**/__pycache__*
 *.pt
 tmp* 
-*.pyc
+**/*.pyc
 *.code-workspace
 *.npz
+

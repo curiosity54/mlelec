@@ -137,7 +137,9 @@ from mlelec.utils.twocenter_utils import (
 import torch
 
 
-def matrix_to_blocks(dataset, device=None):
+def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
+    from mlelec.utils.metatensor_utils import TensorBuilder
+
     if device is None:
         device = dataset.device
 
@@ -157,6 +159,7 @@ def matrix_to_blocks(dataset, device=None):
     property_names = ["dummy"]
     property_values = np.asarray([[0]])
     component_names = [["m_i"], ["m_j"]]
+
     # multiplicity
     orbs_mult = {}
     for species in dataset.basis:
@@ -170,21 +173,6 @@ def matrix_to_blocks(dataset, device=None):
         unique_orbs = np.asarray(dataset.basis[species])[orbidx[idx]][:, :2]
         orbs_mult[species] = {tuple(k): v for k, v in zip(unique_orbs, count[idx])}
 
-    ##-- returns SORTED
-    # orbs_mult = {
-    #     species: {
-    #         tuple(k): v
-    #         for k, v in zip(
-    #             *np.unique(
-    #                 np.asarray(dataset.basis[species])[:, :2],
-    #                 axis=0,
-    #                 return_counts=True,
-    #             )
-    #         )
-    #     }
-    #     for species in dataset.basis
-    # }
-    # print(orbs_mult,'A')
     kmesh = dataset.kmesh
     block_builder = TensorBuilder(
         key_names,
@@ -194,11 +182,24 @@ def matrix_to_blocks(dataset, device=None):
     )
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
     matrices = dataset.matrices_translation
-    for T in dataset.desired_shifts:
-        for A in range(len(dataset.structures)):
-            frame = dataset.structures[A]
-            matrixT = matrices[tuple(T)][A]
-            matrixmT = matrices[tuple(np.mod(-np.array(T), kmesh[A]))][A]
+    # for T in dataset.desired_shifts: # Loop over translations given in input
+
+    for A in range(len(dataset.structures)):  # Loop over frames
+
+        frame = dataset.structures[A]
+
+        for T in dataset.matrices_translation[
+            A
+        ]:  # Loop over the actual translations (in MIC) which label dataset.matrices_translation
+
+            matrixT = matrices[A][T]
+
+            # "Old": look for the matrix associated with the negative translation among the H(T)s
+            # matrixmT = matrices[tuple(np.mod(-np.array(T), kmesh[A]))][A]
+
+            # New: take the H given in input and labeled by the same T
+            matrixmT = negative_shift_matrices[A][T]
+
             if isinstance(matrixT, np.ndarray):
                 matrixT = torch.from_numpy(matrixT).to(device)
                 matrixmT = torch.from_numpy(matrixmT).to(device)
@@ -211,6 +212,7 @@ def matrix_to_blocks(dataset, device=None):
                 orbs_i = orbs_mult[ai]
                 j_start = 0
                 for j, aj in enumerate(frame.numbers):
+                    # print('j,aj,frame', j, aj, frame)
                     orbs_j = orbs_mult[aj]
                     # add what kind of blocks we expect in the tensormap
                     n1l1n2l2 = np.concatenate(
@@ -222,6 +224,9 @@ def matrix_to_blocks(dataset, device=None):
                         i_start : i_start + orbs_tot[ai],
                         j_start : j_start + orbs_tot[aj],
                     ]
+
+                    # print(block_ij.shape)
+
                     block_split = [
                         torch.split(blocki, list(orbs_j.values()), dim=1)
                         for blocki in torch.split(
@@ -247,6 +252,7 @@ def matrix_to_blocks(dataset, device=None):
                                 j_start : j_start + orbs_tot[aj],
                                 i_start : i_start + orbs_tot[ai],
                             ]
+                            # print(block_jimT.shape)
                             # print(block_jimT.shape, block_ij.shape, iorbital, i, j, ai, aj, ni, li, nj, lj, T, matrixT.shape, matrixmT.shape)
                             block_jimT_split = [
                                 torch.split(blocki, list(orbs_i.values()), dim=1)

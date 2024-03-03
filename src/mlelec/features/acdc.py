@@ -95,9 +95,10 @@ def pair_features(
     device="cpu",
     kmesh=None,
     desired_shifts=None,
-    counter = None,
+    counter=None,
     mic=False,
     return_rho0ij=False,
+    where_Ts_allowed=None,
     **kwargs,
 ):
     """
@@ -132,7 +133,7 @@ def pair_features(
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
             )
-           
+
         elif max_shift is not None:
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
@@ -149,7 +150,7 @@ def pair_features(
         print("hypers_pair", hypers_allpairs)
         calculator_allpairs = PairExpansion(**hypers_allpairs)
 
-        rho0_ij = calculator_allpairs.compute(frames, use_native_system = use_native)
+        rho0_ij = calculator_allpairs.compute(frames, use_native_system=use_native)
 
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
@@ -165,43 +166,38 @@ def pair_features(
         # we should add the missing samples
         warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
         blocks = []
+        blocks_minus = []
 
         for key, block in rho0_ij.items():
-            
+
             all_frIJ = np.unique(block.samples.values[:, :3], axis=0)
             value_indices = []
+            value_indices_minus = []
             fixed_sample = []
-            # all_samples = [
-            #     (*a, x, y, z)
-            #     for a in all_frIJ
-            #     # for x in range(kmesh[0])
-            #     # for y in range(kmesh[1])
-            #     # for z in range(kmesh[2])
-            #     for x,y,z in desired_shifts[frame_idx]
-            # ]
-            # for s in all_samples:
+            fixed_sample_minus = []
             for ifr, i, j in all_frIJ:
-                
-                # for x, y, z in desired_shifts[ifr]:
+                # Should we instead loop over the keys of H_T_fix- No
+                # because we need to associate feats labelled with T to T[iT+1] where T_is not allowd
                 T_keys = list(counter.keys())
-                T_is_allowed = True
                 for iT, T in enumerate(T_keys):
-                    if not T_is_allowed:
-                        T_is_allowed = True
-                        continue
-                    # print(iT,T)
-
                     if i == j and list(T) == [0, 0, 0]:
                         continue
+                    T_is_allowed = where_Ts_allowed[T]
+                    if not T_is_allowed:
+                        print("Skipping", T)
+                        continue
 
-                    if counter[T][i,j] != 0:
+                    if counter[T][i, j] != 0:
                         x, y, z = T
                     else:
-                        print(iT,T,i,j)
-                        assert counter[T_keys[iT+1]][i,j] != 0, (T_keys[iT+1], i, j, counter[T_keys[iT+1]][i,j])
-                        x, y, z = T_keys[iT+1]
-                        T_is_allowed = False
-                    
+                        assert counter[T_keys[iT + 1]][i, j] != 0, (
+                            T_keys[iT + 1],
+                            i,
+                            j,
+                            counter[T_keys[iT + 1]],
+                        )
+                        x, y, z = T_keys[iT + 1]
+
                     mic_label = Labels(
                         [
                             "structure",
@@ -211,16 +207,7 @@ def pair_features(
                             "cell_shift_b",
                             "cell_shift_c",
                         ],
-                        values=np.asarray(
-                            [
-                                ifr,
-                                i,
-                                j,
-                                x,
-                                y,
-                                z
-                            ]
-                        ).reshape(1, -1),
+                        values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
                     )[0]
                     mappedidx = block.samples.position(mic_label)
 
@@ -231,12 +218,12 @@ def pair_features(
                             ifr,
                             i,
                             j,
-                            T[0], # Here we still label features with the original T
+                            T[0],  # Here we still label features with the original T
                             T[1],
                             T[2],
                         ]
                     )
-
+                    # print("1 adding", ifr, i, j, T[0], T[1], T[2], x, y, z)
                     if [x, y, z] != [0, 0, 0]:
                         mic_label = Labels(
                             [
@@ -272,13 +259,17 @@ def pair_features(
                                 -T[2],
                             ]
                         )
-
+            # print(len(value_indices), len(fixed_sample))
+            value_indices, value_pos = np.unique(value_indices, return_index=True)
+            # print(np.unique(np.asarray(fixed_sample)[value_pos], axis=0).shape)
+            fixed_sample = np.asarray(fixed_sample)[value_pos]
+            
             blocks.append(
                 TensorBlock(
                     values=block.values[value_indices],
                     samples=Labels(
                         block.samples.names,
-                        np.asarray(fixed_sample),
+                        fixed_sample,
                     ),
                     components=block.components,
                     properties=block.properties,
@@ -286,7 +277,11 @@ def pair_features(
             )
 
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-
+        # rho0_ij_minus = TensorMap(keys=rho0_ij.keys, blocks=blocks_minus)
+    
+    if mic and return_rho0ij:
+        return rho0_ij#, rho0_ij_minus   
+    
     if isinstance(order_nu, list):
         assert (
             len(order_nu) == 2
@@ -368,121 +363,12 @@ def pair_features(
 # rhoMPij = cg_increment(rhoMPi, rho0_ij, lcut=lcut, other_keys_match=["species_center"], clebsch_gordan=cg)
 
 
-def twocenter_hermitian_features(
-    single_center: TensorMap,
-    pair: TensorMap,
-) -> TensorMap:
-    # keep this function only for molecules - hanldle 000 shift using hermitian PBC - MIC mapping #FIXME
-    # actually special class of features for Hermitian (rank2 tensor)
-    keys = []
-    blocks = []
-    if single_center is not None:
-
-        for k, b in single_center.items():
-            keys.append(
-                tuple(k)
-                + (
-                    k["species_center"],
-                    0,
-                )
-            )
-            # `Try to handle the case of no computed features
-            if len(list(b.samples.values)) == 0:
-                samples_array = b.samples
-            else:
-                samples_array = np.asarray(b.samples.values)
-                samples_array = np.hstack([samples_array, samples_array[:, -1:]])
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names + ["neighbor"],
-                        values=samples_array,
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values,
-                )
-            )
-
-    for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:
-            # off-site, same species
-            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
-            if len(idx_up) == 0:
-                continue
-            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
-
-            # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            smp_up, smp_lo = 0, 0
-            for smp_up in range(len(idx_up)):
-                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
-                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
-
-                for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples.view(["neighbor", "center"]).values[
-                        idx_lo[smp_lo]
-                    ]
-                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
-                    if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
-                    ):
-                        raise ValueError(
-                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
-                        )
-                    if tuple(ij) == tuple(ij_lo):
-                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
-                        break
-
-            keys.append(tuple(k) + (1,))
-            keys.append(tuple(k) + (-1,))
-
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
-                )
-            )
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
-                )
-            )
-        elif k["species_center"] < k["species_neighbor"]:
-            # off-site, different species
-            keys.append(tuple(k) + (2,))
-            blocks.append(b.copy())
-    keys = np.pad(keys, ((0, 0), (0, 6)))
-    return TensorMap(
-        keys=Labels(
-            names=pair.keys.names
-            + ["block_type"]
-            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"]
-            + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
-            values=np.asarray(keys, dtype=np.int32),
-        ),
-        blocks=blocks,
-    )
-
-
 def twocenter_features_periodic_NH(
     single_center: TensorMap, pair: TensorMap, shift=None
 ) -> TensorMap:
     # no hermitian symmetry
-    if shift == [0, 0, 0]:
-        return twocenter_hermitian_features(single_center, pair)
+    # if shift == [0, 0, 0]:
+    #     return twocenter_hermitian_features(single_center, pair)
 
     keys = []
     blocks = []
@@ -510,11 +396,11 @@ def twocenter_features_periodic_NH(
                         "cell_shift_a",
                         "cell_shift_b",
                         "cell_shift_c",
-                        "cell_shift_a_MIC",
-                        "cell_shift_b_MIC",
-                        "cell_shift_c_MIC",
+                        # "cell_shift_a_MIC",
+                        # "cell_shift_b_MIC",
+                        # "cell_shift_c_MIC",
                     ],
-                    values=np.pad(samples_array, ((0, 0), (0, 6))),
+                    values=np.pad(samples_array, ((0, 0), (0, 3))),
                 ),
                 components=b.components,
                 properties=b.properties,
@@ -523,7 +409,7 @@ def twocenter_features_periodic_NH(
         )
 
     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
-    for k, b in pair.items():
+    for (k, b) in pair.items():
         if k["species_center"] == k["species_neighbor"]:  # self translared pairs
             # idx = []
             idx = np.where(
@@ -544,13 +430,11 @@ def twocenter_features_periodic_NH(
             # off-site, same species
             idx_ij = np.where(
                 (b.samples["center"] <= b.samples["neighbor"])
-                & (b.samples["cell_shift_a"] >= 0)
-                & (b.samples["cell_shift_b"] >= 0)
-                & (b.samples["cell_shift_c"] >= 0)
+                # & (b.samples["cell_shift_a"] >= 0)
+                # & (b.samples["cell_shift_b"] >= 0)
+                # & (b.samples["cell_shift_c"] >= 0)
             )[0]
-            # zeroshift_idx = np.argwhere(np.all(np.array(b.samples.values.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"])==[0,0,0]), axis=1))
-            # if b.samples["center"]
-            # print(len(idx_up))
+
             if len(idx_ij) == 0:
                 continue
 
@@ -569,8 +453,7 @@ def twocenter_features_periodic_NH(
             # for smp_up in range(len(idx_up)):
             for idx in idx_ij:
                 # Sample values except the MIC cell shifts
-                structure, i, j, Tx, Ty, Tz, _, _, _ = b.samples.values[idx]
-
+                structure, i, j, Tx, Ty, Tz = b.samples.values[idx]
                 # Invert i, j, and translation vector to define new sample
                 ji_entry = np.array([structure, j, i, -Tx, -Ty, -Tz])
 
@@ -580,7 +463,6 @@ def twocenter_features_periodic_NH(
                 # Ensure that there is only one matching sample
                 assert where_ji.shape == (1, 1), where_ji.shape
                 idx_ji.append(where_ji[0, 0])
-
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
@@ -602,11 +484,11 @@ def twocenter_features_periodic_NH(
             # print("\n\n")
             sample_label_ij = Labels(
                 b.samples.names,
-                # np.array([[0, 0, 1, 1, 4, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 1, 7, 1, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 0, 4, 0, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 0, 1, 0, 0, 0, 0, 0]]),
-                np.array([[0, 0, 1, 4, 0, 0, 4, 0, 0]]),
+                # np.array([[0, 0, 1, 1, 4, 0]),
+                # np.array([[0, 0, 1, 7, 1, 0]]),
+                # np.array([[0, 0, 0, 4, 0, 0]]),
+                # np.array([[0, 0, 0, 1, 0, 0]]),
+                np.array([[0, 0, 1, 4, 0, 0]]),
             )
             sample_label_ji = Labels(
                 b.samples.names,
@@ -614,7 +496,7 @@ def twocenter_features_periodic_NH(
                 # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
                 # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
-                np.array([[0, 1, 0, -4, 0, 0, 4, 0, 0]]),
+                np.array([[0, 1, 0, -4, 0, 0]]),
             )
             pos_ij = np.where(
                 np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
