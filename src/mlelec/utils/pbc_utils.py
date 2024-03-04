@@ -206,6 +206,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
             else:
                 matrixT = matrixT.to(device)
                 matrixmT = matrixmT.to(device)
+            assert np.isclose( torch.norm(matrixT - matrixmT.T).item(), 0.0), (T, torch.norm(matrixT), torch.norm(matrixmT), torch.norm(matrixT - matrixmT.T), matrixT.shape, matrixmT.shape)
 
             i_start = 0
             for i, ai in enumerate(frame.numbers):
@@ -215,58 +216,34 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                     # print('j,aj,frame', j, aj, frame)
                     orbs_j = orbs_mult[aj]
                     # add what kind of blocks we expect in the tensormap
-                    n1l1n2l2 = np.concatenate(
-                        [[k2 + k1 for k1 in orbs_i] for k2 in orbs_j]
-                    )
+                    n1l1n2l2 = np.concatenate([[k2 + k1 for k1 in orbs_i] for k2 in orbs_j])
 
                     # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
-                    block_ij = matrixT[
-                        i_start : i_start + orbs_tot[ai],
-                        j_start : j_start + orbs_tot[aj],
-                    ]
+                    block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
 
-                    # print(block_ij.shape)
+                    block_split = [torch.split(blocki, list(orbs_j.values()), dim = 1) for blocki in torch.split(block_ij, list(orbs_i.values()), dim=0)]
+                    block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
-                    block_split = [
-                        torch.split(blocki, list(orbs_j.values()), dim=1)
-                        for blocki in torch.split(
-                            block_ij, list(orbs_i.values()), dim=0
-                        )
-                    ]
-                    block_split = [
-                        y for x in block_split for y in x
-                    ]  # flattening the list of lists above
-
-                    for iorbital, ((ni, li, nj, lj), value) in enumerate(
-                        zip(n1l1n2l2, block_split)
-                    ):
+                    for iorbital, ((ni, li, nj, lj), value) in enumerate(zip(n1l1n2l2, block_split)):
 
                         if i == j and np.linalg.norm(T) == 0:
+                            # On-site
                             block_type = 0
                             key = (block_type, ai, ni, li, aj, nj, lj, *T)
 
                         elif (ai == aj) or (i == j and T != [0, 0, 0]):
+                            # Same species interaction
                             block_type = 1
                             key = (block_type, ai, ni, li, aj, nj, lj, *T)
-                            block_jimT = matrixmT[
-                                j_start : j_start + orbs_tot[aj],
-                                i_start : i_start + orbs_tot[ai],
-                            ]
+                            block_jimT = matrixmT[j_start : j_start + orbs_tot[aj], i_start : i_start + orbs_tot[ai]]
+                            # block_jimT = matrixmT[i_start : i_start + orbs_tot[aj], j_start : j_start + orbs_tot[ai]]
                             # print(block_jimT.shape)
                             # print(block_jimT.shape, block_ij.shape, iorbital, i, j, ai, aj, ni, li, nj, lj, T, matrixT.shape, matrixmT.shape)
-                            block_jimT_split = [
-                                torch.split(blocki, list(orbs_i.values()), dim=1)
-                                for blocki in torch.split(
-                                    block_jimT, list(orbs_j.values()), dim=0
-                                )
-                            ]
-                            block_jimT_split = [
-                                y for x in block_jimT_split for y in x
-                            ]  # flattening the list of lists above
-                            value_ji = block_jimT_split[
-                                iorbital
-                            ]  # same orbital in the ji subblock
+                            block_jimT_split = [torch.split(blocki, list(orbs_i.values()), dim=1) for blocki in torch.split(block_jimT, list(orbs_j.values()), dim = 0)]
+                            block_jimT_split = [y for x in block_jimT_split for y in x]  # flattening the list of lists above
+                            value_ji = block_jimT_split[iorbital]  # same orbital in the ji subblock
                         else:
+                            # Different species interaction
                             # skip ai>aj
                             block_type = 2
                             key = (block_type, ai, ni, li, nj, lj, *T)
@@ -274,19 +251,12 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
 
                         if key not in block_builder.blocks:
                             # add blocks if not already present
-                            block = block_builder.add_block(
-                                key=key,
-                                properties=property_values,
-                                components=[_components_idx(li), _components_idx(lj)],
-                            )
+                            block = block_builder.add_block(key=key, properties=property_values, components=[_components_idx(li), _components_idx(lj)])
                             if block_type == 1:
                                 block = block_builder.add_block(
                                     key=(-1,) + key[1:],
                                     properties=property_values,
-                                    components=[
-                                        _components_idx(li),
-                                        _components_idx(lj),
-                                    ],
+                                    components=[_components_idx(li), _components_idx(lj)],
                                 )
 
                         # add samples to the blocks when present
@@ -295,8 +265,8 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                             block_asym = block_builder.blocks[(-1,) + key[1:]]
 
                         if block_type == 1:
-                            if i > j:  # keep only (i,j) and not (j,i)
-                                continue
+                            # if i > j:  # keep only (i,j) and not (j,i)
+                                # continue
                             # bplus = value
                             bplus = (value + value_ji) * ISQRT_2
                             # bminus = value_ji
@@ -329,12 +299,12 @@ def blocks_to_matrix(blocks, dataset, device=None):
     if device is None:
         device = dataset.device
     kmesh = dataset.kmesh
-    rmatrices = {tuple(T): [] for T in dataset.desired_shifts}
+
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
     orbs_mult = {
-        species: {
-            tuple(k): v
+        species: 
+                {tuple(k): v
             for k, v in zip(
                 *np.unique(
                     np.asarray(dataset.basis[species])[:, :2],
@@ -345,20 +315,23 @@ def blocks_to_matrix(blocks, dataset, device=None):
         }
         for species in dataset.basis
     }
-    for T in dataset.desired_shifts:
 
-        for A in range(len(dataset.structures)):
-            norbs = 0
-            for ai in dataset.structures[A].numbers:
-                norbs += orbs_tot[ai]  # total number of orbitals in the frame
-            matrix = torch.zeros(norbs, norbs, device=device)
-            rmatrices[tuple(T)].append(matrix)
+    reconstructed_matrices_plus = []
+    reconstructed_matrices_minus = []
+
+    # Loop over frames
+    for A, shifts in enumerate(dataset.desired_shifts):
+        norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+
+        reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
+        reconstructed_matrices_minus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
 
     # loops over block types
     for key, block in blocks.items():
         # dense idx and cur_A track the frame
-        mat_idx = -1
-        iframe = -1
+        # mat_idx = -1
+        # iframe = -1
+
         block_type = key["block_type"]
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
@@ -370,69 +343,64 @@ def blocks_to_matrix(blocks, dataset, device=None):
             for k1 in orbs_i
             for k2 in orbs_j
         }
+
         ioffset = orbs_offset[(ai, ni, li)]
         joffset = orbs_offset[(aj, nj, lj)]
 
-        j_end = joffset + shapes[(ni, li, nj, lj)][1]
+        # j_end = joffset + shapes[(ni, li, nj, lj)][1]
+        # print('jend 1')
+
         # loops over samples (structure, i, j)
         for sample, blockval in zip(block.samples, block.values):
+            
             A = sample["structure"]
             i = sample["center"]
             j = sample["neighbor"]
-            # check if we have to update the frame and index
-            if i == j and np.linalg.norm([Tx, Ty, Tz]) > 0:
-                # if i==j and np.linalg.norm([Tx,Ty,Tz])>0:
-                # we are writing to the matrix twice when T =T and T = mT
-                factor = 2
-            else:
-                factor = 1
-            if A != iframe:
-                iframe = A
-                mat_idx += 1
 
-            matrixT = rmatrices[Tx, Ty, Tz][mat_idx]
-            matrixmT = rmatrices[tuple(np.mod(-np.array([Tx, Ty, Tz]), kmesh[A]))][
-                mat_idx
-            ]
+
+            matrix_T_plus  = reconstructed_matrices_plus[A][Tx, Ty, Tz]
+            matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
             i_start, j_start = atom_blocks_idx[(A, i, j)]
             i_end = shapes[(ni, li, nj, lj)][0]  # orb end
             j_end = shapes[(ni, li, nj, lj)][1]  # orb end
 
-            # print(Tx,Ty, Tz, block_type, (ni,li, nj,lj), i_start+ioffset, i_start+ioffset+i_end, j_start+joffset, j_start+joffset+j_end)
+            # print()
+            # print((i,j),(ni, li, nj, lj), (i_start + ioffset, i_start + ioffset + i_end), (j_start + joffset, j_start + joffset + j_end))
 
-            values = blockval[:, :, 0].clone()
-            values = values.reshape(2 * li + 1, 2 * lj + 1)
-            values = values / factor
+            values = blockval[:, :, 0].clone().reshape(2 * li + 1, 2 * lj + 1)
 
             # position of the orbital within this block
 
             if block_type == 0 or block_type == 2:
-                matrixT[
+
+                matrix_T_plus[
                     i_start + ioffset : i_start + ioffset + i_end,
                     j_start + joffset : j_start + joffset + j_end,
                 ] = values
+
             if abs(block_type) == 1:
+
                 values *= ISQRT_2
                 if block_type == 1:
-                    matrixT[
+                    matrix_T_plus[
                         i_start + ioffset : i_start + ioffset + i_end,
                         j_start + joffset : j_start + joffset + j_end,
                     ] += values
-                    matrixmT[
+                    matrix_T_minus[
                         j_start + ioffset : j_start + ioffset + i_end,
                         i_start + joffset : i_start + joffset + j_end,
                     ] += values
                 else:
-                    matrixT[
+                    matrix_T_plus[
                         i_start + ioffset : i_start + ioffset + i_end,
                         j_start + joffset : j_start + joffset + j_end,
                     ] += values
-                    matrixmT[
+                    matrix_T_minus[
                         j_start + ioffset : j_start + ioffset + i_end,
                         i_start + joffset : i_start + joffset + j_end,
                     ] -= values
 
-    return rmatrices
+    return reconstructed_matrices_plus, reconstructed_matrices_minus
 
 
 from mlelec.utils.symmetry import ClebschGordanReal
