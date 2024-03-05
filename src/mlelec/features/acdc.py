@@ -5,7 +5,7 @@ from rascaline import SphericalExpansion
 from rascaline import SphericalExpansionByPair as PairExpansion
 import ase
 
-from metatensor import TensorMap, TensorBlock, Labels
+from metatensor import TensorMap, TensorBlock, Labels, sort_block
 import metatensor.operations as operations
 import torch
 import numpy as np
@@ -95,6 +95,7 @@ def pair_features(
     device="cpu",
     kmesh=None,
     desired_shifts=None,
+    T_dict=None,
     counter=None,
     mic=False,
     return_rho0ij=False,
@@ -165,80 +166,58 @@ def pair_features(
         # we should add the missing samples
         warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
         blocks = []
-        blocks_minus = []
         for key, block in rho0_ij.items():
 
             all_frames = np.unique(block.samples.values[:, 0])
             value_indices = []
             fixed_sample = []
-            value_indices_m = [] # TODO: see if we can avoid repeating things twice
-            fixed_sample_m = []
+
 
             for ifr in all_frames:
-                all_atom_pairs = np.unique(block.samples.values[block.samples.values[:, 0] == ifr][:, 1:3], axis = 0)
                 
-                T_keys = list(counter[ifr].keys())
-                skip_T = False
-                for iT, T in enumerate(T_keys):
-                    if skip_T:
-                        skip_T = False
-                        continue
-                    for i, j in all_atom_pairs:
-                        if counter[ifr][T][i, j] != 0:
+                for T_dummy in T_dict[ifr]:
+                    for T in T_dict[ifr][T_dummy]:
+                        pairs = np.where(counter[ifr][T])
+                        for i, j in zip(*pairs):
                             x, y, z = T
-                        else:
-                            assert counter[ifr][T_keys[iT + 1]][i, j] != 0, (
-                                T_keys[iT + 1],
-                                i,
-                                j,
-                                counter[ifr][T_keys[iT + 1]],
-                            )
-                            x, y, z = T_keys[iT + 1]
-                            skip_T = True
-                            
-                        mic_label = Labels(
-                            [
-                                "structure",
-                                "center",
-                                "neighbor",
-                                "cell_shift_a",
-                                "cell_shift_b",
-                                "cell_shift_c",
-                            ],
-                            values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
-                        )[0]
-                        mappedidx = block.samples.position(mic_label)
-                        assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                            mic_label = Labels(
+                                [
+                                    "structure",
+                                    "center",
+                                    "neighbor",
+                                    "cell_shift_a",
+                                    "cell_shift_b",
+                                    "cell_shift_c",
+                                ],
+                                values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
+                            )[0]
+                            mappedidx = block.samples.position(mic_label)
+                            assert isinstance(mappedidx, int), (mappedidx, mic_label)
 
-                        value_indices.append(mappedidx)
-                        fixed_sample.append([ifr, i, j, T[0], T[1], T[2], 1])  # Here we still label features with the original T
+                            value_indices.append(mappedidx)
+                            fixed_sample.append([ifr, i, j, T_dummy[0], T_dummy[1], T_dummy[2], 1])  # Here we still label features with the original T
 
-                        # if [x, y, z] != [0, 0, 0]:
-                        mic_label = Labels(
-                            [
-                                "structure",
-                                "center",
-                                "neighbor",
-                                "cell_shift_a",
-                                "cell_shift_b",
-                                "cell_shift_c",
-                            ],
-                            values=np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1),
-                        )[0]
-                        mappedidx = block.samples.position(mic_label)
-                        assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                            mic_label = Labels(
+                                [
+                                    "structure",
+                                    "center",
+                                    "neighbor",
+                                    "cell_shift_a",
+                                    "cell_shift_b",
+                                    "cell_shift_c",
+                                ],
+                                values=np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1),
+                            )[0]
+                            mappedidx = block.samples.position(mic_label)
+                            assert isinstance(mappedidx, int), (mappedidx, mic_label)
 
-                        value_indices.append(mappedidx)
-                        fixed_sample.append([ifr, j, i, T[0], T[1], T[2], -1])
+                            value_indices.append(mappedidx)
+                            fixed_sample.append([ifr, j, i, T_dummy[0], T_dummy[1], T_dummy[2], -1])
 
-            # print(len(value_indices), len(fixed_sample))
-            # value_indices, value_pos = np.unique(value_indices, return_index = True)
-            # print(np.unique(np.asarray(fixed_sample)[value_pos], axis=0).shape)
-            fixed_sample = np.asarray(fixed_sample) #[value_pos]
-
+            fixed_sample = np.asarray(fixed_sample)
             
             blocks.append(
-                TensorBlock(
+                sort_block(TensorBlock(
                     values=block.values[value_indices],
                     samples=Labels(
                         block.samples.names + ['sign'],
@@ -246,94 +225,10 @@ def pair_features(
                     ),
                     components=block.components,
                     properties=block.properties,
-                )
+                ), axes = 'samples')
             )
 
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-
-        #     all_ifr = np.unique(block.samples.values[:, :1], axis=0)
-        #     value_indices = []
-        #     value_indices_minus = []
-        #     fixed_sample = []
-        #     fixed_sample_minus = []
-        #     for ifr, i, j in all_frIJ:
-        #         # Should we instead loop over the keys of H_T_fix- No
-        #         # because we need to associate feats labelled with T to T[iT+1] where T_is not allowd
-        #         T_keys = list(counter.keys())
-        #         for iT, T in enumerate(T_keys):
-        #             if i == j and list(T) == [0, 0, 0]:
-        #                 continue
-        #             T_is_allowed = where_Ts_allowed[T]
-        #             if not T_is_allowed:
-        #                 # print("Skipping", T)
-        #                 continue
-
-        #             if counter[T][i, j] != 0:
-        #                 x, y, z = T
-        #             else:
-        #                 assert counter[T_keys[iT + 1]][i, j] != 0, (
-        #                     T_keys[iT + 1],
-        #                     i,
-        #                     j,
-        #                     counter[T_keys[iT + 1]],
-        #                 )
-        #                 x, y, z = T_keys[iT + 1]
-
-        #             mic_label = Labels(
-        #                 [
-        #                     "structure",
-        #                     "center",
-        #                     "neighbor",
-        #                     "cell_shift_a",
-        #                     "cell_shift_b",
-        #                     "cell_shift_c",
-        #                 ],
-        #                 values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
-        #             )[0]
-        #             mappedidx = block.samples.position(mic_label)
-        #             assert isinstance(mappedidx, int), (mappedidx, mic_label)
-
-        #             value_indices.append(mappedidx)
-        #             fixed_sample.append([ifr, i, j, T[0], T[1], T[2], x, y, z])  # Here we still label features with the original T
-        #             # print("1 adding", ifr, i, j, T[0], T[1], T[2], x, y, z)
-
-        #             if [x, y, z] != [0, 0, 0]:
-        #                 mic_label = Labels(
-        #                     [
-        #                         "structure",
-        #                         "center",
-        #                         "neighbor",
-        #                         "cell_shift_a",
-        #                         "cell_shift_b",
-        #                         "cell_shift_c",
-        #                     ],
-        #                     values=np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1),
-        #                 )[0]
-        #                 mappedidx = block.samples.position(mic_label)
-        #                 assert isinstance(mappedidx, int), (mappedidx, mic_label)
-
-        #                 value_indices.append(mappedidx)
-        #                 fixed_sample.append([ifr, j, i, -T[0], -T[1], -T[2], -x, -y, -z])
-                        
-        #     # print(len(value_indices), len(fixed_sample))
-        #     value_indices, value_pos = np.unique(value_indices, return_index=True)
-        #     # print(np.unique(np.asarray(fixed_sample)[value_pos], axis=0).shape)
-        #     fixed_sample = np.asarray(fixed_sample)[value_pos]
-            
-        #     blocks.append(
-        #         TensorBlock(
-        #             values=block.values[value_indices],
-        #             samples=Labels(
-        #                 block.samples.names + ["cell_shift_a_MIC","cell_shift_b_MIC", "cell_shift_c_MIC"],
-        #                 fixed_sample,
-        #             ),
-        #             components=block.components,
-        #             properties=block.properties,
-        #         )
-        #     )
-
-        # rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-        # # rho0_ij_minus = TensorMap(keys=rho0_ij.keys, blocks=blocks_minus)
     
     if mic and return_rho0ij:
         return rho0_ij 
@@ -554,56 +449,56 @@ def twocenter_features_periodic_NH(
             #     torch.norm(b.values[idx_ij][wherediff] + b.values[idx_ji][wherediff]),
             # )
             # print("\n\n")
-            sample_label_ij = Labels(
-                b.samples.names,
-                # np.array([[0, 0, 1, 1, 4, 0]),
-                # np.array([[0, 0, 1, 7, 1, 0]]),
-                # np.array([[0, 0, 0, 4, 0, 0]]),
-                # np.array([[0, 0, 0, 1, 0, 0]]),
-                np.array([[0, 0, 1, 0, 4, 0, 1]]),
-            )
-            sample_label_ji = Labels(
-                b.samples.names,
-                # np.array([[0, 1, 0, -1, -4, 0, 0, 0, 0]]),
-                # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
-                # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
-                np.array([[0, 1, 0, 0, -4, 0, -1]]),
-            )
-            pos_ij = idx_ij#slice(None) #np.where(
-            #     np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
-            # )[0]
+            # sample_label_ij = Labels(
+            #     b.samples.names,
+            #     # np.array([[0, 0, 1, 1, 4, 0]),
+            #     # np.array([[0, 0, 1, 7, 1, 0]]),
+            #     # np.array([[0, 0, 0, 4, 0, 0]]),
+            #     # np.array([[0, 0, 0, 1, 0, 0]]),
+            #     np.array([[0, 0, 1, 0, 4, 0, 1]]),
+            # )
+            # sample_label_ji = Labels(
+            #     b.samples.names,
+            #     # np.array([[0, 1, 0, -1, -4, 0, 0, 0, 0]]),
+            #     # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
+            #     # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
+            #     # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
+            #     np.array([[0, 1, 0, 0, -4, 0, -1]]),
+            # )
+            # pos_ij = idx_ij#slice(None) #np.where(
+            # #     np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
+            # # )[0]
 
-            # pos_ij = b.samples.position(sample_label_ij[0])
-            pos_ji = idx_ji#slice(None) #np.where(
-            #     np.all(b.samples.values[:, :6] == sample_label_ji.values[:, :6], axis=1)
-            # )[0]
+            # # pos_ij = b.samples.position(sample_label_ij[0])
+            # pos_ji = idx_ji#slice(None) #np.where(
+            # #     np.all(b.samples.values[:, :6] == sample_label_ji.values[:, :6], axis=1)
+            # # )[0]
 
-            stupid_idx = torch.where(~torch.isclose(b.values[pos_ij] - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji], torch.tensor(0.0)))
-            print(len(stupid_idx))
-            # print(~torch.isclose(b.values, (-1) ** k["spherical_harmonics_l"] * b.values))
+            # stupid_idx = torch.where(~torch.isclose(b.values[pos_ij] - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji], torch.tensor(0.0)))
+            # print(len(stupid_idx))
+            # # print(~torch.isclose(b.values, (-1) ** k["spherical_harmonics_l"] * b.values))
         
-            print("l", k["spherical_harmonics_l"])
-            print("k", k.values)
-            print(
-                "values",
-                torch.norm(
-                    b.values[pos_ij]
-                    - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji]
-                ),
-                torch.norm(b.values[pos_ij] - b.values[pos_ji]),
-                torch.norm(b.values[pos_ij] + b.values[pos_ji]),
-                # b.values[pos_ij],
-                # b.values[pos_ji],
-                torch.norm(b.values[pos_ij]),
-                torch.norm(b.values[pos_ji]),
-                # 'stupid', b.samples.values[stupid_idx[0]]
-                'stupid', torch.unique(stupid_idx[0])
-                # pos_ij,
-                # b.samples.values,
-                # pos_ji,
-                # b.samples.values,
-            )
+            # print("l", k["spherical_harmonics_l"])
+            # print("k", k.values)
+            # print(
+            #     "values",
+            #     torch.norm(
+            #         b.values[pos_ij]
+            #         - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji]
+            #     ),
+            #     torch.norm(b.values[pos_ij] - b.values[pos_ji]),
+            #     torch.norm(b.values[pos_ij] + b.values[pos_ji]),
+            #     # b.values[pos_ij],
+            #     # b.values[pos_ji],
+            #     torch.norm(b.values[pos_ij]),
+            #     torch.norm(b.values[pos_ji]),
+            #     # 'stupid', b.samples.values[stupid_idx[0]]
+            #     'stupid', torch.unique(stupid_idx[0])
+            #     # pos_ij,
+            #     # b.samples.values,
+            #     # pos_ji,
+            #     # b.samples.values,
+            # )
             blocks.append(
                 TensorBlock(
                     samples=Labels(
