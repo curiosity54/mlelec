@@ -377,20 +377,17 @@ def twocenter_features_periodic_NH(
         positive_shifts_idx = []
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
-            idx_ij = np.where(
-                (b.samples["sign"] == 1) & \
-                ((((b.samples["center"] != b.samples["neighbor"]) & ((b.samples["cell_shift_a"] == 0) & (b.samples["cell_shift_b"] == 0) & (b.samples["cell_shift_c"] == 0)))) \
-                | (~((b.samples["cell_shift_a"] == 0) & (b.samples["cell_shift_b"] == 0) & (b.samples["cell_shift_c"] == 0)))))[0]
-            #     # & (b.samples["cell_shift_b"] >= 0)
-            #     # & (b.samples["cell_shift_c"] >= 0)) )
-            #     # (b.samples["center"] <= b.samples["neighbor"])
-            #     # & (b.samples["cell_shift_a"] >= 0)
-            #     # & (b.samples["cell_shift_b"] >= 0)
-            #     # & (b.samples["cell_shift_c"] >= 0)
-            # )[0]
-
-            # Indeces to loop over
-            # idx_ij = np.where(b.samples["sign"] == 1)[0]
+            sign = b.samples["sign"]
+            atom_i = b.samples["center"]
+            atom_j = b.samples["neighbor"]
+            Tx = b.samples["cell_shift_a"]
+            Ty = b.samples["cell_shift_b"]
+            Tz = b.samples["cell_shift_c"]
+            positive_sign = sign == 1
+            cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
+            different_atoms = (atom_i != atom_j) #(atom_i < atom_j)
+            avoid_double_counting_atoms = True # FIXME atom_i <= atom_j
+            idx_ij = np.where(positive_sign & ( (cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
 
             if len(idx_ij) == 0:
                 continue
@@ -413,17 +410,10 @@ def twocenter_features_periodic_NH(
 
                 if i == j == Tx == Ty == Tz == 0:
                     continue
-                # if [Tx, Ty, Tz] == [0, 0, 0]:
-                #     other_sign = sign
-                #     if i == j:
-                #         continue
-                # else: 
-                #     other_sign = -sign
- 
+               
                 # Sample to symmetrize over
                 ji_entry = np.array([structure, j, i, Tx, Ty, Tz, -1])
 
-                # print(structure, i, j, Tx, Ty, Tz, sign)
                 # Find the index of the corresponding sample index in the block
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis = 1))
 

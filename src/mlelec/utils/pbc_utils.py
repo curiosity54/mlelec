@@ -180,6 +180,8 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
         component_names,
         property_names,
     )
+
+    from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
     matrices = dataset.matrices_translation
     # for T in dataset.desired_shifts: # Loop over translations given in input
@@ -213,10 +215,18 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                 orbs_i = orbs_mult[ai]
                 j_start = 0
                 for j, aj in enumerate(frame.numbers):
-                    # print('j,aj,frame', j, aj, frame)
+
+                    # if i > j and ai == aj:
+                    #     j_start += orbs_tot[aj]
+                    #     continue
+                    
                     orbs_j = orbs_mult[aj]
+
                     # add what kind of blocks we expect in the tensormap
                     n1l1n2l2 = np.concatenate([[k2 + k1 for k1 in orbs_i] for k2 in orbs_j])
+                    # sorted_orbs = np.sort([(o1, o2) for o1, o2 in product(list(orbs_i.keys()), list(orbs_j.keys()))], axis=1)
+                    # orbs, orbital_idx = np.unique(sorted_orbs, return_index = True, axis = 0)
+                    # n1l1n2l2 = [tuple(o1) + tuple(o2) for o1, o2 in orbs]
 
                     # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
                     block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
@@ -224,7 +234,9 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                     block_split = [torch.split(blocki, list(orbs_j.values()), dim = 1) for blocki in torch.split(block_ij, list(orbs_i.values()), dim=0)]
                     block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
-                    for iorbital, ((ni, li, nj, lj), value) in enumerate(zip(n1l1n2l2, block_split)):
+                    for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
+                        # iorbital = orbital_idx[iorbital]
+                        value = block_split[iorbital]
 
                         if i == j and np.linalg.norm(T) == 0:
                             # On-site
@@ -271,7 +283,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                             bplus = (value + value_ji) * ISQRT_2
                             # bminus = value_ji
                             bminus = (value - value_ji) * ISQRT_2
-
+                            # print(i,j)
                             block.add_samples(
                                 labels=[(A, i, j)],
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),

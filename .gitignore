@@ -5,5 +5,5 @@ src/mlelec.egg-info/
 tmp* 
 **/*.pyc
 *.code-workspace
-*.npz
+*feat*.npz
 

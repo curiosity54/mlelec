@@ -349,8 +349,7 @@ class LinearTargetModel(nn.Module):
                 pred_blocks.append(
                     TensorBlock(
                         values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device)
-                        .to(torch.float32),
+                        .to(self.device),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -359,7 +358,7 @@ class LinearTargetModel(nn.Module):
             else:
                 pred_blocks.append(
                     TensorBlock(
-                        values=block.values.to(torch.float32),
+                        values=block.values,
                         samples=block.samples,
                         components=block.components,
                         properties=block.properties,
@@ -400,8 +399,7 @@ class LinearTargetModel(nn.Module):
             pred_blocks_val.append(
                 TensorBlock(
                     values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                    .to(self.device)
-                    .to(torch.float32),
+                    .to(self.device),
                     samples=target.samples,
                     components=target.components,
                     properties=self.dummy_property,
@@ -616,8 +614,7 @@ class LinearModelPeriodic(nn.Module):
                 pred_blocks.append(
                     TensorBlock(
                         values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device)
-                        .to(torch.float32),
+                        .to(self.device),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -626,7 +623,7 @@ class LinearModelPeriodic(nn.Module):
             else:
                 pred_blocks.append(
                     TensorBlock(
-                        values=block.values.to(torch.float32),
+                        values=block.values,
                         samples=block.samples,
                         components=block.components,
                         properties=block.properties,
