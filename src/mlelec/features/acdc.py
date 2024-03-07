@@ -135,7 +135,7 @@ def pair_features(
             )
 
         elif max_shift is not None:
-            repframes = [f.repeat(max_shift) for f in frames]
+            repframes = [f.repeat(max_shift[ifr]) for ifr, f in enumerate(frames)]
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max(
                     [np.max(f.get_all_distances(mic=mic)) / factor for f in repframes]
@@ -162,7 +162,7 @@ def pair_features(
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
 
         # generate all the translations and assign values based on mic map
-        assert kmesh is not None, "kmesh must be specified for MIC mapping"
+        # assert kmesh is not None, "kmesh must be specified for MIC mapping"
         # we should add the missing samples
         warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
         blocks = []

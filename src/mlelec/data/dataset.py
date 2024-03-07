@@ -804,28 +804,29 @@ class PySCFPeriodicDataset(Dataset):
             self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
         self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
 
-        self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
+        self.matrices_kpoint = [torch.tensor(m).to(self.device) for m in matrices_kpoint]
         
-        if matrices_translation is None:
-            assert matrices_kpoint is not None
-            matrices_translation = self.kpts_to_translation_target(
-                self.matrices_kpoint, nao
-            )
+        # FIXME: matrices_translation will have to be computed internally
+        # if matrices_translation is None:
+        #     assert matrices_kpoint is not None
+        #     matrices_translation = self.kpts_to_translation_target(
+        #         self.matrices_kpoint, nao
+        #     )
         
         ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-        self.matrices_translation = {key: [] for key in matrices_translation[0]}
-        [
-            self.matrices_translation[tuple(k)].append(
-                matrices_translation[ifr][tuple(k)]
-            )
-            for ifr in range(self.nstructs)
-            for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
-        ]
+        # self.matrices_translation = {key: [] for key in matrices_translation[0]}
+        # [
+        #     self.matrices_translation[tuple(k)].append(
+        #         matrices_translation[ifr][tuple(k)]
+        #     )
+        #     for ifr in range(self.nstructs)
+        #     for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
+        # ]
 
-        for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
-            self.matrices_translation[tuple(k)] = torch.stack(
-                self.matrices_translation[tuple(k)]
-            )
+        # for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
+        #     self.matrices_translation[tuple(k)] = torch.stack(
+        #         self.matrices_translation[tuple(k)]
+        #     )
         # DO the same for the overlap 
         if overlap_kpoint is not None:
             self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
@@ -847,13 +848,13 @@ class PySCFPeriodicDataset(Dataset):
                     self.overlap_translation[tuple(k)]
                 )
 
-        self.target = {t: [] for t in self.target_names}
-        for t in self.target_names:
-            # keep only desired shifts
-            if t == "real_translation":
-                self.target[t] = self.matrices_translation
-            elif t == "kpoint":
-                self.target[t] = self.matrices_kpoint
+        # self.target = {t: [] for t in self.target_names}
+        # for t in self.target_names:
+        #     # keep only desired shifts
+        #     if t == "real_translation":
+        #         self.target[t] = self.matrices_translation
+        #     elif t == "kpoint":
+        #         self.target[t] = self.matrices_kpoint
 
     def get_kpoint_target(self, translated_matrices):
         """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
