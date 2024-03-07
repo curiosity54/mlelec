@@ -599,11 +599,10 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
-                # ridge = ridge.fit(x,y)
-                ridge = RidgeCV(
-                    alphas=np.logspace(-15, -1, 40), fit_intercept=bias
-                ).fit(x, y)
+                ridge = KernelRidge(alpha = 1e-8).fit(x, y) # )
+                # ridge = RidgeCV(
+                    # alphas=np.logspace(-50, -1, 200), fit_intercept=bias
+                # ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
                 pred = ridge.predict(x)
