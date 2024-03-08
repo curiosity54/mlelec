@@ -137,7 +137,7 @@ from mlelec.utils.twocenter_utils import (
 import torch
 
 
-def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = False):
+def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = False, cutoff = None):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -190,9 +190,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
 
         frame = dataset.structures[A]
 
-        for T in dataset.fock_realspace[
-            A
-        ]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
+        for T in dataset.fock_realspace[A]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
 
             matrixT = matrices[A][T]
 
@@ -218,6 +216,8 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                             j_start += orbs_tot[aj]
                             continue
                     
+                    get_mic_distance_in_supercell(i, j, T)
+
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
