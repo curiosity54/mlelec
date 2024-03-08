@@ -125,7 +125,7 @@ def pair_features(
             factor = 1  # we only need half the cell - so we use half the cutoff
         hypers_allpairs = hypers_pair.copy()
         if max_shift is None and hypers["cutoff"] < np.max(
-            [np.max(f.get_all_distances(mic=True)) / factor for f in frames]
+            [np.max(f.get_all_distances(mic=mic)) / factor for f in frames]
         ):
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
@@ -157,6 +157,9 @@ def pair_features(
     # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+    if return_rho0ij: 
+        print('returning rho0ij')
+        return rho0_ij
     # ----- MIC mapping ------
     if mic:
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
@@ -375,6 +378,7 @@ def pair_features(
         feature_names=kwargs.get("feature_names", None),
     )
     if not both_centers:
+        print('returning rhonuij')
         return rhonu_ij
 
     else:
@@ -536,7 +540,7 @@ def twocenter_hermitian_features(
 
 
 def twocenter_features_periodic_NH(
-    single_center: TensorMap, pair: TensorMap, shift=None
+    single_center: TensorMap, pair: TensorMap, mic:bool=True, shift=None
 ) -> TensorMap:
     # no hermitian symmetry
     if shift == [0, 0, 0]:
@@ -559,26 +563,46 @@ def twocenter_features_periodic_NH(
         else:
             samples_array = np.asarray(b.samples.values)
             samples_array = np.hstack([samples_array, samples_array[:, -1:]])
-        blocks.append(
-            TensorBlock(
-                samples=Labels(
-                    names=b.samples.names
-                    + [
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c",
-                        "cell_shift_a_MIC",
-                        "cell_shift_b_MIC",
-                        "cell_shift_c_MIC",
-                    ],
-                    values=np.pad(samples_array, ((0, 0), (0, 6))),
-                ),
-                components=b.components,
-                properties=b.properties,
-                values=b.values,
+
+        if mic:
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names
+                        + [
+                            "neighbor",
+                            "cell_shift_a",
+                            "cell_shift_b",
+                            "cell_shift_c",
+                            "cell_shift_a_MIC",
+                            "cell_shift_b_MIC",
+                            "cell_shift_c_MIC",
+                        ],
+                        values=np.pad(samples_array, ((0, 0), (0, 6))),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=b.values,
+                )
             )
-        )
+        else:
+            blocks.append(
+                TensorBlock(
+                    samples=Labels(
+                        names=b.samples.names
+                        + [
+                            "neighbor",
+                            "cell_shift_a",
+                            "cell_shift_b",
+                            "cell_shift_c",
+                        ],
+                        values=np.pad(samples_array, ((0, 0), (0, 3))),
+                    ),
+                    components=b.components,
+                    properties=b.properties,
+                    values=b.values,
+                )
+            )
 
     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
     for k, b in pair.items():
@@ -598,17 +622,31 @@ def twocenter_features_periodic_NH(
 
     for k, b in pair.items():
         positive_shifts_idx = []
-        if k["species_center"] == k["species_neighbor"]:
-            # off-site, same species
-            idx_up = np.where(
-                (b.samples["center"] <= b.samples["neighbor"])
-                & (b.samples["cell_shift_a"] >= 0)
-                & (b.samples["cell_shift_b"] >= 0)
-                & (b.samples["cell_shift_c"] >= 0)
-            )[0]
+        if k["species_center"] == k["species_neighbor"]: #k["species_neighbor"]:
+#            # off-site, same species
+            idx_up =list(range(len(b.samples.values.tolist())))
+        
+#            idx_up=np.where(
+#                (b.samples["center"] <= b.samples["neighbor"])
+##                 (b.samples["cell_shift_a"] >= 0)
+##                & (b.samples["cell_shift_a"] >= 0)
+##                & (b.samples["cell_shift_b"] >= 0)
+##                & (b.samples["cell_shift_c"] >= 0)  
+#            )[0]
+
+            idx_0 = np.where(
+                 (b.samples["center"] == b.samples["neighbor"])
+                 & (b.samples["cell_shift_a"] == 0)
+                 & (b.samples["cell_shift_b"] == 0)
+                 & (b.samples["cell_shift_c"] == 0))[0]
+
+            delidx=[i for i,j in enumerate(idx_up) if j in idx_0]
+            #print(idx_up, idx_0, delidx)
+            idx_up=np.delete(idx_up,delidx)
+
             # zeroshift_idx = np.argwhere(np.all(np.array(b.samples.values.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"])==[0,0,0]), axis=1))
             # if b.samples["center"]
-            print(len(idx_up))
+            #print(len(idx_up))
             if len(idx_up) == 0:
                 continue
             idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
@@ -629,9 +667,14 @@ def twocenter_features_periodic_NH(
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
 
-                structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
-                    idx_up[smp_up]
-                ]
+                if mic:
+                    structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
+                        idx_up[smp_up]
+                    ]
+                else:
+                    structure, i, j, Tx, Ty, Tz = b.samples.values[
+                        idx_up[smp_up]
+                    ]
 
                 ji_entry = np.array(
                     [structure, j, i, -Tx, -Ty, -Tz]
@@ -643,6 +686,21 @@ def twocenter_features_periodic_NH(
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
+
+
+#            print('---new')
+#            print(b.samples.values[idx_up])
+#            print('---opp')
+#            print(b.samples.values[idx_ji])
+#            print('diff')
+#            print(b.samples.values[idx_ji]+b.samples.values[idx_up])
+#            print('--++')
+#            print('--- --')
+#            print(keys[-2])
+#            print(np.linalg.norm((b.values[idx_up]+b.values[idx_ji])[18]))
+#
+#            print(keys[-1])
+#            print(np.linalg.norm((b.values[idx_up]-b.values[idx_ji])[18]))
 
             blocks.append(
                 TensorBlock(

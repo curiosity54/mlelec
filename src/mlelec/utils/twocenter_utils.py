@@ -714,6 +714,7 @@ def _blocks_to_matrix(
                     same_koff,
                     li,
                     lj,
+#                    hermitian=hermitian,
                 )
             else:
                 _fill(
@@ -747,6 +748,7 @@ def _fill_NH(
     same_koff: bool,
     li: int,
     lj: int,
+#    hermitian: bool,
 ):
     """fill block of type <type> where type is either -1,0,1,2"""
     # TODO: check matrix device, values devide are the same

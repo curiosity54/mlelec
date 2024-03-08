@@ -436,7 +436,7 @@ class LinearModelPeriodic(nn.Module):
             self.device = device
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
-        print(self.cell_shifts, len(self.cell_shifts))
+        #print(self.cell_shifts, len(self.cell_shifts))
 
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
