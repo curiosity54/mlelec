@@ -548,6 +548,7 @@ class LinearModelPeriodic(nn.Module):
     def fit_ridge_analytical(self, return_matrix=False, set_bias=False) -> None:
         from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
+        from sklearn.model_selection import GridSearchCV
 
         # set_bias will set bias=True for the invariant model
         self.recon = {}
@@ -599,15 +600,17 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                ridge = KernelRidge(alpha = 1e-8).fit(x, y) # )
+
+                ridge = KernelRidge(alpha = 1e-9).fit(x, y) 
+
+                # gscv = GridSearchCV(ridge, dict(alpha = np.logspace(-50, -1, 200)), cv = 3)
+                # gscv
                 # ridge = RidgeCV(
                     # alphas=np.logspace(-50, -1, 200), fit_intercept=bias
                 # ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
                 pred = ridge.predict(x)
-                # if k['L']==0:
-                #     print('SCORE', ridge.score(x,y) )
                 ridges.append(ridge)
 
                 pred_blocks.append(

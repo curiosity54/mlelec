@@ -121,24 +121,22 @@ def pair_features(
         hypers_pair = hypers
     calculator = PairExpansion(**hypers_pair)
     rho0_ij = calculator.compute(frames, use_native_system=use_native)
-    factor = 1
 
     if all_pairs:
-        if mic:
-            factor = 1  # we only need half the cell - so we use half the cutoff
+        
         hypers_allpairs = hypers_pair.copy()
         if max_shift is None and hypers["cutoff"] < np.max(
-            [np.max(f.get_all_distances(mic=True)) / factor for f in frames]
+            [np.max(f.get_all_distances(mic=True))for f in frames]
         ):
             hypers_allpairs["cutoff"] = np.ceil(
-                np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
+                np.max([np.max(f.get_all_distances(mic=mic)) for f in frames])
             )
 
         elif max_shift is not None:
             repframes = [f.repeat(max_shift[ifr]) for ifr, f in enumerate(frames)]
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max(
-                    [np.max(f.get_all_distances(mic=mic)) / factor for f in repframes]
+                    [np.max(f.get_all_distances(mic=mic)) for f in repframes]
                 )
             )
             # FIXME - miic = mic
@@ -315,11 +313,8 @@ def pair_features(
 
 
 def twocenter_features_periodic_NH(
-    single_center: TensorMap, pair: TensorMap, shift=None
+    single_center: TensorMap, pair: TensorMap, all_pairs = False
 ) -> TensorMap:
-    # no hermitian symmetry
-    # if shift == [0, 0, 0]:
-    #     return twocenter_hermitian_features(single_center, pair)
 
     keys = []
     blocks = []
@@ -346,10 +341,9 @@ def twocenter_features_periodic_NH(
                         "neighbor",
                         "cell_shift_a",
                         "cell_shift_b",
-                        "cell_shift_c",
-                        "sign"
+                        "cell_shift_c"
                     ],
-                    values=np.pad(samples_array, ((0, 0), (0, 4))),
+                    values=np.pad(samples_array, ((0, 0), (0, 3))),
                 ),
                 components=b.components,
                 properties=b.properties,
@@ -374,7 +368,6 @@ def twocenter_features_periodic_NH(
             raise NotImplementedError  # Handle periodic case for different species
 
     for k, b in pair.items():
-        positive_shifts_idx = []
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
             sign = b.samples["sign"]
@@ -385,8 +378,13 @@ def twocenter_features_periodic_NH(
             Tz = b.samples["cell_shift_c"]
             positive_sign = sign == 1
             cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
-            different_atoms = (atom_i != atom_j) #(atom_i < atom_j)
-            avoid_double_counting_atoms = True # FIXME atom_i <= atom_j
+
+            if all_pairs:
+                different_atoms = (atom_i != atom_j)
+                avoid_double_counting_atoms = True
+            else:
+                different_atoms = (atom_i < atom_j)
+                avoid_double_counting_atoms = atom_i <= atom_j
             idx_ij = np.where(positive_sign & ( (cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
 
             if len(idx_ij) == 0:
@@ -422,99 +420,30 @@ def twocenter_features_periodic_NH(
                 idx_ji.append(where_ji[0, 0])
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
-            # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
-
-            # print("SHAPE", np.shape(idx_up), b.samples.values.shape)
-            # print("--------------------------------------")
-            # print("l", k["spherical_harmonics_l"])
-            # print(list(np.array(b.samples.values[idx_ij])[:3]))
-            # print(list(np.array(b.values[idx_ij])[:3]))
-            # print(list(np.array(b.samples.values[idx_ji])[:3]))
-            # print(list(np.array(b.values[idx_ji])[:3]))
-            # normdiff = torch.norm(b.values[idx_ij] - b.values[idx_ji], dim=(1, 2))
-            # wherediff = torch.where(normdiff != 0)
-            # assert torch.norm(b.values[idx_ij] - b.values[idx_ji]) == 0, (
-            #     b.samples.values[idx_ij][wherediff],
-            #     b.samples.values[idx_ji][wherediff],
-            #     torch.norm(b.values[idx_ij][wherediff] + b.values[idx_ji][wherediff]),
-            # )
-            # print("\n\n")
-            # sample_label_ij = Labels(
-            #     b.samples.names,
-            #     # np.array([[0, 0, 1, 1, 4, 0]),
-            #     # np.array([[0, 0, 1, 7, 1, 0]]),
-            #     # np.array([[0, 0, 0, 4, 0, 0]]),
-            #     # np.array([[0, 0, 0, 1, 0, 0]]),
-            #     np.array([[0, 0, 1, 0, 4, 0, 1]]),
-            # )
-            # sample_label_ji = Labels(
-            #     b.samples.names,
-            #     # np.array([[0, 1, 0, -1, -4, 0, 0, 0, 0]]),
-            #     # np.array([[0, 1, 0, -7, -1, 0, 0, 0, 0]]),
-            #     # np.array([[0, 0, 0, -4, 0, 0, 0, 0, 0]]),
-            #     # np.array([[0, 0, 0, -1, 0, 0, 0, 0, 0]]),
-            #     np.array([[0, 1, 0, 0, -4, 0, -1]]),
-            # )
-            # pos_ij = idx_ij#slice(None) #np.where(
-            # #     np.all(b.samples.values[:, :6] == sample_label_ij.values[:, :6], axis=1)
-            # # )[0]
-
-            # # pos_ij = b.samples.position(sample_label_ij[0])
-            # pos_ji = idx_ji#slice(None) #np.where(
-            # #     np.all(b.samples.values[:, :6] == sample_label_ji.values[:, :6], axis=1)
-            # # )[0]
-
-            # stupid_idx = torch.where(~torch.isclose(b.values[pos_ij] - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji], torch.tensor(0.0)))
-            # print(len(stupid_idx))
-            # # print(~torch.isclose(b.values, (-1) ** k["spherical_harmonics_l"] * b.values))
-        
-            # print("l", k["spherical_harmonics_l"])
-            # print("k", k.values)
-            # print(
-            #     "values",
-            #     torch.norm(
-            #         b.values[pos_ij]
-            #         - (-1) ** k["spherical_harmonics_l"] * b.values[pos_ji]
-            #     ),
-            #     torch.norm(b.values[pos_ij] - b.values[pos_ji]),
-            #     torch.norm(b.values[pos_ij] + b.values[pos_ji]),
-            #     # b.values[pos_ij],
-            #     # b.values[pos_ji],
-            #     torch.norm(b.values[pos_ij]),
-            #     torch.norm(b.values[pos_ji]),
-            #     # 'stupid', b.samples.values[stupid_idx[0]]
-            #     'stupid', torch.unique(stupid_idx[0])
-            #     # pos_ij,
-            #     # b.samples.values,
-            #     # pos_ji,
-            #     # b.samples.values,
-            # )
+            
             blocks.append(
                 TensorBlock(
                     samples=Labels(
-                        names=b.samples.names,
+                        names=b.samples.names[:-1],
                         values=np.asarray(
-                            b.samples.values[idx_ij]  # [positive_shifts_idx]
+                            b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
                         ),
                     ),
                     components=b.components,
                     properties=b.properties,
-                    # values=b.values[idx_up],
                     values=(b.values[idx_ij] + b.values[idx_ji]),
-                    # / 2,  # idx_lo
                 )
             )
             blocks.append(
                 TensorBlock(
                     samples=Labels(
-                        names=b.samples.names,
+                        names=b.samples.names[:-1],
                         values=np.asarray(
-                            b.samples.values[idx_ij]  # [positive_shifts_idx]
+                            b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
                         ),
                     ),
                     components=b.components,
                     properties=b.properties,
-                    # values=b.values[idx_ji],  ##[idx_ji],
                     values=(b.values[idx_ij] - b.values[idx_ji]),
                 )
             )

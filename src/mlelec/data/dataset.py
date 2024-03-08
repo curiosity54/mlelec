@@ -726,39 +726,35 @@ class PeriodicDataset(Dataset):
 
 
 class PySCFPeriodicDataset(Dataset):
+    from mlelec.utils.pbc_utils import fourier_transform, inverse_fourier_transform, get_T_from_pair
     # TODO: make format compatible with MolecularDataset
     def __init__(
         self,
         frames,
         frame_slice: slice = slice(None),
-        kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
-        matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
-        matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
-        overlap_kpoint: Union[torch.tensor, np.ndarray] = None,
-        overlap_translation: Union[Dict, torch.tensor, np.ndarray] = None,
-        target: List[str] = ["real_translation"],
-        aux: List[str] = ["real_overlap"],
-        use_precomputed: bool = True,
+        kmesh: Union[List[int], List[List[int]]] = [1, 1, 1],
+        fock_kspace: Union[List, torch.tensor, np.ndarray] = None,
+        fock_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
+        overlap_kspace: Union[List, torch.tensor, np.ndarray] = None,
+        overlap_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
+        # aux: List[str] = ["real_overlap"],
+        use_precomputed: bool = True, 
         device="cuda",
         orbs_name: str = "sto-3g",
         orbs: List = None,
-        desired_shifts: List = None,
-        nao: int = None,
     ):
         self.structures = frames
         self.frame_slice = frame_slice
         self.nstructs = len(frames)
-        self.kmesh = kgrid
-        self.kgrid_is_list = False
-        if isinstance(kgrid[0], list):
-            self.kgrid_is_list = True
+        self.kmesh = kmesh
+        self.kmesh_is_list = False
+        if isinstance(kmesh[0], list):
+            self.kmesh_is_list = True
             assert (
                 len(self.kmesh) == self.nstructs
-            ), "If kgrid is a list, it must have the same length as the number of structures"
+            ), "If kmesh is a list, it must have the same length as the number of structures"
         else:
-            self.kmesh = [
-                kgrid for _ in range(self.nstructs)
-            ]  # currently easiest to do
+            self.kmesh = [kmesh for _ in range(self.nstructs)]  # currently easiest to do
 
         self.device = device
         self.basis = orbs  # actual orbitals
@@ -767,185 +763,222 @@ class PySCFPeriodicDataset(Dataset):
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
 
-        self.target_names = target
-        self.aux_names = aux
-        self.desired_shifts_sup = (
-            []
-        )  # track the negative counterparts of desired_shifts as well
+        # self.target_names = target
+        # self.aux_names = aux
+        
         self.cells = []
         self.phase_matrices = []
         self.supercells = []
-        self.all_relative_shifts = []  # allowed shifts of kmesh
 
         for ifr, structure in enumerate(self.structures):
-            # if self.kgrid_is_list:
-            # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
-            # else:
             cell, scell, phase = get_scell_phase(
                 structure, self.kmesh[ifr], basis=self.basis_name
             )
             self.cells.append(cell)
 
-            self.phase_matrices.append(torch.from_numpy(phase).to(self.device))
-            self.all_relative_shifts.append(
-                translation_vectors_for_kmesh(
-                    cell, self.kmesh[ifr], return_rel=True
-                ).tolist()
-            )
+        self._translation_counter = self.compute_translation_counter()
+        self._translation_dict = self.compute_translation_dict()
 
-        if desired_shifts is not None:
-            self.desired_shifts = desired_shifts
+        if fock_kspace is not None:
+            self.set_fock_kspace(fock_kspace)
+        if overlap_kspace is not None:
+            self.set_overlap_kspace(overlap_kspace)
+
+        if fock_realspace is None:
+            assert self.fock_kspace is not None, "Either the real space or reciprocal space Fock matrices must be provided."
+            self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
+            self.realspace_translations = [list(m.keys()) for m in self.fock_realspace]
         else:
+            raise NotImplementedError("For now only reciprocal space matrices are allowed.")
+            # self.fock_realspace = self.set_matrices_realspace(fock_realspace)
 
-            self.desired_shifts = np.unique(np.vstack(self.all_relative_shifts), axis=0)
+        if overlap_realspace is None and self.overlap_kspace is not None:
+            self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
+        else:
+            raise NotImplementedError("For now only reciprocal space matrices are allowed.")
 
-        for s in self.desired_shifts:
-            self.desired_shifts_sup.append(s)  # make this tuple(s)?
-            self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
-        self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
 
-        self.matrices_kpoint = [torch.tensor(m).to(self.device) for m in matrices_kpoint]
+
         
-        # FIXME: matrices_translation will have to be computed internally
-        # if matrices_translation is None:
-        #     assert matrices_kpoint is not None
-        #     matrices_translation = self.kpts_to_translation_target(
-        #         self.matrices_kpoint, nao
-        #     )
-        
-        ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-        # self.matrices_translation = {key: [] for key in matrices_translation[0]}
-        # [
-        #     self.matrices_translation[tuple(k)].append(
-        #         matrices_translation[ifr][tuple(k)]
-        #     )
-        #     for ifr in range(self.nstructs)
-        #     for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
-        # ]
+    
 
-        # for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
-        #     self.matrices_translation[tuple(k)] = torch.stack(
-        #         self.matrices_translation[tuple(k)]
-        #     )
-        # DO the same for the overlap 
-        if overlap_kpoint is not None:
-            self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
-            overlap_translation = self.kpts_to_translation_target(
-                self.overlap_kpoint, nao
-            )
-            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-            self.overlap_translation = {key: [] for key in overlap_translation[0]}
-            [
-                self.overlap_translation[tuple(k)].append(
-                    overlap_translation[ifr][tuple(k)]
-                )
-                for ifr in range(self.nstructs)
-                for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
-            ]
 
-            for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
-                self.overlap_translation[tuple(k)] = torch.stack(
-                    self.overlap_translation[tuple(k)]
-                )
 
-        # self.target = {t: [] for t in self.target_names}
-        # for t in self.target_names:
-        #     # keep only desired shifts
-        #     if t == "real_translation":
-        #         self.target[t] = self.matrices_translation
-        #     elif t == "kpoint":
-        #         self.target[t] = self.matrices_kpoint
+                
+    def compute_translation_counter(self):
+        from itertools import product
+        from mlelec.utils.pbc_utils import get_T_from_pair
+        counter_T = []
+        for ifr, (frame, kmesh) in enumerate(zip(self.structures, self.kmesh)):
+            counter_T.append({})
+            natm = frame.get_global_number_of_atoms()
+            supercell = frame.repeat(kmesh)
+            shifts = [list(p) for p in product(range(kmesh[0]), range(kmesh[1]), range(kmesh[2]))]
+            for dummy_T in shifts:
+                for i in range(frame.get_global_number_of_atoms()):
+                    for j in range(frame.get_global_number_of_atoms()):
+                        _, _, mic_T = get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh)
+                        mic_T = tuple(mic_T)
+                        if mic_T not in counter_T[ifr]:
+                            counter_T[ifr][mic_T] = np.zeros((natm, natm))
+                        counter_T[ifr][mic_T][i,j] += 1
+        return counter_T
+    
+    def compute_translation_dict(self):
+        T_dict = []
 
-    def get_kpoint_target(self, translated_matrices):
-        """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
-        kmatrix = []
-        for ifr in range(self.nstructs):
-            framekmatrix = torch.zeros_like(
-                torch.tensor(self.matrices_kpoint[0]), dtype=torch.complex128
-            ).to(self.device)
-            # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
-            for kpt in range(np.prod(self.kmesh[ifr])):
-                for i, t in enumerate(translated_matrices.keys()):
-                    # for i in range(len(translated_matrices)):
-                    framekmatrix[kpt] += (
-                        translated_matrices[t][ifr] * self.phase_matrices[ifr][i][kpt]
-                    )
-            kmatrix.append(framekmatrix)
-        return kmatrix
+        for ifr, counter in enumerate(self._translation_counter):
+            natm = self.structures[ifr].get_global_number_of_atoms()
+            T_dict.append({})
+            full_T_list = list(counter.keys())
+            i0 = 0
+            i_skip = 0
+            for i in range(len(full_T_list)):
+                if i < i0 + i_skip:
+                    continue
+                
+                summa = 0
+                counter_list = []
+                T_list = []
+                i_skip = 0
+                while summa != natm**2:
+                    counter_list.append(counter[full_T_list[i+i_skip]])
+                    T_list.append(full_T_list[i+i_skip])
+                    summa = np.sum(counter_list)
+                    i_skip += 1
+                i0 = i
+                T_dict[ifr][full_T_list[i]] = T_list
+        return T_dict
 
-    def kpts_to_translation_target(self, matrices_kpoint, nao=None):
-        target = []
-        for ifr in range(self.nstructs):
-            rel_translations = translation_vectors_for_kmesh(
-                self.cells[ifr], self.kmesh[ifr], wrap_around=False, return_rel=True
-            )
+    # def get_kpoint_target(self, translated_matrices):
+    #     """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
+    #     kmatrix = []
+    #     for ifr in range(self.nstructs):
+    #         framekmatrix = torch.zeros_like(
+    #             torch.tensor(self.fock_kspace[0]), dtype=torch.complex128
+    #         ).to(self.device)
+    #         # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
+    #         for kpt in range(np.prod(self.kmesh[ifr])):
+    #             for i, t in enumerate(translated_matrices.keys()):
+    #                 # for i in range(len(translated_matrices)):
+    #                 framekmatrix[kpt] += (
+    #                     translated_matrices[t][ifr] * self.phase_matrices[ifr][i][kpt]
+    #                 )
+    #         kmatrix.append(framekmatrix)
+    #     return kmatrix
 
-            rel_translations = [tuple(x) for x in rel_translations]
-            if nao is None:
-                nao = self.cells[ifr].nao
-            translated_matrices = torch.zeros(
-                (
-                    len(self.phase_matrices[ifr]),
-                    nao,
-                    nao,
-                ),
-                dtype=torch.complex128,
-            ).to(self.device)
-            for i in range(len(self.phase_matrices[ifr])):
-                for kpt in range(np.prod(self.kmesh[ifr])):
-                    translated_matrices[i] += (
-                        matrices_kpoint[ifr][kpt]
-                        * self.phase_matrices[ifr][i][kpt].conj()
-                    )
+ 
+    # def check_block_(self):
+    #     # mat -> blocks _> couple -> uncouple -> mat
+    #     pass
 
-            # translated_matrices = translated_matrices
-            assert torch.isclose(
-                torch.linalg.norm(translated_matrices - translated_matrices.real),
-                torch.tensor(0.0).to(translated_matrices.real),
-            ), (
-                "error to real",
-                torch.linalg.norm(translated_matrices - translated_matrices.real),
-            )
-
-            translated_matrices = {
-                k: v for k, v in zip(rel_translations, translated_matrices.real)
-            }
-            target.append(translated_matrices)
-        return target
-
-    def check_block_(self):
-        # mat -> blocks _> couple -> uncouple -> mat
-        pass
-
-    def set_matrices_translation(self, matrices_translation):
-        # self.matrices_translation = matrices_translation
-        # [
-        #     self.matrices_translation[tuple(k)].append(
-        #         matrices_translation[ifr][tuple(k)]
-        #     )
-        #     for ifr in range(self.nstructs)
-        #     for k in matrices_translation[0]  # matrices_translation[ifr].keys() TOCHECK
-        # ]
-
-        # for k in matrices_translation[0]:  # self.matrices_translation.keys(): TOCHECK
-        #     self.matrices_translation[tuple(k)] = torch.stack(
-        #         self.matrices_translation[tuple(k)]
-        #     )
-
-        self.matrices_translation = []
-        for m in matrices_translation:
-            self.matrices_translation.append({})
+    def _set_matrices_realspace(self, matrices_realspace):
+        _matrices_realspace = []
+        for m in matrices_realspace:
+            _matrices_realspace.append({})
             for k in m:
                 if isinstance(m[k], torch.Tensor):
-                    self.matrices_translation[-1][k] = m[k]
+                    _matrices_realspace[-1][k] = m[k]
                 elif isinstance(m[k], np.ndarray):
-                    self.matrices_translation[-1][k] = torch.from_numpy(m[k])
+                    _matrices_realspace[-1][k] = torch.from_numpy(m[k])
                 elif isinstance(m[k], list):
-                    self.matrices_translation[-1][k] = torch.tensor(m[k])
+                    _matrices_realspace[-1][k] = torch.tensor(m[k])
                 else:
-                    raise ValueError('matrices_translation should be one among torch.tensor, numpy.ndarray, or list')
+                    raise ValueError('matrices_realspace should be one among torch.tensor, numpy.ndarray, or list')
         
-        self.desired_shifts = [list(matrices_translation.keys()) for matrices_translation in self.matrices_translation]
+        return _matrices_realspace
+   
+    def _set_matrices_kspace(self, matrices_kspace):
+        if isinstance(matrices_kspace, list):
+            if isinstance(matrices_kspace[0], np.ndarray):
+                _matrices_kspace = [torch.from_numpy(m).to(self.device) for m in matrices_kspace]
+            elif isinstance(matrices_kspace[0], torch.Tensor):
+                _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
+            elif isinstance(matrices_kspace[0], list):
+                _matrices_kspace = [torch.tensor(m).to(self.device) for m in matrices_kspace]
+            else:
+                raise TypeError("matrices_kspace should be a list [torch.Tensor, np.ndarray, or lists]")
+        elif isinstance(matrices_kspace, np.ndarray):
+            assert matrices_kspace.shape[0] == len(self.structures), "You must provide matrices_kspace for each structure" 
+            _matrices_kspace = [torch.from_numpy(m).to(self.device) for m in matrices_kspace]
+        elif isinstance(matrices_kspace, torch.Tensor):
+            assert matrices_kspace.shape[0] == len(self.structures), "You must provide matrices_kspace for each structure" 
+            _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
+        else:
+            raise TypeError("matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor.")
+        
+        return _matrices_kspace
+    
+    def set_fock_kspace(self, fock_kspace):
+        self.fock_kspace = self._set_matrices_kspace(fock_kspace)
 
+    def set_overlap_kspace(self, overlap_kspace):
+        self.overlap_kspace = self._set_matrices_kspace(overlap_kspace)
+    
+    def compute_matrices_realspace(self, matrices_kspace):
+        from mlelec.utils.pbc_utils import fourier_transform
+
+        H_T_plus = []
+        H_T_minus = []
+
+        for ifr, (kmesh, H_k) in enumerate(zip(self.kmesh, matrices_kspace)):
+
+
+            H_T_plus.append({})
+            H_T_minus.append({})
+            
+            kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(kmesh))
+            natm = self.structures[ifr].get_global_number_of_atoms()
+            nao = self.cells[ifr].nao // natm # FIXME: in general this is wrong
+            
+            for T_dummy in self._translation_dict[ifr]:
+
+                H_T_plus[ifr][T_dummy]  = np.zeros((natm*nao, natm*nao), dtype = np.complex128)
+                H_T_minus[ifr][T_dummy] = np.zeros((natm*nao, natm*nao), dtype = np.complex128)
+                
+                for T in self._translation_dict[ifr][T_dummy]:
+                    pairs = np.where(self._translation_counter[ifr][T])
+                    for i, j in zip(*pairs):
+                    
+                        idx_i = slice(nao*i, nao*(i+1))
+                        idx_j = slice(nao*j, nao*(j+1))
+
+                        H_T_plus[ifr][T_dummy][idx_i, idx_j]  = fourier_transform(H_k, kpts, T)[idx_i, idx_j]
+                        H_T_minus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(H_k, kpts, -np.array(T))[idx_i, idx_j]
+                        
+            for mic_T in H_T_plus[ifr]:
+                assert np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
+                H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
+                assert np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
+                H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+
+        return H_T_plus, H_T_minus
+
+    def compute_matrices_kspace(self, matrices_realspace):
+        from mlelec.utils.pbc_utils import inverse_fourier_transform
+        matrices_kspace = []
+        for ifr, H in enumerate(matrices_realspace):
+            kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(self.kmesh[ifr]))
+            matrices_kspace.append([])
+            for k in kpts:
+                matrices_kspace[ifr].append(inverse_fourier_transform(np.array(list(H.values())), np.array(list(H.keys())), k))
+            matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
+        return matrices_kspace
+    
     def __len__(self):
         return self.nstructs
+    
+
+# Tests
+    
+def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol = 1e-10):
+    from mlelec.utils.pbc_utils import inverse_fourier_transform
+    reconstructed_matrices_kspace = []
+    for ifr, H in enumerate(matrices_realspace):
+        reconstructed_matrices_kspace.append([])
+        kpts = kpoints[ifr]
+        for k in kpts:
+            reconstructed_matrices_kspace[ifr].append(inverse_fourier_transform(np.array(list(H.values())), np.array(list(H.keys())), k))
+        reconstructed_matrices_kspace[ifr] = torch.from_numpy(np.array(reconstructed_matrices_kspace[ifr]))
+        assert reconstructed_matrices_kspace[ifr].shape == matrices_kspace[ifr].shape
+        assert torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol, (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))

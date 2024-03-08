@@ -137,7 +137,7 @@ from mlelec.utils.twocenter_utils import (
 import torch
 
 
-def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
+def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = False):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -183,23 +183,20 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
 
     from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
-    matrices = dataset.matrices_translation
+    matrices = dataset.fock_realspace
     # for T in dataset.desired_shifts: # Loop over translations given in input
 
     for A in range(len(dataset.structures)):  # Loop over frames
 
         frame = dataset.structures[A]
 
-        for T in dataset.matrices_translation[
+        for T in dataset.fock_realspace[
             A
-        ]:  # Loop over the actual translations (in MIC) which label dataset.matrices_translation
+        ]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
 
             matrixT = matrices[A][T]
 
-            # "Old": look for the matrix associated with the negative translation among the H(T)s
-            # matrixmT = matrices[tuple(np.mod(-np.array(T), kmesh[A]))][A]
-
-            # New: take the H given in input and labeled by the same T
+            # Take the H given in input and labeled by the same T
             matrixmT = negative_shift_matrices[A][T]
 
             if isinstance(matrixT, np.ndarray):
@@ -216,17 +213,20 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                 j_start = 0
                 for j, aj in enumerate(frame.numbers):
 
-                    # if i > j and ai == aj:
-                    #     j_start += orbs_tot[aj]
-                    #     continue
+                    if not all_pairs:
+                        if i > j and ai == aj:
+                            j_start += orbs_tot[aj]
+                            continue
                     
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
-                    n1l1n2l2 = np.concatenate([[k2 + k1 for k1 in orbs_i] for k2 in orbs_j])
-                    # sorted_orbs = np.sort([(o1, o2) for o1, o2 in product(list(orbs_i.keys()), list(orbs_j.keys()))], axis=1)
-                    # orbs, orbital_idx = np.unique(sorted_orbs, return_index = True, axis = 0)
-                    # n1l1n2l2 = [tuple(o1) + tuple(o2) for o1, o2 in orbs]
+                    if all_pairs:
+                        n1l1n2l2 = np.concatenate([[k2 + k1 for k1 in orbs_i] for k2 in orbs_j])
+                    else:
+                        sorted_orbs = np.sort([(o1, o2) for o1, o2 in product(list(orbs_i.keys()), list(orbs_j.keys()))], axis=1)
+                        orbs, orbital_idx = np.unique(sorted_orbs, return_index = True, axis = 0)
+                        n1l1n2l2 = [tuple(o1) + tuple(o2) for o1, o2 in orbs]
 
                     # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
                     block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
@@ -235,7 +235,8 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                     block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
-                        # iorbital = orbital_idx[iorbital]
+                        if not all_pairs:
+                            iorbital = orbital_idx[iorbital]
                         value = block_split[iorbital]
 
                         if i == j and np.linalg.norm(T) == 0:
@@ -248,7 +249,6 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                             block_type = 1
                             key = (block_type, ai, ni, li, aj, nj, lj, *T)
                             block_jimT = matrixmT[j_start : j_start + orbs_tot[aj], i_start : i_start + orbs_tot[ai]]
-                            # block_jimT = matrixmT[i_start : i_start + orbs_tot[aj], j_start : j_start + orbs_tot[ai]]
                             # print(block_jimT.shape)
                             # print(block_jimT.shape, block_ij.shape, iorbital, i, j, ai, aj, ni, li, nj, lj, T, matrixT.shape, matrixmT.shape)
                             block_jimT_split = [torch.split(blocki, list(orbs_i.values()), dim=1) for blocki in torch.split(block_jimT, list(orbs_j.values()), dim = 0)]
@@ -306,11 +306,49 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None):
                 i_start += orbs_tot[ai]
     return block_builder.build()
 
+def move_cell_shifts_to_keys(blocks):
+    from metatensor import Labels, TensorBlock, TensorMap
+
+    out_blocks = []
+    out_block_keys = []
+
+    for key, block in blocks.items():        
+        translations = np.unique(block.samples.values[:, -3:], axis = 0)
+        for T in translations:
+            block_view = block.samples.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"]).values
+            idx = np.where(np.all(np.isclose(np.array(block_view),np.array([T[0], T[1], T[2]])), axis = 1))[0]
+
+            if len(idx):
+                out_block_keys.append(list(key.values)+[T[0], T[1], T[2]])
+                out_blocks.append(TensorBlock(
+                        samples = Labels(
+                            blocks.sample_names[:-3],
+                            values = np.asarray(block.samples.values[idx])[:, :-3],
+                        ),
+                        values = block.values[idx],
+                        components = block.components,
+                        properties = block.properties,
+                    ))
+                
+    return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], np.asarray(out_block_keys)), out_blocks)
 
 def blocks_to_matrix(blocks, dataset, device=None):
     if device is None:
         device = dataset.device
-    kmesh = dataset.kmesh
+    # kmesh = dataset.kmesh
+        
+    if "cell_shift_a" not in blocks.keys.names:
+        assert "cell_shift_b" not in blocks.keys.names, "Weird! keys contain 'cell_shift_b' but not 'cell_shift_a'."
+        assert "cell_shift_c" not in blocks.keys.names, "Weird! keys contain 'cell_shift_c' but not 'cell_shift_a'."
+
+        assert "cell_shift_a" in blocks.sample_names, "Cell shifts must be in samples."
+        assert "cell_shift_b" in blocks.sample_names, "Cell shifts must be in samples."
+        assert "cell_shift_c" in blocks.sample_names, "Cell shifts must be in samples."
+
+        if "L" in blocks.keys.names:
+            from mlelec.utils.twocenter_utils import _to_uncoupled_basis
+            blocks = _to_uncoupled_basis(blocks)
+        blocks = move_cell_shifts_to_keys(blocks)      
 
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
@@ -332,7 +370,7 @@ def blocks_to_matrix(blocks, dataset, device=None):
     reconstructed_matrices_minus = []
 
     # Loop over frames
-    for A, shifts in enumerate(dataset.desired_shifts):
+    for A, shifts in enumerate(dataset.realspace_translations):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
 
         reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
@@ -414,92 +452,27 @@ def blocks_to_matrix(blocks, dataset, device=None):
 
     return reconstructed_matrices_plus, reconstructed_matrices_minus
 
+def fourier_transform(H_k, kpts, T):
+    '''
+    Compute the Fourier Transform
+    '''    
+    return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki for ki, H_ki in zip(kpts, H_k)], axis = 0)
+    
+def inverse_fourier_transform(H_T, T_list, k):
+    '''
+    Compute the Inverse Fourier Transform
+    '''    
+    return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)
 
-from mlelec.utils.symmetry import ClebschGordanReal
-
-from metatensor import equal, equal_metadata, allclose, allclose_block, sort, sort_block
-
-
-def cg_combine(
-    x_a,
-    x_b,
-    feature_names=None,
-    clebsch_gordan=None,
-    lcut=None,
-    filter_sigma=[-1, 1],
-    other_keys_match=None,
-    mp=False,
-    device=None,
-):
-    """
-    modified cg_combine from acdc_mini.py to add the MP contraction, that contracts over NOT the center but the neighbor yielding |rho_j> |g_ij>, can be merged
-    """
-
-    # determines the cutoff in the new features
-    lmax_a = max(x_a.keys["spherical_harmonics_l"])
-    lmax_b = max(x_b.keys["spherical_harmonics_l"])
-    if lcut is None:
-        lcut = lmax_a + lmax_b + 1
-
-    if clebsch_gordan is None:
-        clebsch_gordan = ClebschGordanReal(max(lcut, lmax_a, lmax_b) + 1, device=device)
-
-    other_keys_a = tuple(
-        name
-        for name in x_a.keys.names
-        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
-    )
-    other_keys_b = tuple(
-        name
-        for name in x_b.keys.names
-        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
-    )
-
-    if other_keys_match is None:
-        OTHER_KEYS = [k + "_a" for k in other_keys_a] + [k + "_b" for k in other_keys_b]
-    else:
-        OTHER_KEYS = (
-            other_keys_match
-            + [
-                k + ("_a" if k in other_keys_b else "")
-                for k in other_keys_a
-                if k not in other_keys_match
-            ]
-            + [
-                k + ("_b" if k in other_keys_a else "")
-                for k in other_keys_b
-                if k not in other_keys_match
-            ]
-        )
-
-    if feature_names is None:
-        NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
-        feature_names = (
-            tuple(n + "_a" for n in x_a.property_names)
-            + ("k_" + str(NU),)
-            + tuple(n + "_b" for n in x_b.property_names)
-            + ("l_" + str(NU),)
-        )
-
-    X_idx = {}
-    X_blocks = {}
-    X_samples = {}
-
-    for index_a, block_a in x_a.items():
-        block_a = sort_block(block_a, axes="samples")
-
-        lam_a = index_a["spherical_harmonics_l"]
-        sigma_a = index_a["inversion_sigma"]
-        order_a = index_a["order_nu"]
-        properties_a = (
-            block_a.properties
-        )  # pre-extract this block as accessing a c property has a non-zero cost
-
-        samples_a = block_a.samples
-        for index_b, block_b in x_b.items():
-            block_b = sort_block(block_b)
-            lam_b = index_b["spherical_harmonics_l"]
-            sigma_b = index_b["inversion_sigma"]
-            order_b = index_b["order_nu"]
-            properties_b = block_b.properties
-            samples_b = block_b.samples
+def get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh):
+    assert np.all(np.sign(dummy_T) >= 0) or np.all(np.sign(dummy_T) <= 0), "The translation indices must either be all positive or all negative (or zero)"
+    sign = np.sum(dummy_T)
+    if sign != 0:
+        sign = sign/np.abs(sign)
+    dummy_T = np.abs(dummy_T)
+    supercell = frame.repeat(kmesh)
+    I = i
+    J = scidx_from_unitcell(frame, j = j, T = dummy_T, kmesh = kmesh)
+    d = supercell.get_distance(I, J, mic = True, vector = True) - frame.positions[j] + frame.positions[i]
+    mic_T = np.int32(np.round(np.linalg.inv(frame.cell.array).T@d))
+    return I, J, np.int32(sign*mic_T)
