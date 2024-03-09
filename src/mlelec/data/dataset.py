@@ -792,10 +792,11 @@ class PySCFPeriodicDataset(Dataset):
             raise NotImplementedError("For now only reciprocal space matrices are allowed.")
             # self.fock_realspace = self.set_matrices_realspace(fock_realspace)
 
-        if overlap_realspace is None and self.overlap_kspace is not None:
+        if overlap_realspace is None and overlap_kspace is not None:
             self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
         else:
-            raise NotImplementedError("For now only reciprocal space matrices are allowed.")
+            warnings.warn('No real space or kspace overlap set')
+            # raise NotImplementedError("For now only reciprocal space matrices are allowed.")
 
 
 

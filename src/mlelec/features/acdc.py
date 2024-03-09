@@ -94,7 +94,6 @@ def pair_features(
     max_shift=None,
     device="cpu",
     kmesh=None,
-    desired_shifts=None,
     T_dict=None,
     counter=None,
     mic=False,
@@ -165,7 +164,8 @@ def pair_features(
         warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
         blocks = []
         for key, block in rho0_ij.items():
-
+            block_species_i = key['species_center']
+            block_species_j = key['species_neighbor']
             all_frames = np.unique(block.samples.values[:, 0])
             value_indices = []
             fixed_sample = []
@@ -177,6 +177,9 @@ def pair_features(
                     for T in T_dict[ifr][T_dummy]:
                         pairs = np.where(counter[ifr][T])
                         for i, j in zip(*pairs):
+                            ai, aj = frames[ifr].numbers[i], frames[ifr].numbers[j]
+                            if ai != block_species_i or aj != block_species_j:
+                                continue
                             x, y, z = T
                             mic_label = Labels(
                                 [
@@ -189,8 +192,10 @@ def pair_features(
                                 ],
                                 values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
                             )[0]
+                            # print(mic_label)
                             mappedidx = block.samples.position(mic_label)
-                            assert isinstance(mappedidx, int), (mappedidx, mic_label)
+
+                            assert isinstance(mappedidx, int), (mappedidx, mic_label, key,)
 
                             value_indices.append(mappedidx)
                             fixed_sample.append([ifr, i, j, T_dummy[0], T_dummy[1], T_dummy[2], 1])  # Here we still label features with the original T
@@ -207,7 +212,9 @@ def pair_features(
                                 values=np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1),
                             )[0]
                             mappedidx = block.samples.position(mic_label)
-                            assert isinstance(mappedidx, int), (mappedidx, mic_label)
+                            if ai!=aj:
+                                continue
+                            assert isinstance(mappedidx, int), (mappedidx, mic_label, key)
 
                             value_indices.append(mappedidx)
                             fixed_sample.append([ifr, j, i, T_dummy[0], T_dummy[1], T_dummy[2], -1])
@@ -364,8 +371,9 @@ def twocenter_features_periodic_NH(
             if len(idx) != 0:
                 # SHOULD BE ZERO
                 raise ValueError("btype0 should be zero for pair")
-        else:
-            raise NotImplementedError  # Handle periodic case for different species
+        else: 
+            print("off-site, different species")
+
 
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
@@ -447,11 +455,19 @@ def twocenter_features_periodic_NH(
                     values=(b.values[idx_ij] - b.values[idx_ji]),
                 )
             )
-
-        elif k["species_center"] < k["species_neighbor"]:
+            print(b.samples.values)
+        elif k["species_center"] != k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
-            blocks.append(b.copy())
+            # blocks.append(b.copy())
+            blocks.append(TensorBlock(
+                values = b.values, 
+                components = b.components,
+                properties = b.properties,
+                samples = Labels(b.samples.names[:-1], np.asarray(b.samples.values)[:,:-1])
+                )
+                )
+
 
     return TensorMap(
         keys=Labels(

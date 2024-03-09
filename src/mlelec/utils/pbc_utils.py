@@ -173,7 +173,6 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
         unique_orbs = np.asarray(dataset.basis[species])[orbidx[idx]][:, :2]
         orbs_mult[species] = {tuple(k): v for k, v in zip(unique_orbs, count[idx])}
 
-    kmesh = dataset.kmesh
     block_builder = TensorBuilder(
         key_names,
         sample_names,
@@ -211,12 +210,15 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                 j_start = 0
                 for j, aj in enumerate(frame.numbers):
 
-                    if not all_pairs:
-                        if i > j and ai == aj:
+                    if not all_pairs: # not all orbital pairs
+                        if i > j and ai == aj: # skip block type 1 if i>j 
                             j_start += orbs_tot[aj]
                             continue
-                    
-                    get_mic_distance_in_supercell(i, j, T)
+                        elif ai>aj: # keep only sorted species 
+                            j_start += orbs_tot[aj]
+                            continue
+                        
+                    # get_mic_distance_in_supercell(i, j, T)
 
                     orbs_j = orbs_mult[aj]
 
@@ -258,8 +260,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                             # Different species interaction
                             # skip ai>aj
                             block_type = 2
-                            key = (block_type, ai, ni, li, nj, lj, *T)
-                            raise NotImplementedError
+                            key = (block_type, ai, ni, li, aj, nj, lj, *T)
 
                         if key not in block_builder.blocks:
                             # add blocks if not already present
@@ -294,11 +295,12 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                                 data=bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                        elif block_type == 0:
+                        elif block_type == 0 or block_type == 2:
                             block.add_samples(
                                 labels=[(A, i, j)],
                                 data=value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
+                        
                         else:
                             raise ValueError("Block type not implemented")
                     j_start += orbs_tot[aj]
@@ -307,6 +309,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
     return block_builder.build()
 
 def move_cell_shifts_to_keys(blocks):
+    """ Move cell shifts when present in samples, to keys"""
     from metatensor import Labels, TensorBlock, TensorMap
 
     out_blocks = []
@@ -332,10 +335,9 @@ def move_cell_shifts_to_keys(blocks):
                 
     return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], np.asarray(out_block_keys)), out_blocks)
 
-def blocks_to_matrix(blocks, dataset, device=None):
+def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
     if device is None:
         device = dataset.device
-    # kmesh = dataset.kmesh
         
     if "cell_shift_a" not in blocks.keys.names:
         assert "cell_shift_b" not in blocks.keys.names, "Weird! keys contain 'cell_shift_b' but not 'cell_shift_a'."
@@ -378,23 +380,24 @@ def blocks_to_matrix(blocks, dataset, device=None):
 
     # loops over block types
     for key, block in blocks.items():
-        # dense idx and cur_A track the frame
-        # mat_idx = -1
-        # iframe = -1
-
         block_type = key["block_type"]
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
         Tx, Ty, Tz = key["cell_shift_a"], key["cell_shift_b"], key["cell_shift_c"]
+        # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
+        # of a p block = 3
         orbs_i = orbs_mult[ai]
         orbs_j = orbs_mult[aj]
+        
+        # The shape of the block corresponding to the orbital pair
         shapes = {
             (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
             for k1 in orbs_i
             for k2 in orbs_j
         }
-
-        ioffset = orbs_offset[(ai, ni, li)]
+        # offset of the orbital (ni, li) within a block of atom i
+        ioffset = orbs_offset[(ai, ni, li)] 
+        # offset of the orbital (nj,lj) within a block of atom j
         joffset = orbs_offset[(aj, nj, lj)]
 
         # j_end = joffset + shapes[(ni, li, nj, lj)][1]
@@ -410,7 +413,9 @@ def blocks_to_matrix(blocks, dataset, device=None):
 
             matrix_T_plus  = reconstructed_matrices_plus[A][Tx, Ty, Tz]
             matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
+            # beginning of the block corresponding to the atom i-j pair
             i_start, j_start = atom_blocks_idx[(A, i, j)]
+            
             i_end = shapes[(ni, li, nj, lj)][0]  # orb end
             j_end = shapes[(ni, li, nj, lj)][1]  # orb end
 
@@ -426,31 +431,84 @@ def blocks_to_matrix(blocks, dataset, device=None):
                 matrix_T_plus[
                     i_start + ioffset : i_start + ioffset + i_end,
                     j_start + joffset : j_start + joffset + j_end,
-                ] = values
+                             ] = values
+
+                # Add the corresponding hermitian part
+                # if (ni, li)!=(nj, lj):
+                #     matrix_T_plus[j_start + joffset : j_start + joffset + j_end, 
+                #                 i_start + ioffset : i_start + ioffset + i_end
+                #                 ] = values.T
 
             if abs(block_type) == 1:
-
                 values *= ISQRT_2
                 if block_type == 1:
                     matrix_T_plus[
                         i_start + ioffset : i_start + ioffset + i_end,
                         j_start + joffset : j_start + joffset + j_end,
                     ] += values
+
+
+                    # matrix_T_plus[
+                    #         j_start + ioffset : j_start + ioffset + i_end,
+                    #         i_start + joffset : i_start + joffset + j_end,
+                    #     ] += values
+                   
+
                     matrix_T_minus[
                         j_start + ioffset : j_start + ioffset + i_end,
                         i_start + joffset : i_start + joffset + j_end,
                     ] += values
+
+                    # print([Tx,Ty,Tz],i,j, slice(i_start + ioffset, i_start + ioffset + i_end), slice(j_start + joffset, j_start + joffset + j_end))
+                
+                    # # Add the corresponding hermitian part
+                    # if (ni, li)!= (nj, lj):
+
+                    #     # <i \phi |H| j \psi> = <j \psi |H| i \phi>^\dagger
+                    #     matrix_T_plus[
+                    #     j_start + joffset : j_start + joffset + j_end,
+                    #     i_start + ioffset : i_start + ioffset + i_end,
+                    # ] += values.T
+                        
+                    #     matrix_T_plus[
+                    #         i_start + joffset : i_start + joffset + j_end,
+                    #         j_start + ioffset : j_start + ioffset + i_end,
+                    #     ] += values.T
+
                 else:
+                    
                     matrix_T_plus[
                         i_start + ioffset : i_start + ioffset + i_end,
                         j_start + joffset : j_start + joffset + j_end,
                     ] += values
+
+                    # matrix_T_plus[
+                    #         j_start + ioffset : j_start + ioffset + i_end,
+                    #         i_start + joffset : i_start + joffset + j_end,
+                    #     ] -= values
+                    
                     matrix_T_minus[
                         j_start + ioffset : j_start + ioffset + i_end,
                         i_start + joffset : i_start + joffset + j_end,
                     ] -= values
 
-    return reconstructed_matrices_plus, reconstructed_matrices_minus
+                    # Add the corresponding hermitian part
+                    # if (ni, li)!= (nj, lj):
+                    #     matrix_T_plus[
+                    #         j_start + joffset : j_start + joffset + j_end,
+                    #         i_start + ioffset : i_start + ioffset + i_end,
+                    #     ] += values.T
+
+                    #     matrix_T_plus[
+                    #         i_start + joffset : i_start + joffset + j_end,
+                    #         j_start + ioffset : j_start + ioffset + i_end,
+                    #     ] -= values.T
+
+
+
+    if return_negative:
+        return reconstructed_matrices_plus, reconstructed_matrices_minus
+    return reconstructed_matrices_plus
 
 def fourier_transform(H_k, kpts, T):
     '''
