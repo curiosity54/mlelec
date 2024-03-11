@@ -91,7 +91,6 @@ def pair_features(
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
-    max_shift=None,
     device="cpu",
     kmesh=None,
     T_dict=None,
@@ -106,54 +105,39 @@ def pair_features(
     rhonu_i: TensorMap of single center features
     order_nu: int or list of int, order of the spherical expansion
     """
+
     if not isinstance(frames, list):
         frames = [frames]
+
     if lcut is None:
         lcut = 10
+
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
 
         L = max(lcut, hypers["max_angular"])
         cg = ClebschGordanReal(lmax=L, device=device)
         # cg = ClebschGordanReal(lmax=lcut)
+
     if hypers_pair is None:
         hypers_pair = hypers
+
+    if all_pairs:    
+        repframes = [f.repeat(kmesh[ifr]) for ifr, f in enumerate(frames)]
+        hypers_pair["cutoff"] = np.ceil(np.max([np.max(f.get_all_distances(mic = mic)) for f in repframes]))
+        warnings.warn(f"Overwriting hyperparameter 'cutoff' to new value {hypers_pair['cutoff']} for all pair feature.")
+
     calculator = PairExpansion(**hypers_pair)
-    rho0_ij = calculator.compute(frames, use_native_system=use_native)
+    rho0_ij = calculator.compute(frames, use_native_system = use_native)
 
-    if all_pairs:
-        
-        hypers_allpairs = hypers_pair.copy()
-        if max_shift is None and hypers["cutoff"] < np.max(
-            [np.max(f.get_all_distances(mic=True))for f in frames]
-        ):
-            hypers_allpairs["cutoff"] = np.ceil(
-                np.max([np.max(f.get_all_distances(mic=mic)) for f in frames])
-            )
-
-        elif max_shift is not None:
-            repframes = [f.repeat(max_shift[ifr]) for ifr, f in enumerate(frames)]
-            hypers_allpairs["cutoff"] = np.ceil(
-                np.max(
-                    [np.max(f.get_all_distances(mic=mic)) for f in repframes]
-                )
-            )
-            # FIXME - miic = mic
-            warnings.warn(
-                f"Using cutoff {hypers_allpairs['cutoff']} for all pairs feature"
-            )
-        else:
-            warnings.warn(f"Using unchanged hypers for all pairs feature")
-        print("hypers_pair", hypers_allpairs)
-        calculator_allpairs = PairExpansion(**hypers_allpairs)
-
-        rho0_ij = calculator_allpairs.compute(frames, use_native_system=use_native)
-
-    # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
+
     if not mic and return_rho0ij:
         return rho0_ij
+
+
+    print(hypers_pair)
     # ----- MIC mapping ------
     if mic:
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
@@ -176,10 +160,19 @@ def pair_features(
                 for T_dummy in T_dict[ifr]:
                     for T in T_dict[ifr][T_dummy]:
                         pairs = np.where(counter[ifr][T])
+
                         for i, j in zip(*pairs):
+
+                            if not all_pairs:
+                                ij_distance = np.linalg.norm(frames[ifr].cell.array.T @ np.array(T) + frames[ifr].positions[j] - frames[ifr].positions[i])
+                                if ij_distance > hypers_pair['cutoff']:
+                                    continue
+
                             ai, aj = frames[ifr].numbers[i], frames[ifr].numbers[j]
+                        
                             if ai != block_species_i or aj != block_species_j:
                                 continue
+                        
                             x, y, z = T
                             mic_label = Labels(
                                 [
@@ -455,7 +448,6 @@ def twocenter_features_periodic_NH(
                     values=(b.values[idx_ij] - b.values[idx_ji]),
                 )
             )
-            print(b.samples.values)
         elif k["species_center"] != k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))

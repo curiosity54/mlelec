@@ -141,6 +141,116 @@ import scipy
 
 
 def plot_bands_frame(
+    ifr,
+    dataset,
+    realfock,
+    realover,
+    special_symm=None,
+    bandpath_str=None,
+    kpath=None,
+    npoints=30,
+    pbc=[True, True, True],
+    y_min=-2 * Hartree,
+    y_max=2 * Hartree,
+    ax=None,
+    color="blue",
+    ls="-",
+    marker=None,
+):
+
+    from mlelec.utils.pbc_utils import fourier_transform, inverse_fourier_transform
+    # R_vec_rel = translation_vectors_for_kmesh(
+    #     pyscf_cell, kmesh, return_rel=True, wrap_around=True
+    # )
+    # R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, wrap_around=True)
+
+    # mask_x = np.where(R_vec_rel[:, 0] == -kmesh[0] // 2)[0]
+    # R_vec_rel[:, 0][mask_x] = kmesh[0] // 2
+    # R_vec_abs[:, 0][mask_x] = -1 * R_vec_abs[:, 0][mask_x]
+
+    # mask_y = np.where(R_vec_rel[:, 1] == -kmesh[1] // 2)[0]
+    # R_vec_rel[:, 1][mask_y] = kmesh[1] // 2
+    # R_vec_abs[:, 1][mask_y] = -1 * R_vec_abs[:, 1][mask_y]
+
+    pyscf_cell = dataset.cells[ifr]
+    kmesh = dataset.kmesh[ifr]
+    frame = dataset.structures[ifr]
+
+    print(npoints, bandpath_str, pbc, special_points[special_symm])
+    if bandpath_str is not None:
+        kpath = frame.cell.bandpath(
+            path=bandpath_str,
+            npoints=npoints,
+            pbc=pbc,
+            special_points=special_points[special_symm],
+        )
+    else:
+        assert kpath is not None
+
+    kpts = kpath.kpts  # units of icell
+    # kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
+
+    xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
+    special_xcoords = np.array(special_xcoords) / xcoords[-1]
+    xcoords = np.array(xcoords) / xcoords[-1]
+    # Nk = np.prod(kmesh)
+
+    Hk = []
+    Sk = []
+    # for HT, ST in zip(realfock, realover):
+    HT = realfock; ST = realover 
+    # kpts = dataset.cells[ifr].get_scaled_kpts(dataset.cells[ifr].make_kpts(dataset.kmesh[ifr]))
+    for k in kpts:
+        Hk.append(inverse_fourier_transform(np.array(list(HT.values())), np.array(list(HT.keys())), k))
+        Sk.append(inverse_fourier_transform(np.array(list(ST.values())), np.array(list(ST.keys())), k))
+    Hk = np.asarray(Hk)
+    Sk = np.asarray(Sk)
+
+    # phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
+    # Hk = np.einsum("tk, tij ->kij", phase, realfock)
+    # Sk = np.einsum("tk, tij ->kij", phase, realover)
+    e_nk = []
+    for n in range(len(kpts)):
+        e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
+
+    vbmax = -99
+    for en in e_nk:
+        vb_k = en[pyscf_cell.nelectron // 2 - 1]
+        if vb_k > vbmax:
+            vbmax = vb_k
+    e_nk = [en - vbmax for en in e_nk]
+    emin = y_min
+    emax = y_max
+    fs = plt.rcParams["figure.figsize"]
+
+    if ax is None:
+        ax_was_none = True
+        fig, ax = plt.subplots(figsize=(fs[0] * 0.8, fs[1] * 1.2))
+    else:
+        ax_was_none = False
+    nbands = pyscf_cell.nao_nr()
+
+    for n in range(nbands):
+        ax.plot(
+            xcoords, [e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
+        )
+
+    for p in special_xcoords:
+        ax.plot([p, p], [emin, emax], "k-")
+    # plt.plot([0, sp_points[-1]], [0, 0], 'k-')
+    # plt.xticks(x, labels)
+    ax.set_xticks(special_xcoords, labels)
+    ax.axis(xmin=0, xmax=special_xcoords[-1], ymin=emin, ymax=emax)
+    ax.set_xlabel(r"$\mathbf{k}$")
+
+    ax.set_ylim(y_min, y_max)
+
+    if ax_was_none:
+        return fig, ax
+    else:
+        return ax
+
+def plot_bands_frame_(
     frame,
     realfock,
     realover,
@@ -171,6 +281,8 @@ def plot_bands_frame(
     mask_y = np.where(R_vec_rel[:, 1] == -kmesh[1] // 2)[0]
     R_vec_rel[:, 1][mask_y] = kmesh[1] // 2
     R_vec_abs[:, 1][mask_y] = -1 * R_vec_abs[:, 1][mask_y]
+
+    # print(npoints, bandpath_str, pbc, special_points[special_symm])
     if bandpath_str is not None:
         kpath = frame.cell.bandpath(
             path=bandpath_str,
@@ -260,12 +372,12 @@ def plot_bands(
             realover[ifr],
             pyscf_cell[ifr],
             kmesh[ifr],
-            special_symm,
-            bandpath_str,
-            npoints,
-            pbc,
-            y_min,
-            y_max,
+            special_symm = special_symm,
+            bandpath_str = bandpath_str,
+            npoints = npoints,
+            pbc = pbc,
+            y_min = y_min,
+            y_max = y_max,
         )
         axes.append(ax)
         # ax_.plot(ax.get_xticks(), ax.get_yticks(), "k-")

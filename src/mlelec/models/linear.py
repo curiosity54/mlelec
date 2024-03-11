@@ -601,15 +601,20 @@ class LinearModelPeriodic(nn.Module):
                     .numpy()
                 )
 
-                ridge = KernelRidge(alpha = 1e-9).fit(x, y) 
+                # ridge = KernelRidge(alpha = 5e-9).fit(x, y) 
+                # if nsamples > 2:
+                #     gscv = GridSearchCV(ridge, dict(alpha = np.logspace(-12, 1, 25)), cv = 3).fit(x, y) 
+                #     alpha = gscv.best_params_['alpha']
+                # else:
+                #     alpha = 1e-5
+                # ridge = KernelRidge(alpha = alpha).fit(x, y) 
 
-                # gscv = GridSearchCV(ridge, dict(alpha = np.logspace(-50, -1, 200)), cv = 3)
-                # gscv
-                # ridge = RidgeCV(
-                    # alphas=np.logspace(-50, -1, 200), fit_intercept=bias
-                # ).fit(x, y)
+                ridge = RidgeCV(
+                    alphas=np.logspace(-20, -1, 500), fit_intercept = bias
+                ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
+
                 pred = ridge.predict(x)
                 ridges.append(ridge)
 

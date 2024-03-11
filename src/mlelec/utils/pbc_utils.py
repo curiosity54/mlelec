@@ -137,7 +137,7 @@ from mlelec.utils.twocenter_utils import (
 import torch
 
 
-def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = False, cutoff = None):
+def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = True, cutoff = None):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -208,18 +208,31 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
             for i, ai in enumerate(frame.numbers):
                 orbs_i = orbs_mult[ai]
                 j_start = 0
+
                 for j, aj in enumerate(frame.numbers):
+
+                    skip_pair = False
 
                     if not all_pairs: # not all orbital pairs
                         if i > j and ai == aj: # skip block type 1 if i>j 
                             j_start += orbs_tot[aj]
                             continue
-                        elif ai>aj: # keep only sorted species 
+                        elif ai > aj: # keep only sorted species 
                             j_start += orbs_tot[aj]
                             continue
+                       
+                    # Skip the pair if their distance exceeds the cutoff
+                    if cutoff is not None:
+                        for mic_T in dataset._translation_dict[A][T]:
+                            if dataset._translation_counter[A][mic_T][i, j]:
+                                ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(mic_T) + frame.positions[j] - frame.positions[i])
+                                if ij_distance > cutoff:
+                                    skip_pair = True
+                                break
+                    if skip_pair:
+                        j_start += orbs_tot[aj]
+                        continue
                         
-                    # get_mic_distance_in_supercell(i, j, T)
-
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
