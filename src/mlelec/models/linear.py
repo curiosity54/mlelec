@@ -349,8 +349,7 @@ class LinearTargetModel(nn.Module):
                 pred_blocks.append(
                     TensorBlock(
                         values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device)
-                        .to(torch.float32),
+                        .to(self.device),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -359,7 +358,7 @@ class LinearTargetModel(nn.Module):
             else:
                 pred_blocks.append(
                     TensorBlock(
-                        values=block.values.to(torch.float32),
+                        values=block.values,
                         samples=block.samples,
                         components=block.components,
                         properties=block.properties,
@@ -400,8 +399,7 @@ class LinearTargetModel(nn.Module):
             pred_blocks_val.append(
                 TensorBlock(
                     values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                    .to(self.device)
-                    .to(torch.float32),
+                    .to(self.device),
                     samples=target.samples,
                     components=target.components,
                     properties=self.dummy_property,
@@ -421,7 +419,7 @@ class LinearModelPeriodic(nn.Module):
         frames,
         orbitals,
         device=None,
-        cell_shifts=None,
+        # cell_shifts=None,
         **kwargs,
     ):
         super().__init__()
@@ -429,14 +427,14 @@ class LinearModelPeriodic(nn.Module):
         self.target_blocks = target_blocks
         self.frames = frames
         self.orbitals = orbitals
-        self.cell_shifts = cell_shifts
+        # self.cell_shifts = cell_shifts
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
-        #print(self.cell_shifts, len(self.cell_shifts))
+        # print(self.cell_shifts, len(self.cell_shifts))
 
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
@@ -445,7 +443,9 @@ class LinearModelPeriodic(nn.Module):
             if k["L"] == 0 and set_bias:
                 bias = True
             blockval = torch.linalg.norm(self.target_blocks[k].values)
-            if True:  # blockval > 1e-10:
+            # if  blockval > 1e-10:
+            if True: #<<<<<<<<<<<<<<<<<<<<<
+            
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 self.blockmodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
@@ -455,7 +455,6 @@ class LinearModelPeriodic(nn.Module):
                     bias=bias,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
-        print(self.device)
         self.model.to(self.device)
 
     def forward(self, return_matrix=False):
@@ -501,9 +500,11 @@ class LinearModelPeriodic(nn.Module):
     def model_return(self, target: TensorMap, return_matrix=False):
         if not return_matrix:
             return target
+        else:
+            raise NotImplementedError
         recon_blocks = {}
 
-        for translation in self.cell_shifts:
+        for translation in self.cell_shifts: # TODOD <<<< FIX 
             blocks = []
             for key, block in target.items():
                 # TODO: replace labels_where
@@ -547,6 +548,7 @@ class LinearModelPeriodic(nn.Module):
     def fit_ridge_analytical(self, return_matrix=False, set_bias=False) -> None:
         from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
+        from sklearn.model_selection import GridSearchCV
 
         # set_bias will set bias=True for the invariant model
         self.recon = {}
@@ -558,7 +560,7 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
-            if True:  # blockval > 1e-10:
+            if True: #blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
                 sample_names = block.samples.names
@@ -598,23 +600,23 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
-                # ridge = ridge.fit(x,y)
-                ridge = RidgeCV(
-                    alphas=np.logspace(-15, -1, 40), fit_intercept=bias
-                ).fit(x, y)
+
+                ridge = KernelRidge(alpha = 1e-9).fit(x, y) 
+
+                # gscv = GridSearchCV(ridge, dict(alpha = np.logspace(-50, -1, 200)), cv = 3)
+                # gscv
+                # ridge = RidgeCV(
+                    # alphas=np.logspace(-50, -1, 200), fit_intercept=bias
+                # ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
                 pred = ridge.predict(x)
-                # if k['L']==0:
-                #     print('SCORE', ridge.score(x,y) )
                 ridges.append(ridge)
 
                 pred_blocks.append(
                     TensorBlock(
                         values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device)
-                        .to(torch.float32),
+                        .to(self.device),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -623,7 +625,7 @@ class LinearModelPeriodic(nn.Module):
             else:
                 pred_blocks.append(
                     TensorBlock(
-                        values=block.values.to(torch.float32),
+                        values=block.values,
                         samples=block.samples,
                         components=block.components,
                         properties=block.properties,
