@@ -340,9 +340,9 @@ def plot_bands_frame_(
     ax.set_ylim(y_min, y_max)
 
     if ax_was_none:
-        return fig, ax
+        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
     else:
-        return ax
+        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
 
 
 def plot_bands(
