@@ -500,6 +500,43 @@ class LinearModelPeriodic(nn.Module):
         return self.recon_blocks
         # _to_matrix(_to_uncoupled_basis(pred_sum_dict[s]), frames = self.frames, orbitals=self.orbitals)
 
+    def predict(self, features, target_blocks, return_matrix=False):
+        pred_blocks = []
+        for k, block in target_blocks.items():
+            # print(k)
+            blockval = torch.linalg.norm(block.values)
+            if True:
+                # if blockval > 1e-10:
+                sample_names = block.samples.names
+                feat = map_targetkeys_to_featkeys(features, k)
+
+                featnorm = torch.linalg.norm(feat.values)
+                nsamples, ncomp, nprops = block.values.shape
+                # nsamples, ncomp, nprops = feat.values.shape
+                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
+                pred = self.blockmodels[str(tuple(k))](feat.values)
+                # print(pred.shape, nsamples)
+
+                pred_blocks.append(
+                    TensorBlock(
+                        values=pred.reshape((nsamples, ncomp, 1)),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=self.dummy_property,
+                    )
+                )
+            else:
+                raise NotImplementedError
+                # pred_blocks.append(block.copy())
+        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
+        recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
+        return recon_blocks
+
     def model_return(self, target: TensorMap, return_matrix=False):
         if not return_matrix:
             return target
@@ -603,7 +640,7 @@ class LinearModelPeriodic(nn.Module):
                     .numpy()
                 )
                 if kernel_ridge:
-                    warnings.warn("Using KernelRidge")
+                    # warnings.warn("Using KernelRidge")
                     # ridge = KernelRidge(alpha = 5e-9).fit(x, y)
                     if nsamples > 2:
                         gscv = GridSearchCV(
@@ -614,7 +651,7 @@ class LinearModelPeriodic(nn.Module):
                         alpha = 1e-5
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
                 else:
-                    warnings.warn("Using RidgeCV")
+                    # warnings.warn("Using RidgeCV")
                     ridge = RidgeCV(
                         alphas=np.logspace(-20, -1, 500), fit_intercept=bias
                     ).fit(x, y)
