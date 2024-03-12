@@ -641,6 +641,7 @@ class LinearModelPeriodic(nn.Module):
                 )
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
+                    #warnings.warn("Using KernelRidge")
                     ridge = KernelRidge(alpha = 5e-9).fit(x, y)
                     if nsamples > 2:
                         gscv = GridSearchCV(
@@ -648,12 +649,12 @@ class LinearModelPeriodic(nn.Module):
                         ).fit(x, y)
                         alpha = gscv.best_params_["alpha"]
                     else:
-                        alpha = 1e-5
+                        alpha = 1e-7
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
                 else:
-                    # warnings.warn("Using RidgeCV")
+                    #warnings.warn("Using RidgeCV")
                     ridge = RidgeCV(
-                        alphas=np.logspace(-20, -1, 500), fit_intercept=bias
+                        alphas=np.logspace(-25, 1, 100), fit_intercept=bias
                     ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
