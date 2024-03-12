@@ -12,7 +12,8 @@ from mlelec.data.dataset import PySCFPeriodicDataset
 from mlelec.utils.twocenter_utils import fix_orbital_order
 from pathlib import Path
 from mlelec.features.acdc import pair_features, single_center_features, twocenter_features_periodic_NH
-
+from numpy.random import seed 
+from metatensor import slice as mts_slice 
 def check_target(coupled_blocks, tol=1e-4):
     """ Checks that the coupled blocks, when n1, l1 = n2, l2, satisfy 
             - block_type=1, lambda = ODD blocks are zero, 

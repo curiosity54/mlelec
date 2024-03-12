@@ -641,7 +641,7 @@ class LinearModelPeriodic(nn.Module):
                 )
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
-                    # ridge = KernelRidge(alpha = 5e-9).fit(x, y)
+                    ridge = KernelRidge(alpha = 5e-9).fit(x, y)
                     if nsamples > 2:
                         gscv = GridSearchCV(
                             ridge, dict(alpha=np.logspace(-12, 1, 25)), cv=3
