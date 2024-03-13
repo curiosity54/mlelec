@@ -137,7 +137,7 @@ from mlelec.utils.twocenter_utils import (
 import torch
 
 
-def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = True, cutoff = None):
+def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = True, cutoff = None, target='fock'):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -182,14 +182,19 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
 
     from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
-    matrices = dataset.fock_realspace
+    if target.lower() == "fock":
+        matrices = dataset.fock_realspace
+    elif target.lower() == "overlap":
+        matrices = dataset.overlap_realspace
+    else:
+        raise ValueError("target must be either 'fock' or 'overlap'")
     # for T in dataset.desired_shifts: # Loop over translations given in input
 
     for A in range(len(dataset.structures)):  # Loop over frames
 
         frame = dataset.structures[A]
 
-        for T in dataset.fock_realspace[A]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
+        for T in matrices[A]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
 
             matrixT = matrices[A][T]
 

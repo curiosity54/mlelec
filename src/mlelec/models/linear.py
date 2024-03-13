@@ -12,6 +12,7 @@ from metatensor import Labels, TensorMap, TensorBlock
 import mlelec.metrics as mlmetrics
 from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
+import warnings
 
 
 def norm_over_components(x):
@@ -348,8 +349,9 @@ class LinearTargetModel(nn.Module):
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device),
+                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                            self.device
+                        ),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -398,8 +400,9 @@ class LinearTargetModel(nn.Module):
             pred = self.ridges[imdl].predict(x)
             pred_blocks_val.append(
                 TensorBlock(
-                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                    .to(self.device),
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                        self.device
+                    ),
                     samples=target.samples,
                     components=target.components,
                     properties=self.dummy_property,
@@ -444,8 +447,8 @@ class LinearModelPeriodic(nn.Module):
                 bias = True
             blockval = torch.linalg.norm(self.target_blocks[k].values)
             # if  blockval > 1e-10:
-            if True: #<<<<<<<<<<<<<<<<<<<<<
-            
+            if True:  # <<<<<<<<<<<<<<<<<<<<<
+
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 self.blockmodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
@@ -497,6 +500,43 @@ class LinearModelPeriodic(nn.Module):
         return self.recon_blocks
         # _to_matrix(_to_uncoupled_basis(pred_sum_dict[s]), frames = self.frames, orbitals=self.orbitals)
 
+    def predict(self, features, target_blocks, return_matrix=False):
+        pred_blocks = []
+        for k, block in target_blocks.items():
+            # print(k)
+            blockval = torch.linalg.norm(block.values)
+            if True:
+                # if blockval > 1e-10:
+                sample_names = block.samples.names
+                feat = map_targetkeys_to_featkeys(features, k)
+
+                featnorm = torch.linalg.norm(feat.values)
+                nsamples, ncomp, nprops = block.values.shape
+                # nsamples, ncomp, nprops = feat.values.shape
+                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
+                pred = self.blockmodels[str(tuple(k))](feat.values)
+                # print(pred.shape, nsamples)
+
+                pred_blocks.append(
+                    TensorBlock(
+                        values=pred.reshape((nsamples, ncomp, 1)),
+                        samples=block.samples,
+                        components=block.components,
+                        properties=self.dummy_property,
+                    )
+                )
+            else:
+                raise NotImplementedError
+                # pred_blocks.append(block.copy())
+        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
+        recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
+        return recon_blocks
+
     def model_return(self, target: TensorMap, return_matrix=False):
         if not return_matrix:
             return target
@@ -504,7 +544,7 @@ class LinearModelPeriodic(nn.Module):
             raise NotImplementedError
         recon_blocks = {}
 
-        for translation in self.cell_shifts: # TODOD <<<< FIX 
+        for translation in self.cell_shifts:  # TODOD <<<< FIX
             blocks = []
             for key, block in target.items():
                 # TODO: replace labels_where
@@ -545,7 +585,9 @@ class LinearModelPeriodic(nn.Module):
             return rmat
         return recon_blocks
 
-    def fit_ridge_analytical(self, return_matrix=False, set_bias=False) -> None:
+    def fit_ridge_analytical(
+        self, return_matrix=False, set_bias=False, kernel_ridge=False
+    ) -> None:
         from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
         from sklearn.model_selection import GridSearchCV
@@ -555,12 +597,11 @@ class LinearModelPeriodic(nn.Module):
 
         pred_blocks = []
         ridges = []
-        kernels = []
         for k, block in self.target_blocks.items():
             # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
-            if True: #blockval > 1e-10:
+            if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
                 sample_names = block.samples.names
@@ -588,8 +629,6 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-                kernel = x @ x.T
-                kernels.append(kernel)
                 y = (
                     (
                         block.values.reshape(
@@ -600,18 +639,23 @@ class LinearModelPeriodic(nn.Module):
                     .cpu()
                     .numpy()
                 )
-
-                # ridge = KernelRidge(alpha = 5e-9).fit(x, y) 
-                # if nsamples > 2:
-                #     gscv = GridSearchCV(ridge, dict(alpha = np.logspace(-12, 1, 25)), cv = 3).fit(x, y) 
-                #     alpha = gscv.best_params_['alpha']
-                # else:
-                #     alpha = 1e-5
-                # ridge = KernelRidge(alpha = alpha).fit(x, y) 
-
-                ridge = RidgeCV(
-                    alphas=np.logspace(-20, -1, 500), fit_intercept = bias
-                ).fit(x, y)
+                if kernel_ridge:
+                    # warnings.warn("Using KernelRidge")
+                    #warnings.warn("Using KernelRidge")
+                    ridge = KernelRidge(alpha = 5e-9).fit(x, y)
+                    if nsamples > 2:
+                        gscv = GridSearchCV(
+                            ridge, dict(alpha=np.logspace(-12, 1, 25)), cv=3
+                        ).fit(x, y)
+                        alpha = gscv.best_params_["alpha"]
+                    else:
+                        alpha = 1e-7
+                    ridge = KernelRidge(alpha=alpha).fit(x, y)
+                else:
+                    #warnings.warn("Using RidgeCV")
+                    ridge = RidgeCV(
+                        alphas=np.logspace(-25, 1, 100), fit_intercept=bias
+                    ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
 
@@ -620,8 +664,9 @@ class LinearModelPeriodic(nn.Module):
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                        .to(self.device),
+                        values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                            self.device
+                        ),
                         samples=block.samples,
                         components=block.components,
                         properties=self.dummy_property,
@@ -642,7 +687,7 @@ class LinearModelPeriodic(nn.Module):
         pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
         self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
 
-        return self.recon_blocks, ridges, kernels
+        return self.recon_blocks, ridges
 
     def regularization_loss(self, regularization):
         return (
