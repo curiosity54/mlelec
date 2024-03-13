@@ -533,7 +533,7 @@ class LinearModelPeriodic(nn.Module):
             else:
                 raise NotImplementedError
                 # pred_blocks.append(block.copy())
-        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
+        pred_tmap = TensorMap(target_blocks.keys, pred_blocks)
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
 
@@ -641,18 +641,17 @@ class LinearModelPeriodic(nn.Module):
                 )
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
-                    #warnings.warn("Using KernelRidge")
-                    ridge = KernelRidge(alpha = 5e-9).fit(x, y)
+                    ridge = KernelRidge(alpha=5e-9).fit(x, y)
                     if nsamples > 2:
                         gscv = GridSearchCV(
-                            ridge, dict(alpha=np.logspace(-12, 1, 25)), cv=3
+                            ridge, dict(alpha=np.logspace(-18, 1, 35)), cv=3
                         ).fit(x, y)
                         alpha = gscv.best_params_["alpha"]
                     else:
-                        alpha = 1e-7
+                        alpha = 1e-5
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
                 else:
-                    #warnings.warn("Using RidgeCV")
+                    # warnings.warn("Using RidgeCV")
                     ridge = RidgeCV(
                         alphas=np.logspace(-25, 1, 100), fit_intercept=bias
                     ).fit(x, y)
