@@ -586,8 +586,16 @@ class LinearModelPeriodic(nn.Module):
         return recon_blocks
 
     def fit_ridge_analytical(
-        self, return_matrix=False, set_bias=False, kernel_ridge=False
+        self,
+        return_matrix=False,
+        set_bias=False,
+        kernel_ridge=False,
+        alphas=None,
+        alpha=5e-9,
+        cv=3,
     ) -> None:
+        if alphas is None:
+            alphas = np.logspace(-18, 1, 35)
         from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
         from sklearn.model_selection import GridSearchCV
@@ -641,20 +649,16 @@ class LinearModelPeriodic(nn.Module):
                 )
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
-                    ridge = KernelRidge(alpha=5e-9).fit(x, y)
+                    ridge = KernelRidge(alpha=alpha).fit(x, y)
                     if nsamples > 2:
-                        gscv = GridSearchCV(
-                            ridge, dict(alpha=np.logspace(-18, 1, 35)), cv=3
-                        ).fit(x, y)
+                        gscv = GridSearchCV(ridge, dict(alpha=alphas), cv=cv).fit(x, y)
                         alpha = gscv.best_params_["alpha"]
                     else:
-                        alpha = 1e-5
+                        alpha = alpha
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
                 else:
                     # warnings.warn("Using RidgeCV")
-                    ridge = RidgeCV(
-                        alphas=np.logspace(-25, 1, 100), fit_intercept=bias
-                    ).fit(x, y)
+                    ridge = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 # print(pred.shape, nsamples)
 
