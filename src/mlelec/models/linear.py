@@ -606,47 +606,19 @@ class LinearModelPeriodic(nn.Module):
         pred_blocks = []
         ridges = []
         for k, block in self.target_blocks.items():
-            # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
-                sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-                featkey = map_targetkeys_to_featkeys(self.feats, k, return_key=True)
+                nsamples, _, _ = block.values.shape
 
-                featnorm = torch.linalg.norm(feat.values)
-                targetnorm = torch.linalg.norm(block.values)
-                nsamples, ncomp, nprops = block.values.shape
-                # nsamples, ncomp, nprops = feat.values.shape
-                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
-                    k,
-                    block.samples.values.shape,
-                    feat.samples.values.shape,
-                )
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (k, block.samples.values.shape, feat.samples.values.shape)
 
-                x = (
-                    (
-                        feat.values.reshape(
-                            (feat.values.shape[0] * feat.values.shape[1], -1)
-                        )
-                        / 1
-                    )
-                    .cpu()
-                    .numpy()
-                )
-                y = (
-                    (
-                        block.values.reshape(
-                            block.values.shape[0] * block.values.shape[1], -1
-                        )
-                        / 1
-                    )
-                    .cpu()
-                    .numpy()
-                )
+                x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))).cpu().numpy())
+                y = ((block.values.reshape(block.values.shape[0] * block.values.shape[1], -1)).cpu().numpy())
+
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
                     ridge = KernelRidge(alpha=alpha).fit(x, y)

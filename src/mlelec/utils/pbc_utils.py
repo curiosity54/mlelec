@@ -538,7 +538,14 @@ def inverse_fourier_transform(H_T, T_list, k):
     '''
     Compute the Inverse Fourier Transform
     '''    
-    return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)
+    # print(H_T.shape, T_list.shape)
+    if isinstance(H_T, np.ndarray):
+        return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
+    elif isinstance(H_T, torch.Tensor):
+        k = torch.tensor(k).to(T_list)
+        return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
+    else:
+        raise ValueError("H_T must be np.ndarray or torch.Tensor")
 
 def get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh):
     assert np.all(np.sign(dummy_T) >= 0) or np.all(np.sign(dummy_T) <= 0), "The translation indices must either be all positive or all negative (or zero)"
@@ -552,3 +559,4 @@ def get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh):
     d = supercell.get_distance(I, J, mic = True, vector = True) - frame.positions[j] + frame.positions[i]
     mic_T = np.int32(np.round(np.linalg.inv(frame.cell.array).T@d))
     return I, J, np.int32(sign*mic_T)
+

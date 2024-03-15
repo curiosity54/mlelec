@@ -227,6 +227,59 @@ def pair_features(
             )
 
         rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
+
+    else:
+
+        blocks = []
+        for key, block in rho0_ij.items():
+            print(block.values.shape,'1')
+            block_species_i = key['species_center']
+            block_species_j = key['species_neighbor']
+            all_frames = np.unique(block.samples.values[:, 0])
+            sample_labels = []
+            value_indices = []
+
+            negative_list = []
+            for isample, sample in enumerate(block.samples):
+                ifr = sample['structure']
+                i = sample['center']
+                j = sample['neighbor']
+                x = sample['cell_shift_a']
+                y = sample['cell_shift_b']
+                z = sample['cell_shift_c']
+
+                if False: #[i, j, x, y, z] in negative_list: <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
+                    continue
+
+                else:
+                    value_indices.append(isample)
+                    sample_labels.append([ifr, i, j, x, y, z, 1])
+                    if not (j==i and x==0 and y==0 and z==0):
+                        sample_labels.append([ifr, j, i, x, y, z, -1])
+                        negative_list.append([j, i, -x, -y, -z])
+
+                        neg_label = Labels(["structure","center","neighbor","cell_shift_a","cell_shift_b","cell_shift_c",],
+                                                values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                        mappedidx = block.samples.position(neg_label)
+                        assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
+                        value_indices.append(mappedidx)
+            
+
+            sample_labels = np.asarray(sample_labels)
+            
+            blocks.append(
+                sort_block(TensorBlock(
+                    values = block.values[value_indices],
+                    samples = Labels(
+                        block.samples.names + ['sign'],
+                        sample_labels,
+                    ),
+                    components = block.components,
+                    properties = block.properties,
+                ), axes = 'samples')
+            )
+            print(blocks[-1].values.shape, '2')
+        rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
     
     if mic and return_rho0ij:
         return rho0_ij 
@@ -371,14 +424,13 @@ def twocenter_features_periodic_NH(
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
-            sign = b.samples["sign"]
             atom_i = b.samples["center"]
             atom_j = b.samples["neighbor"]
             Tx = b.samples["cell_shift_a"]
             Ty = b.samples["cell_shift_b"]
             Tz = b.samples["cell_shift_c"]
-            positive_sign = sign == 1
             cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
+            positive_sign = b.samples["sign"] == 1
 
             if all_pairs:
                 different_atoms = (atom_i != atom_j)
@@ -417,7 +469,7 @@ def twocenter_features_periodic_NH(
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis = 1))
 
                 # Ensure that there is only one matching sample
-                assert where_ji.shape == (1, 1), (where_ji.shape, where_ji)
+                assert where_ji.shape == (1, 1), (where_ji.shape, where_ji, ji_entry)
                 idx_ji.append(where_ji[0, 0])
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
