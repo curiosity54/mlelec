@@ -8,4 +8,4 @@ tmp*
 **/*.pyc
 *.code-workspace
 *feat*.npz
-
+*.npy
