@@ -71,7 +71,7 @@ def plot_hamiltonian(
     return fig, ax, mappable
 
 
-def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax = None):
+def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
     try:
         # coupled block
         x = [
@@ -130,7 +130,6 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax = None):
 
     if return_ax:
         return fig, ax, ax_loss
-    
 
 
 from mlelec.data.pyscf_calculator import translation_vectors_for_kmesh
@@ -141,15 +140,14 @@ import scipy
 
 
 def plot_bands_frame(
-    ifr,
     dataset,
+    ifr,
     realfock,
     realover,
     special_symm=None,
     bandpath_str=None,
     kpath=None,
     npoints=30,
-    pbc=[True, True, True],
     y_min=-2 * Hartree,
     y_max=2 * Hartree,
     ax=None,
@@ -157,58 +155,70 @@ def plot_bands_frame(
     ls="-",
     marker=None,
 ):
+    from mlelec.utils.pbc_utils import inverse_fourier_transform
 
-    from mlelec.utils.pbc_utils import fourier_transform, inverse_fourier_transform
-    # R_vec_rel = translation_vectors_for_kmesh(
-    #     pyscf_cell, kmesh, return_rel=True, wrap_around=True
-    # )
-    # R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, wrap_around=True)
-
-    # mask_x = np.where(R_vec_rel[:, 0] == -kmesh[0] // 2)[0]
-    # R_vec_rel[:, 0][mask_x] = kmesh[0] // 2
-    # R_vec_abs[:, 0][mask_x] = -1 * R_vec_abs[:, 0][mask_x]
-
-    # mask_y = np.where(R_vec_rel[:, 1] == -kmesh[1] // 2)[0]
-    # R_vec_rel[:, 1][mask_y] = kmesh[1] // 2
-    # R_vec_abs[:, 1][mask_y] = -1 * R_vec_abs[:, 1][mask_y]
-
+    """bloch"""
+    # print(npoints, bandpath_str, pbc, special_points[special_symm])
+    frame = dataset.structures[ifr]
     pyscf_cell = dataset.cells[ifr]
     kmesh = dataset.kmesh[ifr]
-    frame = dataset.structures[ifr]
-
-    print(npoints, bandpath_str, pbc, special_points[special_symm])
     if bandpath_str is not None:
         kpath = frame.cell.bandpath(
             path=bandpath_str,
             npoints=npoints,
-            pbc=pbc,
+            pbc=frame.pbc,
             special_points=special_points[special_symm],
         )
     else:
         assert kpath is not None
-
     kpts = kpath.kpts  # units of icell
-    # kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
+    kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
 
     xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
     special_xcoords = np.array(special_xcoords) / xcoords[-1]
     xcoords = np.array(xcoords) / xcoords[-1]
-    # Nk = np.prod(kmesh)
+    Nk = np.prod(kmesh)
 
-    Hk = []
-    Sk = []
-    # for HT, ST in zip(realfock, realover):
-    HT = realfock; ST = realover 
-    # kpts = dataset.cells[ifr].get_scaled_kpts(dataset.cells[ifr].make_kpts(dataset.kmesh[ifr]))
-    for k in kpts:
-        Hk.append(inverse_fourier_transform(np.array(list(HT.values())), np.array(list(HT.keys())), k))
-        Sk.append(inverse_fourier_transform(np.array(list(ST.values())), np.array(list(ST.keys())), k))
-    Hk = np.asarray(Hk)
-    Sk = np.asarray(Sk)
+    if isinstance(next(iter(realfock.values())), np.ndarray):
 
-    # phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
-    # Hk = np.einsum("tk, tij ->kij", phase, realfock)
-    # Sk = np.einsum("tk, tij ->kij", phase, realover)
+        Hk = []
+        Sk = []
+        for k in kpts:
+            Hk.append(
+                inverse_fourier_transform(
+                    np.array(list(realfock.values())),
+                    np.array(list(realfock.keys())),
+                    k,
+                )
+            )
+            Sk.append(
+                inverse_fourier_transform(
+                    np.array(list(realover.values())),
+                    np.array(list(realover.keys())),
+                    k,
+                )
+            )
+
+    elif isinstance(next(iter(realfock.values())), torch.Tensor):
+
+        Hk = []
+        Sk = []
+        for k in kpts:
+            Hk.append(
+                inverse_fourier_transform(
+                    torch.stack(list(realfock.values())).detach(),
+                    torch.from_numpy(np.array(list(realfock.keys()))),
+                    k,
+                )
+            )
+            Sk.append(
+                inverse_fourier_transform(
+                    torch.stack(list(realover.values())).detach(),
+                    torch.from_numpy(np.array(list(realover.keys()))),
+                    k,
+                )
+            )
+
     e_nk = []
     for n in range(len(kpts)):
         e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
@@ -246,9 +256,10 @@ def plot_bands_frame(
     ax.set_ylim(y_min, y_max)
 
     if ax_was_none:
-        return fig, ax
+        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
     else:
-        return ax
+        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
+
 
 def plot_bands_frame_(
     frame,
@@ -268,6 +279,7 @@ def plot_bands_frame_(
     ls="-",
     marker=None,
 ):
+    """fourier"""
 
     R_vec_rel = translation_vectors_for_kmesh(
         pyscf_cell, kmesh, return_rel=True, wrap_around=True
@@ -372,12 +384,12 @@ def plot_bands(
             realover[ifr],
             pyscf_cell[ifr],
             kmesh[ifr],
-            special_symm = special_symm,
-            bandpath_str = bandpath_str,
-            npoints = npoints,
-            pbc = pbc,
-            y_min = y_min,
-            y_max = y_max,
+            special_symm=special_symm,
+            bandpath_str=bandpath_str,
+            npoints=npoints,
+            pbc=pbc,
+            y_min=y_min,
+            y_max=y_max,
         )
         axes.append(ax)
         # ax_.plot(ax.get_xticks(), ax.get_yticks(), "k-")

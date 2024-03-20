@@ -322,7 +322,7 @@ class MLDataset(Dataset):
         self.test_idx = self.indices[
             int((self.train_frac + self.val_frac) * self.nstructs) :
         ].sort()[0]
-        if self.test_frac>0:
+        if self.test_frac > 0:
             assert (
                 len(self.test_idx)
                 > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
@@ -726,7 +726,12 @@ class PeriodicDataset(Dataset):
 
 
 class PySCFPeriodicDataset(Dataset):
-    from mlelec.utils.pbc_utils import fourier_transform, inverse_fourier_transform, get_T_from_pair
+    from mlelec.utils.pbc_utils import (
+        fourier_transform,
+        inverse_fourier_transform,
+        get_T_from_pair,
+    )
+
     # TODO: make format compatible with MolecularDataset
     def __init__(
         self,
@@ -738,7 +743,7 @@ class PySCFPeriodicDataset(Dataset):
         overlap_kspace: Union[List, torch.tensor, np.ndarray] = None,
         overlap_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
         # aux: List[str] = ["real_overlap"],
-        use_precomputed: bool = True, 
+        use_precomputed: bool = True,
         device="cuda",
         orbs_name: str = "sto-3g",
         orbs: List = None,
@@ -754,7 +759,9 @@ class PySCFPeriodicDataset(Dataset):
                 len(self.kmesh) == self.nstructs
             ), "If kmesh is a list, it must have the same length as the number of structures"
         else:
-            self.kmesh = [kmesh for _ in range(self.nstructs)]  # currently easiest to do
+            self.kmesh = [
+                kmesh for _ in range(self.nstructs)
+            ]  # currently easiest to do
 
         self.device = device
         self.basis = orbs  # actual orbitals
@@ -765,7 +772,7 @@ class PySCFPeriodicDataset(Dataset):
 
         # self.target_names = target
         # self.aux_names = aux
-        
+
         self.cells = []
         self.phase_matrices = []
         self.supercells = []
@@ -785,46 +792,52 @@ class PySCFPeriodicDataset(Dataset):
             self.set_overlap_kspace(overlap_kspace)
 
         if fock_realspace is None:
-            assert self.fock_kspace is not None, "Either the real space or reciprocal space Fock matrices must be provided."
-            self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
+            assert (
+                self.fock_kspace is not None
+            ), "Either the real space or reciprocal space Fock matrices must be provided."
+            self.fock_realspace, self._fock_realspace_negative_translations = (
+                self.compute_matrices_realspace(self.fock_kspace)
+            )
             self.realspace_translations = [list(m.keys()) for m in self.fock_realspace]
         else:
-            raise NotImplementedError("For now only reciprocal space matrices are allowed.")
+            raise NotImplementedError(
+                "For now only reciprocal space matrices are allowed."
+            )
             # self.fock_realspace = self.set_matrices_realspace(fock_realspace)
 
         if overlap_realspace is None and overlap_kspace is not None:
-            self.overlap_realspace, self._overlap_realspace_negative_translations = self.compute_matrices_realspace(self.overlap_kspace)
+            self.overlap_realspace, self._overlap_realspace_negative_translations = (
+                self.compute_matrices_realspace(self.overlap_kspace)
+            )
         else:
-            warnings.warn('No real space or kspace overlap set')
+            warnings.warn("No real space or kspace overlap set")
             # raise NotImplementedError("For now only reciprocal space matrices are allowed.")
 
-
-
-        
-    
-
-
-
-                
     def compute_translation_counter(self):
         from itertools import product
         from mlelec.utils.pbc_utils import get_T_from_pair
+
         counter_T = []
         for ifr, (frame, kmesh) in enumerate(zip(self.structures, self.kmesh)):
             counter_T.append({})
             natm = frame.get_global_number_of_atoms()
             supercell = frame.repeat(kmesh)
-            shifts = [list(p) for p in product(range(kmesh[0]), range(kmesh[1]), range(kmesh[2]))]
+            shifts = [
+                list(p)
+                for p in product(range(kmesh[0]), range(kmesh[1]), range(kmesh[2]))
+            ]
             for dummy_T in shifts:
                 for i in range(frame.get_global_number_of_atoms()):
                     for j in range(frame.get_global_number_of_atoms()):
-                        _, _, mic_T = get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh)
+                        _, _, mic_T = get_T_from_pair(
+                            frame, supercell, i, j, dummy_T, kmesh
+                        )
                         mic_T = tuple(mic_T)
                         if mic_T not in counter_T[ifr]:
                             counter_T[ifr][mic_T] = np.zeros((natm, natm))
-                        counter_T[ifr][mic_T][i,j] += 1
+                        counter_T[ifr][mic_T][i, j] += 1
         return counter_T
-    
+
     def compute_translation_dict(self):
         T_dict = []
 
@@ -837,14 +850,14 @@ class PySCFPeriodicDataset(Dataset):
             for i in range(len(full_T_list)):
                 if i < i0 + i_skip:
                     continue
-                
+
                 summa = 0
                 counter_list = []
                 T_list = []
                 i_skip = 0
                 while summa != natm**2:
-                    counter_list.append(counter[full_T_list[i+i_skip]])
-                    T_list.append(full_T_list[i+i_skip])
+                    counter_list.append(counter[full_T_list[i + i_skip]])
+                    T_list.append(full_T_list[i + i_skip])
                     summa = np.sum(counter_list)
                     i_skip += 1
                 i0 = i
@@ -868,7 +881,6 @@ class PySCFPeriodicDataset(Dataset):
     #         kmatrix.append(framekmatrix)
     #     return kmatrix
 
- 
     # def check_block_(self):
     #     # mat -> blocks _> couple -> uncouple -> mat
     #     pass
@@ -885,37 +897,53 @@ class PySCFPeriodicDataset(Dataset):
                 elif isinstance(m[k], list):
                     _matrices_realspace[-1][k] = torch.tensor(m[k])
                 else:
-                    raise ValueError('matrices_realspace should be one among torch.tensor, numpy.ndarray, or list')
-        
+                    raise ValueError(
+                        "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
+                    )
+
         return _matrices_realspace
-   
+
     def _set_matrices_kspace(self, matrices_kspace):
         if isinstance(matrices_kspace, list):
             if isinstance(matrices_kspace[0], np.ndarray):
-                _matrices_kspace = [torch.from_numpy(m).to(self.device) for m in matrices_kspace]
+                _matrices_kspace = [
+                    torch.from_numpy(m).to(self.device) for m in matrices_kspace
+                ]
             elif isinstance(matrices_kspace[0], torch.Tensor):
                 _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
             elif isinstance(matrices_kspace[0], list):
-                _matrices_kspace = [torch.tensor(m).to(self.device) for m in matrices_kspace]
+                _matrices_kspace = [
+                    torch.tensor(m).to(self.device) for m in matrices_kspace
+                ]
             else:
-                raise TypeError("matrices_kspace should be a list [torch.Tensor, np.ndarray, or lists]")
+                raise TypeError(
+                    "matrices_kspace should be a list [torch.Tensor, np.ndarray, or lists]"
+                )
         elif isinstance(matrices_kspace, np.ndarray):
-            assert matrices_kspace.shape[0] == len(self.structures), "You must provide matrices_kspace for each structure" 
-            _matrices_kspace = [torch.from_numpy(m).to(self.device) for m in matrices_kspace]
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "You must provide matrices_kspace for each structure"
+            _matrices_kspace = [
+                torch.from_numpy(m).to(self.device) for m in matrices_kspace
+            ]
         elif isinstance(matrices_kspace, torch.Tensor):
-            assert matrices_kspace.shape[0] == len(self.structures), "You must provide matrices_kspace for each structure" 
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "You must provide matrices_kspace for each structure"
             _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
         else:
-            raise TypeError("matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor.")
-        
+            raise TypeError(
+                "matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor."
+            )
+
         return _matrices_kspace
-    
+
     def set_fock_kspace(self, fock_kspace):
         self.fock_kspace = self._set_matrices_kspace(fock_kspace)
 
     def set_overlap_kspace(self, overlap_kspace):
         self.overlap_kspace = self._set_matrices_kspace(overlap_kspace)
-    
+
     def compute_matrices_realspace(self, matrices_kspace):
         from mlelec.utils.pbc_utils import fourier_transform
 
@@ -924,71 +952,107 @@ class PySCFPeriodicDataset(Dataset):
 
         for ifr, (kmesh, H_k) in enumerate(zip(self.kmesh, matrices_kspace)):
 
-
             H_T_plus.append({})
             H_T_minus.append({})
-            
+
             kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(kmesh))
             natm = self.structures[ifr].get_global_number_of_atoms()
-            nao = self.cells[ifr].nao // natm # FIXME: in general this is wrong
-            
+            nao = self.cells[ifr].nao // natm  # FIXME: in general this is wrong
+
             for T_dummy in self._translation_dict[ifr]:
 
-                H_T_plus[ifr][T_dummy]  = np.zeros((natm*nao, natm*nao), dtype = np.complex128)
-                H_T_minus[ifr][T_dummy] = np.zeros((natm*nao, natm*nao), dtype = np.complex128)
-                
+                H_T_plus[ifr][T_dummy] = np.zeros(
+                    (natm * nao, natm * nao), dtype=np.complex128
+                )
+                H_T_minus[ifr][T_dummy] = np.zeros(
+                    (natm * nao, natm * nao), dtype=np.complex128
+                )
+
                 for T in self._translation_dict[ifr][T_dummy]:
                     pairs = np.where(self._translation_counter[ifr][T])
                     for i, j in zip(*pairs):
-                    
-                        idx_i = slice(nao*i, nao*(i+1))
-                        idx_j = slice(nao*j, nao*(j+1))
 
-                        H_T_plus[ifr][T_dummy][idx_i, idx_j]  = fourier_transform(H_k, kpts, T)[idx_i, idx_j]
-                        H_T_minus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(H_k, kpts, -np.array(T))[idx_i, idx_j]
-                        
+                        idx_i = slice(nao * i, nao * (i + 1))
+                        idx_j = slice(nao * j, nao * (j + 1))
+
+                        H_T_plus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
+                            H_k, kpts, T
+                        )[idx_i, idx_j]
+                        H_T_minus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
+                            H_k, kpts, -np.array(T)
+                        )[idx_i, idx_j]
+
             for mic_T in H_T_plus[ifr]:
-                assert np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
+                assert np.allclose(
+                    H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real
+                ), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
                 H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
-                assert np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
+                assert np.allclose(
+                    H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real
+                ), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
                 H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
 
         return H_T_plus, H_T_minus
 
     def compute_matrices_kspace(self, matrices_realspace):
         from mlelec.utils.pbc_utils import inverse_fourier_transform
+
         matrices_kspace = []
 
         if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
             for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(self.kmesh[ifr]))
+                kpts = self.cells[ifr].get_scaled_kpts(
+                    self.cells[ifr].make_kpts(self.kmesh[ifr])
+                )
                 matrices_kspace.append([])
                 for k in kpts:
-                    matrices_kspace[ifr].append(inverse_fourier_transform(np.array(list(H.values())), np.array(list(H.keys())), k))
+                    matrices_kspace[ifr].append(
+                        inverse_fourier_transform(
+                            np.array(list(H.values())), np.array(list(H.keys())), k
+                        )
+                    )
                 matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
         elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(self.kmesh[ifr]))
+                kpts = self.cells[ifr].get_scaled_kpts(
+                    self.cells[ifr].make_kpts(self.kmesh[ifr])
+                )
                 matrices_kspace.append([])
                 for k in kpts:
-                    matrices_kspace[ifr].append(inverse_fourier_transform(torch.stack(list(H.values())), torch.tensor(list(H.keys())), k))
+                    matrices_kspace[ifr].append(
+                        inverse_fourier_transform(
+                            torch.stack(list(H.values())),
+                            torch.tensor(list(H.keys())),
+                            k,
+                        )
+                    )
                 matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
         return matrices_kspace
-    
+
     def __len__(self):
         return self.nstructs
-    
+
 
 # Tests
-    
-def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol = 1e-10):
+
+
+def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-10):
     from mlelec.utils.pbc_utils import inverse_fourier_transform
+
     reconstructed_matrices_kspace = []
     for ifr, H in enumerate(matrices_realspace):
         reconstructed_matrices_kspace.append([])
         kpts = kpoints[ifr]
         for k in kpts:
-            reconstructed_matrices_kspace[ifr].append(inverse_fourier_transform(np.array(list(H.values())), np.array(list(H.keys())), k))
-        reconstructed_matrices_kspace[ifr] = torch.from_numpy(np.array(reconstructed_matrices_kspace[ifr]))
+            reconstructed_matrices_kspace[ifr].append(
+                inverse_fourier_transform(
+                    np.array(list(H.values())), np.array(list(H.keys())), k
+                )
+            )
+        reconstructed_matrices_kspace[ifr] = torch.from_numpy(
+            np.array(reconstructed_matrices_kspace[ifr])
+        )
         assert reconstructed_matrices_kspace[ifr].shape == matrices_kspace[ifr].shape
-        assert torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol, (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
+        assert (
+            torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol
+        ), (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
