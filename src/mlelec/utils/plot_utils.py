@@ -315,6 +315,7 @@ def plot_bands_frame_(
     phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
     Hk = np.einsum("tk, tij ->kij", phase, realfock)
     Sk = np.einsum("tk, tij ->kij", phase, realover)
+
     e_nk = []
     for n in range(len(kpts)):
         e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))

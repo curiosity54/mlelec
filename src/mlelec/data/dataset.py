@@ -983,50 +983,72 @@ class PySCFPeriodicDataset(Dataset):
                         )[idx_i, idx_j]
 
             for mic_T in H_T_plus[ifr]:
-                assert np.allclose(
-                    H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real
-                ), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
+                assert np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
                 H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
-                assert np.allclose(
-                    H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real
-                ), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
+                assert np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
                 H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+
+                # if np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real):
+                #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
+                # else:
+                #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T])
+                # if np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real):
+                #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+                # else:
+                #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T])
+
+
 
         return H_T_plus, H_T_minus
 
+    # def OLD_compute_matrices_kspace(self, matrices_realspace):
+    #     from mlelec.utils.pbc_utils import inverse_fourier_transform
+
+    #     matrices_kspace = []
+
+    #     if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
+    #         for ifr, H in enumerate(matrices_realspace):
+    #             kpts = self.cells[ifr].get_scaled_kpts(
+    #                 self.cells[ifr].make_kpts(self.kmesh[ifr])
+    #             )
+    #             matrices_kspace.append([])
+    #             for k in kpts:
+    #                 matrices_kspace[ifr].append(
+    #                     inverse_fourier_transform(
+    #                         np.array(list(H.values())), np.array(list(H.keys())), k
+    #                     )
+    #                 )
+    #             matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
+    #     elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
+    #         for ifr, H in enumerate(matrices_realspace):
+    #             kpts = self.cells[ifr].get_scaled_kpts(
+    #                 self.cells[ifr].make_kpts(self.kmesh[ifr])
+    #             )
+    #             matrices_kspace.append([])
+    #             for k in kpts:
+    #                 matrices_kspace[ifr].append(
+    #                     inverse_fourier_transform(
+    #                         torch.stack(list(H.values())),
+    #                         torch.tensor(list(H.keys())),
+    #                         k,
+    #                     )
+    #                 )
+    #             matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
+    #     return matrices_kspace
+
     def compute_matrices_kspace(self, matrices_realspace):
-        from mlelec.utils.pbc_utils import inverse_fourier_transform
+        from mlelec.utils.pbc_utils import inverse_fourier_transform, inverse_fft
 
         matrices_kspace = []
 
         if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
             for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(
-                    self.cells[ifr].make_kpts(self.kmesh[ifr])
-                )
-                matrices_kspace.append([])
-                for k in kpts:
-                    matrices_kspace[ifr].append(
-                        inverse_fourier_transform(
-                            np.array(list(H.values())), np.array(list(H.keys())), k
-                        )
-                    )
-                matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
+                matrices_kspace.append(torch.from_numpy(inverse_fft(np.array(list(H.values())), self.kmesh[ifr])))
+
         elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(
-                    self.cells[ifr].make_kpts(self.kmesh[ifr])
-                )
-                matrices_kspace.append([])
-                for k in kpts:
-                    matrices_kspace[ifr].append(
-                        inverse_fourier_transform(
-                            torch.stack(list(H.values())),
-                            torch.tensor(list(H.keys())),
-                            k,
-                        )
-                    )
-                matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
+                matrices_kspace.append(inverse_fft(torch.stack(list(H.values())), self.kmesh[ifr]))
+
         return matrices_kspace
 
     def __len__(self):

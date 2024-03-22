@@ -4,20 +4,28 @@ from typing import List, Optional, Union
 from metatensor import TensorMap
 from mlelec.utils.pbc_utils import blocks_to_matrix
 from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.utils.symmetry import ClebschGordanReal
 
 
 def L2_kspace_loss(pred: Union[TensorMap], 
-                   target: Union[TensorMap],
-                   dataset: PySCFPeriodicDataset):
+                   target: Union[TensorMap, list],
+                   dataset: PySCFPeriodicDataset,
+                   cg: Optional[ClebschGordanReal] = None,
+                   ):
     
-    assert isinstance(target, TensorMap), "Target must be a TensorMap"
+    assert isinstance(target, TensorMap) or isinstance(target, list), "Target must be a TensorMap or a list"
     assert isinstance(pred, TensorMap), "Prediction must be a TensorMap"
 
     loss = 0
-    pred_real = blocks_to_matrix(pred, dataset)
-    target_real = blocks_to_matrix(target, dataset)
+    pred_real = blocks_to_matrix(pred, dataset, cg = cg)
     pred_kspace = dataset.compute_matrices_kspace(pred_real)
-    target_kspace = dataset.compute_matrices_kspace(target_real)
+
+    if isinstance(target, list):
+        target_kspace = target
+    else:
+        target_real = blocks_to_matrix(target, dataset, cg = cg)
+        target_kspace = dataset.compute_matrices_kspace(target_real)
+
     for ifr in range(len(target_kspace)):
         loss += torch.sum((pred_kspace[ifr] - target_kspace[ifr]) * torch.conj(pred_kspace[ifr] - target_kspace[ifr]))
     assert torch.norm(loss-loss.real) <1e-10

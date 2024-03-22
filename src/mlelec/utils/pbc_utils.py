@@ -1,5 +1,7 @@
 import numpy as np
 import warnings
+from scipy.fft import fftn, ifftn
+from torch.fft import fftn as torch_fftn, ifftn as torch_ifftn
 
 
 def scidx_from_unitcell(frame, j=0, T=[0, 0, 0], kmesh=None):
@@ -353,6 +355,129 @@ def move_cell_shifts_to_keys(blocks):
                 
     return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], np.asarray(out_block_keys)), out_blocks)
 
+def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = None):
+    if device is None:
+        device = dataset.device
+
+    if "L" in blocks.keys.names:
+        from mlelec.utils.twocenter_utils import _to_uncoupled_basis
+        blocks = _to_uncoupled_basis(blocks, cg = cg)
+
+    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
+    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_mult = {
+        species: 
+                {tuple(k): v
+            for k, v in zip(
+                *np.unique(
+                    np.asarray(dataset.basis[species])[:, :2],
+                    axis=0,
+                    return_counts=True,
+                )
+            )
+        }
+        for species in dataset.basis
+    }
+
+    reconstructed_matrices_plus = []
+    reconstructed_matrices_minus = []
+
+    # Loop over frames
+    for A, shifts in enumerate(dataset.realspace_translations):
+        norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+
+        reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
+        reconstructed_matrices_minus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
+
+    # loops over block types
+    for key, block in blocks.items():
+        block_type = key["block_type"]
+        ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
+        aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
+        
+        # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
+        # of a p block = 3
+        orbs_i = orbs_mult[ai]
+        orbs_j = orbs_mult[aj]
+        
+        # The shape of the block corresponding to the orbital pair
+        shapes = {
+            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
+            for k1 in orbs_i
+            for k2 in orbs_j
+        }
+        # offset of the orbital (ni, li) within a block of atom i
+        ioffset = orbs_offset[(ai, ni, li)] 
+        # offset of the orbital (nj,lj) within a block of atom j
+        joffset = orbs_offset[(aj, nj, lj)]
+
+        i_end, j_end = shapes[(ni, li, nj, lj)]
+
+        # loops over samples (structure, i, j)
+        for sample, blockval in zip(block.samples, block.values):
+            
+            A = sample["structure"]
+            i = sample["center"]
+            j = sample["neighbor"]
+            Tx, Ty, Tz = sample["cell_shift_a"], sample["cell_shift_b"], sample["cell_shift_c"]
+
+            matrix_T_plus  = reconstructed_matrices_plus[A][Tx, Ty, Tz]
+
+            if return_negative:
+                matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
+            # i_start, j_start = atom_blocks_idx[(A, i, j)]
+
+            i_start, j_start = atom_blocks_idx[(A, i, j)]
+            i_slice = slice(i_start + ioffset, i_start + ioffset + i_end) 
+            j_slice = slice(j_start + joffset, j_start + joffset + j_end)
+
+            # OPT (commented)
+            # values = blockval[:, :, 0].clone()
+
+            if block_type == 1:
+                matrix_T_plus[
+                    # i_start + ioffset : i_start + ioffset + i_end,
+                    # j_start + joffset : j_start + joffset + j_end,
+                    i_slice, j_slice
+                ] += blockval[:, :, 0]*ISQRT_2 # OPTvalues
+
+                if return_negative:
+                    matrix_T_minus[
+                        # j_start + ioffset : j_start + ioffset + i_end,
+                        # i_start + joffset : i_start + joffset + j_end,
+                        i_slice, j_slice
+                    ] += blockval[:, :, 0]*ISQRT_2 # values # OPT
+                        
+            elif block_type == -1:
+                    
+                matrix_T_plus[
+                    # i_start + ioffset : i_start + ioffset + i_end,
+                    # j_start + joffset : j_start + joffset + j_end,
+                    i_slice, j_slice
+                ] += blockval[:, :, 0] # values # OPT
+
+                if return_negative:
+                    matrix_T_minus[
+                        # j_start + ioffset : j_start + ioffset + i_end,
+                        # i_start + joffset : i_start + joffset + j_end,
+                        i_slice, j_slice
+                    ] -= blockval[:, :, 0] # values # OPT
+
+            # if block_type == 0 or block_type == 2:
+            else: # bt = 0 or 2
+
+                matrix_T_plus[
+                    # i_start + ioffset : i_start + ioffset + i_end,
+                    # j_start + joffset : j_start + joffset + j_end,
+                    i_slice,
+                    j_slice,
+                             ] = blockval[:, :, 0] # values # OPT
+
+
+    if return_negative:
+        return reconstructed_matrices_plus, reconstructed_matrices_minus
+    return reconstructed_matrices_plus
+
 def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
     if device is None:
         device = dataset.device
@@ -545,6 +670,23 @@ def inverse_fourier_transform(H_T, T_list, k):
     elif isinstance(H_T, torch.Tensor):
         k = torch.tensor(k).to(T_list.device)
         return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
+    else:
+        raise ValueError("H_T must be np.ndarray or torch.Tensor")
+    
+def inverse_fft(H_T, kmesh):
+    '''
+    Compute the Inverse Fourier Transform
+    '''    
+    # print( k, '<')
+    # print(H_T.shape, T_list.shape)
+    if isinstance(H_T, np.ndarray):
+        # return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
+        shape = H_T.shape[-1]
+        return ifftn(H_T.reshape(*kmesh, -1), axes = (0, 1, 2), norm = 'ortho').reshape(np.prod(kmesh), shape, shape)
+    elif isinstance(H_T, torch.Tensor):
+        # return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
+        shape = H_T.shape[-1]
+        return torch_ifftn(H_T.reshape(*kmesh, -1), dim = (0, 1, 2), norm = 'ortho').reshape(np.prod(kmesh), shape, shape)
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
 
