@@ -123,7 +123,7 @@ class MLP(nn.Module):
         device=None,
     ):
         super().__init__()
-        if nlayers == 1:
+        if nlayers <= 1:
             self.mlp = nn.Linear(nin, nout, bias=bias)
             self.mlp.to(device)
             return
@@ -502,10 +502,9 @@ class LinearModelPeriodic(nn.Module):
 
     def predict(self, features, target_blocks, return_matrix=False):
         pred_blocks = []
-
         for k, block in target_blocks.items():
+            # print(k)
             blockval = torch.linalg.norm(block.values)
-        
             if True:
                 # if blockval > 1e-10:
                 sample_names = block.samples.names
@@ -515,7 +514,11 @@ class LinearModelPeriodic(nn.Module):
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (k,block.samples.values.shape,feat.samples.values.shape,)
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                    k,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
+                )
                 pred = self.blockmodels[str(tuple(k))](feat.values)
                 # print(pred.shape, nsamples)
 
@@ -609,7 +612,7 @@ class LinearModelPeriodic(nn.Module):
                 if k["L"] == 0 and set_bias:
                     bias = True
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-                nsamples, ncomp, nproperties = block.values.shape
+                nsamples, _, _ = block.values.shape
 
                 assert np.all(block.samples.values == feat.samples.values[:, :6]), (k, block.samples.values.shape, feat.samples.values.shape)
 
