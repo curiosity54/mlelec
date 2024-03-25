@@ -2,38 +2,55 @@
 import torch
 from typing import List, Optional, Union
 from metatensor import TensorMap
-from mlelec.utils.pbc_utils import blocks_to_matrix
+from mlelec.utils.pbc_utils import blocks_to_matrix, inverse_fourier_transform
 from mlelec.data.dataset import PySCFPeriodicDataset
 from mlelec.utils.symmetry import ClebschGordanReal
-
+import warnings
+import numpy as np
 
 def L2_kspace_loss(pred: Union[TensorMap], 
                    target: Union[TensorMap, list],
                    dataset: PySCFPeriodicDataset,
                    cg: Optional[ClebschGordanReal] = None,
-                   ):
+                   kpts: List =  [[ 0,0,0]],
+                   desired_ifr = 0):
+                   
+    """L2 loss function for k-space matrices computed at given 'kpts' 
+    kpt: list(list of kpts) per frame 
+    target: list of Hks per frame
+    ASSUMPTION: len(target) = len(kpts) and target[ifr] has the associated kpts in kpt[ifr].  
+    Not implemented for ttarget = TensorMap
+    """
     
     assert isinstance(target, TensorMap) or isinstance(target, list), "Target must be a TensorMap or a list"
     assert isinstance(pred, TensorMap), "Prediction must be a TensorMap"
 
     loss = 0
     pred_real = blocks_to_matrix(pred, dataset, cg = cg)
-    pred_kspace = dataset.compute_matrices_kspace(pred_real)
-
+    # print(len(pred_real), pred_real[0][0,0,0].shape)
     if isinstance(target, list):
         target_kspace = target
     else:
+        raise NotImplementedError("Target must be a list of k-space matrices")
+        warnings.warn("Target is a TensorMap. Computing k-space matrices for target")
         target_real = blocks_to_matrix(target, dataset, cg = cg)
         target_kspace = dataset.compute_matrices_kspace(target_real)
-
     for ifr in range(len(target_kspace)):
-        loss += torch.sum((pred_kspace[ifr] - target_kspace[ifr]) * torch.conj(pred_kspace[ifr] - target_kspace[ifr]))
+        pred_kspace = []
+        
+        for k in kpts[ifr]:
+            # a = inverse_fourier_transform(torch.stack(list(pred_real[ifr].values())), torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype=np.float64)), k)
+            # print('a', a.shape)
+            pred_kspace.append(inverse_fourier_transform(torch.stack(list(pred_real[desired_ifr].values())), torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype=np.float64)), k))
+            # print('pred_kspace', pred_kspace[-1].shape)
+        pred_kspace = torch.stack(pred_kspace)
+        assert pred_kspace.shape == target_kspace[ifr].shape
+        # print(pred_kspace.shape, target_kspace[ifr].shape)  
+        loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr]))
     assert torch.norm(loss-loss.real) <1e-10
     return loss.real
 
-def L2_loss(
-    pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap]
-):
+def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap]):
     """L2 loss function"""
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)

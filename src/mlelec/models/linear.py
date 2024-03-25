@@ -64,16 +64,16 @@ class EquivariantNonLinearity(nn.Module):
     def forward(self, x):
         assert len(x.shape) == 3
         x_inv = x.clone()
-        norm = torch.sqrt(torch.sum(x_inv**2) + epsilon)
+        norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
         if x.shape[1] > 1:
             # create an inv
             x_inv = torch.einsum("imf,imf->if", x_inv, x_inv)
         silu = torch.nn.SiLU()
-        x_inv = torch.nn.SiLU()(x_inv)
+        x_inv = silu(x_inv)
         x_inv = x_inv.reshape(x.shape[0], x.shape[2])
         # should probably norm x here
         out = torch.einsum("if, imf->imf", x_inv, x)
-        normout = torch.sqrt(torch.sum(out**2) + epsilon)
+        normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
         out = out * norm / normout
         return out
         # return torch.einsum("if, imf->imf", x_inv, x)
@@ -422,7 +422,7 @@ class LinearModelPeriodic(nn.Module):
         frames,
         orbitals,
         device=None,
-        # cell_shifts=None,
+        train_kspace = False,
         **kwargs,
     ):
         super().__init__()
@@ -430,6 +430,7 @@ class LinearModelPeriodic(nn.Module):
         self.target_blocks = target_blocks
         self.frames = frames
         self.orbitals = orbitals
+        self.train_kspace = train_kspace
         # self.cell_shifts = cell_shifts
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -474,10 +475,12 @@ class LinearModelPeriodic(nn.Module):
                 feat = map_targetkeys_to_featkeys(self.feats, k)
 
                 featnorm = torch.linalg.norm(feat.values)
-                nsamples, ncomp, nprops = block.values.shape
-                # nsamples, ncomp, nprops = feat.values.shape
+                # nsamples, ncomp, nprops = block.values.shape
+                nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                if not self.train_kspace:
+                    nsamples, ncomp, nprops = block.values.shape
+                    assert np.all(block.samples.values == feat.samples.values[:, :6]), (
                     k,
                     block.samples.values.shape,
                     feat.samples.values.shape,
@@ -488,7 +491,7 @@ class LinearModelPeriodic(nn.Module):
                 pred_blocks.append(
                     TensorBlock(
                         values=pred.reshape((nsamples, ncomp, 1)),
-                        samples=block.samples,
+                        samples=feat.samples,
                         components=block.components,
                         properties=self.dummy_property,
                     )

@@ -478,7 +478,7 @@ def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg
         return reconstructed_matrices_plus, reconstructed_matrices_minus
     return reconstructed_matrices_plus
 
-def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
+def blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = None):
     if device is None:
         device = dataset.device
         
@@ -492,7 +492,7 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
 
         if "L" in blocks.keys.names:
             from mlelec.utils.twocenter_utils import _to_uncoupled_basis
-            blocks = _to_uncoupled_basis(blocks)
+            blocks = _to_uncoupled_basis(blocks, cg = cg)
         blocks = move_cell_shifts_to_keys(blocks)      
 
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
@@ -513,13 +513,22 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
 
     reconstructed_matrices_plus = []
     reconstructed_matrices_minus = []
-
+    # translations = np.unique(blocks[15].samples.values[:, -3:], axis = 1) 
+    # print(translations)
+    #if translations != dataset.realspace_translations:
+    #    warnings.warn('Using more translations than the ones in the dataset.')
+    
+    #else: 
+    #    translations = dataset.realspace_translations
     # Loop over frames
-    for A, shifts in enumerate(dataset.realspace_translations):
+    # for A, shifts in enumerate(dataset.realspace_translations):
+    for A in range(len(dataset.structures)):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+        reconstructed_matrices_plus.append({})
+        reconstructed_matrices_minus.append({})
 
-        reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
-        reconstructed_matrices_minus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
+        # reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
+        # reconstructed_matrices_minus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
 
     # loops over block types
     for key, block in blocks.items():
@@ -553,9 +562,15 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
             i = sample["center"]
             j = sample["neighbor"]
 
+            if (Tx, Ty, Tz) not in reconstructed_matrices_plus[A]:
+                norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+                reconstructed_matrices_plus[A][(Tx, Ty, Tz)] = torch.zeros(norbs, norbs, device = device)
+                if return_negative:
+                    reconstructed_matrices_minus[A][(Tx, Ty, Tz)] = torch.zeros(norbs, norbs, device = device)
 
             matrix_T_plus  = reconstructed_matrices_plus[A][Tx, Ty, Tz]
-            matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
+            if return_negative:
+                matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
             # beginning of the block corresponding to the atom i-j pair
             i_start, j_start = atom_blocks_idx[(A, i, j)]
             
@@ -596,11 +611,11 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
                     #         i_start + joffset : i_start + joffset + j_end,
                     #     ] += values
                    
-
-                    matrix_T_minus[
+                    if return_negative:
+                        matrix_T_minus[
                         j_start + ioffset : j_start + ioffset + i_end,
                         i_start + joffset : i_start + joffset + j_end,
-                    ] += values
+                        ] += values
 
                     # print([Tx,Ty,Tz],i,j, slice(i_start + ioffset, i_start + ioffset + i_end), slice(j_start + joffset, j_start + joffset + j_end))
                 
@@ -629,11 +644,11 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False):
                     #         j_start + ioffset : j_start + ioffset + i_end,
                     #         i_start + joffset : i_start + joffset + j_end,
                     #     ] -= values
-                    
-                    matrix_T_minus[
-                        j_start + ioffset : j_start + ioffset + i_end,
-                        i_start + joffset : i_start + joffset + j_end,
-                    ] -= values
+                    if return_negative:
+                        matrix_T_minus[
+                            j_start + ioffset : j_start + ioffset + i_end,
+                            i_start + joffset : i_start + joffset + j_end,
+                        ] -= values
 
                     # Add the corresponding hermitian part
                     # if (ni, li)!= (nj, lj):
@@ -669,6 +684,7 @@ def inverse_fourier_transform(H_T, T_list, k):
         return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
     elif isinstance(H_T, torch.Tensor):
         k = torch.tensor(k).to(T_list.device)
+        # print(k, T_list)
         return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
@@ -702,4 +718,3 @@ def get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh):
     d = supercell.get_distance(I, J, mic = True, vector = True) - frame.positions[j] + frame.positions[i]
     mic_T = np.int32(np.round(np.linalg.inv(frame.cell.array).T@d))
     return I, J, np.int32(sign*mic_T)
-
