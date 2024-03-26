@@ -254,6 +254,9 @@ class LinearTargetModel(nn.Module):
             )
             return self.reconstructed_uncoupled
         elif return_type == "tensor":
+            self.reconstructed_uncoupled = _to_uncoupled_basis(
+                pred_tmap, device=self.device
+            )
             if batch_indices is None:
                 # identify the frames in the batch
                 batch_indices = list(
