@@ -109,7 +109,7 @@ class BlockModel(nn.Module):
         super().__init__()
         pass
 
-
+# from mlelec.models.nn import EquiLayerNorm
 class MLP(nn.Module):
     def __init__(
         self,
@@ -121,6 +121,7 @@ class MLP(nn.Module):
         norm: bool = False,
         bias: bool = False,
         device=None,
+        apply_layer_norm = False, # FIXME: to be removed when moving to mts modulemaps
     ):
         super().__init__()
         if nlayers <= 1:
@@ -128,12 +129,20 @@ class MLP(nn.Module):
             self.mlp.to(device)
             return
 
-        self.mlp = [
-            # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
-            nn.Linear(nin, nhidden, bias=bias),
-        ]
+        if apply_layer_norm:
+            self.mlp = [
+                # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
+                # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
+                nn.Linear(nin, nhidden, bias=bias),
+            ]
+        else:
+            self.mlp = [
+                nn.Linear(nin, nhidden, bias=bias),
+            ]
         if norm:
-            norm_layer = NormLayer(nonlinearity=activation, device=device)
+            # norm_layer = NormLayer(nonlinearity=activation, device=device)
+            # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
+            pass
         for _ in range(nlayers - 2):
             self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
             if activation is not None:
@@ -169,6 +178,7 @@ class LinearTargetModel(nn.Module):
         self.submodels = {}
         # return 1 model if no subtargets present, else spawn
         # multiple models
+        apply_layer_norm = False
         if len(self.dataset.target.block_keys) == 1:
             self.model = MLP(
                 nlayers=kwargs.get("nlayers", 2),
@@ -177,6 +187,7 @@ class LinearTargetModel(nn.Module):
                 nhidden=kwargs.get("nhidden", 10),
                 bias=set_bias,
                 device=self.device,
+                apply_layer_norm = False,
             )
         else:
             for k in self.dataset.target.block_keys:
@@ -186,12 +197,14 @@ class LinearTargetModel(nn.Module):
                 # print(feat.values.device, self.device)
                 if k["L"] == 0 and set_bias:
                     bias = True
+                    apply_layer_norm = False
                 self.submodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
                     nout=1,
                     nhidden=kwargs.get("nhidden", 10),
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
+                    apply_layer_norm = apply_layer_norm,
                 )
 
                 # print(k, self.submodels[str(tuple(k))])
@@ -457,6 +470,7 @@ class LinearModelPeriodic(nn.Module):
                     nhidden=kwargs.get("nhidden", 10),
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
+                    apply_layer_norm=True,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
         self.model.to(self.device)

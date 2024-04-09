@@ -672,9 +672,33 @@ def fourier_transform(H_k, kpts, T):
     '''
     Compute the Fourier Transform
     '''    
-    return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki for ki, H_ki in zip(kpts, H_k)], axis = 0)
+    return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki.cpu() for ki, H_ki in zip(kpts, H_k)], axis = 0)
     
-def inverse_fourier_transform(H_T, T_list, k):
+def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None):
+    '''
+    Compute the Inverse Fourier Transform of a real-space tensor in a (list of) k points
+    '''    
+    # print( k, '<')
+    # print(H_T.shape, T_list.shape)
+    if isinstance(H_T, np.ndarray):
+        # H_T is a numpy array
+        return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
+    
+    elif isinstance(H_T, torch.Tensor):
+        # H_T is a torch tensor
+        # also k must be a tensor on the same device as T
+        # k = torch.tensor(k).to(T_list.device)
+        if phase is None:
+            assert T_list is not None and k is not None, "T_list and k must be provided when phase is None"
+            phase = torch.exp(2j * np.pi * torch.tensordot(T_list, k, dims = ([-1], [-1])))
+            if len(phase.shape) == 1:
+                phase = phase.reshape(1, -1)
+        return torch.tensordot(H_T.to(phase), phase, dims = ([0], [0])).permute(2, 0, 1) / np.sqrt(phase.shape[0])
+        # return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
+    else:
+        raise ValueError("H_T must be np.ndarray or torch.Tensor")
+    
+def inverse_fourier_transform_OLD(H_T, T_list, k):
     '''
     Compute the Inverse Fourier Transform
     '''    

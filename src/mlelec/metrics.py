@@ -12,8 +12,8 @@ def L2_kspace_loss(pred: Union[TensorMap],
                    target: Union[TensorMap, list],
                    dataset: PySCFPeriodicDataset,
                    cg: Optional[ClebschGordanReal] = None,
-                   kpts: List =  [[ 0,0,0]],
-                   desired_ifr = 0):
+                   kpts: Union[List, torch.Tensor] =  [[0.,0.,0.]],
+                   desired_ifr = None):
                    
     """L2 loss function for k-space matrices computed at given 'kpts' 
     kpt: list(list of kpts) per frame 
@@ -35,19 +35,37 @@ def L2_kspace_loss(pred: Union[TensorMap],
         warnings.warn("Target is a TensorMap. Computing k-space matrices for target")
         target_real = blocks_to_matrix(target, dataset, cg = cg)
         target_kspace = dataset.compute_matrices_kspace(target_real)
-    for ifr in range(len(target_kspace)):
-        pred_kspace = []
-        
-        for k in kpts[ifr]:
-            # a = inverse_fourier_transform(torch.stack(list(pred_real[ifr].values())), torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype=np.float64)), k)
-            # print('a', a.shape)
-            pred_kspace.append(inverse_fourier_transform(torch.stack(list(pred_real[desired_ifr].values())), torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype=np.float64)), k))
-            # print('pred_kspace', pred_kspace[-1].shape)
-        pred_kspace = torch.stack(pred_kspace)
-        assert pred_kspace.shape == target_kspace[ifr].shape
-        # print(pred_kspace.shape, target_kspace[ifr].shape)  
-        loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr]))
-    assert torch.norm(loss-loss.real) <1e-10
+
+
+    if desired_ifr is not None:
+        # for ifr in range(len(target_kspace)):
+            pred_kspace = []
+            
+            # for k in kpts[ifr]:
+            #     # a = inverse_fourier_transform(torch.stack(list(pred_real[ifr].values())), torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype=np.float64)), k)
+            #     # print('a', a.shape)
+            #     pred_kspace.append(inverse_fourier_transform(torch.stack(list(pred_real[desired_ifr].values())), 
+            #                                                  torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype=np.float64)), 
+            #                                                  k))
+            pred_H = torch.stack(list(pred_real[desired_ifr].values()))
+            T = torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype = np.float64))
+            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts)
+                # print('pred_kspace', pred_kspace[-1].shape)
+            # pred_kspace = torch.stack(pred_kspace)
+            # assert pred_kspace.shape == target_kspace[ifr].shape
+            # print(pred_kspace.shape, target_kspace[ifr].shape)  
+            loss += torch.sum([(pred_kspace[ifr] - target_kspace[ifr]) * torch.conj(pred_kspace[ifr] - target_kspace[ifr]) \
+                               for ifr in range(len(target_kspace))])
+    else:
+        for ifr in range(len(target)):
+            pred_H = torch.stack(list(pred_real[ifr].values()))
+            T = torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype = np.float64)).to(pred_H)
+            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr])
+
+            # assert pred_kspace.shape == target_kspace[ifr].shape
+            loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr]))
+            
+    assert torch.norm(loss-loss.real) < 1e-10
     return loss.real
 
 def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap]):
