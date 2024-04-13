@@ -46,14 +46,14 @@ class TwoCenter:  # class for second-rank tensors
         frames: Optional[List[ase.Atoms]] = None,
         device=None,
     ):
-        assert (
-            len(tensor.shape) == 3
-        ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
+        # assert (
+        #     len(tensor.shape) == 3
+        # ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
         self.tensor = tensor
         if isinstance(tensor, np.ndarray):
-            self.tensor = torch.from_numpy(tensor)
+            self.tensor = [torch.from_numpy(tensor[i]) for i in range(tensor.shape[0])]
 
-        self.tensor = self.tensor.to(device)
+        # self.tensor = self.tensor.to(device)
         self.orbitals = orbitals
         self.frames = frames
         self.device = device
@@ -106,9 +106,9 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         )
 
         super().__init__(tensor, orbitals, frames, device=device)
-        assert torch.allclose(
-            self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
-        ), "Only symmetric Hamiltonians supported for now"
+        # assert torch.allclose(
+        #     self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
+        # ), "Only symmetric Hamiltonians supported for now"
         self.model_strategy = model_strategy
         self._to_blocks()
         if self.model_strategy == "coupled":

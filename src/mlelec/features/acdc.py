@@ -1,31 +1,27 @@
-# ACDC style 1,2 centered features from rascaline
-# depending on the target decide what kind of features must be computed
+import warnings
+from typing import List, Optional, Tuple, Union
 
+import ase
+import metatensor.operations as operations
+import numpy as np
+import torch
+import tqdm
+from metatensor import Labels, TensorBlock, TensorMap
 from rascaline import SphericalExpansion
 from rascaline import SphericalExpansionByPair as PairExpansion
-import ase
 
-from metatensor import TensorMap, TensorBlock, Labels
-import metatensor.operations as operations
-import torch
-import numpy as np
-import warnings
-from mlelec.utils.metatensor_utils import labels_where
 from mlelec.features.acdc_utils import (
-    acdc_standardize_keys,
-    cg_increment,
-    cg_combine,
     _pca,
-    relabel_keys,
-    fix_gij,
-    drop_blocks_L,
-    block_to_mic_translation,
     _standardize,
+    acdc_standardize_keys,
+    block_to_mic_translation,
+    cg_combine,
+    cg_increment,
+    drop_blocks_L,
+    fix_gij,
+    relabel_keys,
 )
-from typing import List, Optional, Union, Tuple
-import tqdm
-
-# TODO: use rascaline.clebsch_gordan.combine_single_center_to_nu when support for multiple centers is added
+from mlelec.utils.metatensor_utils import labels_where
 
 use_native = True  # True for rascaline
 
@@ -33,16 +29,30 @@ use_native = True  # True for rascaline
 def single_center_features(
     frames, hypers, order_nu, lcut=None, cg=None, device="cpu", **kwargs
 ):
+    """
+    computes the atom-centred features for all the frames in the dataset
+    using the `SphericalExpansion` calculator from rascaline. The spherical
+    expansion coefficients are calculated based on the given hyperparameters.
+    Clebsch-Gordan iterations are then performed to get the desired body-order
+    expansion `order_nu`, using the `cg_increment` function.
+
+    Args:
+        frames: List of ase.Atoms objects.
+        hypers: dictionary of hyperparameters used to compute the spherical expansion.
+        order_nu: desired body_order.
+        lcut: angular_cutoff for the Clebsch-Gordan iterations. Defaults to None.
+        cg: `ClebshGordanReal` object. Defaults to None.
+        device: device to use. Defaults to "cpu".
+
+    Returns:
+        TensorMap: TensorMap containing the atom-centred features.
+    """
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
     rhoi = rhoi.keys_to_properties(["species_neighbor"])
-    # print(rhoi[0].samples)
     rho1i = acdc_standardize_keys(rhoi)
-    # rho1i = _standardize(rho1i)
     if order_nu == 1:
-        # return upto lcut? # TODO: change this maybe
         return drop_blocks_L(rho1i, lcut)
-        # return rho1i
     if lcut is None:
         lcut = 10
     if cg is None:
@@ -51,7 +61,7 @@ def single_center_features(
         L = max(lcut, hypers["max_angular"])
         cg = ClebschGordanReal(lmax=L, device=device)
     rho_prev = rho1i
-    # compute nu order feature recursively
+
     for _ in range(order_nu - 2):
         rho_x = cg_combine(
             rho_prev,
@@ -85,9 +95,7 @@ def pair_features(
     hypers_pair: dict = None,
     cg=None,
     rhonu_i: TensorMap = None,
-    order_nu: Union[
-        List[int], int
-    ] = None,  # List currently not supported - useful when combining nu on i and nu' on j
+    order_nu: Union[List[int], int] = None,
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
@@ -100,10 +108,37 @@ def pair_features(
     **kwargs,
 ):
     """
-    hypers: dictionary of hyperparameters for the pair expansion as in Rascaline
-    cg: object of utils:symmetry:ClebschGordanReal
-    rhonu_i: TensorMap of single center features
-    order_nu: int or list of int, order of the spherical expansion
+    computes the two-centred features for all the frames in the dataset.
+    The two-centred features are computed using the `PairExpansion` calculator
+    from rascaline. One can either use the same hyperparameters as that of the
+    spherical expansion or specify new hyperparameters in `hypers_pair` to
+    compute the pair expansion coefficients. Like `single_centre_features`
+    here too Clebsch-Gordan iterations are performed to get the desired body
+    -order expansion `order_nu`,using the `cg_increment` function. When working
+    with periodic systems, the `mic` flag should be set to True and the `kmesh`
+    parameter should specify the k-grid one wants to use. The `desired_shifts`
+    parameter can be used to specify the desired translations one wants to retain
+    the features for.
+
+    Args:
+        frames: A list of ase.Atoms objects.
+        hypers: dictionary of hyperparameters used to compute the spherical expansion.
+        hypers_pair: hyperparams for pair expansion. Defaults to None.
+        cg: `ClebshGordanReal` object. Defaults to None.
+        rhonu_i: spherical expansion coefficients. Defaults to None.
+        order_nu: desired body order. Defaults to None.
+        all_pairs: #TODO. Defaults to False.
+        both_centers: #TODO. Defaults to False.
+        lcut: angular_cutoff for the Clebsch-Gordan iterations. Defaults to 3.
+        max_shift: #TODO. Defaults to None.
+        device: device to use. Defaults to "cpu".
+        kmesh: k-grid. Defaults to None.
+        desired_shifts: translations to be retained. Defaults to None.
+        mic: set to `True` if working with periodic systems. Defaults to False.
+        return_rho0ij: #TODO. Defaults to False.
+
+    Returns:
+        TensorMap: TensorMap containing the two-centred features.
     """
     if not isinstance(frames, list):
         frames = [frames]
@@ -130,12 +165,7 @@ def pair_features(
             hypers_allpairs["cutoff"] = np.ceil(
                 np.max([np.max(f.get_all_distances(mic=mic)) / factor for f in frames])
             )
-            # nmax = int(
-            #     hypers_allpairs["max_radial"]
-            #     / hypers["cutoff"]
-            #     * hypers_allpairs["cutoff"]
-            # )
-            # hypers_allpairs["max_radial"] = nmax
+
         elif max_shift is not None:
             repframes = [f.repeat(max_shift) for f in frames]
             hypers_allpairs["cutoff"] = np.ceil(
@@ -154,10 +184,9 @@ def pair_features(
 
         rho0_ij = calculator_allpairs.compute(frames, use_native_system=use_native)
 
-    # rho0_ij = acdc_standardize_keys(rho0_ij)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
-    # ----- MIC mapping ------
+
     if mic:
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
 
@@ -328,8 +357,7 @@ def pair_features(
                     values=np.array(desired_shifts[:]).reshape(-1, 3),
                 ),
                 return_idx=True,
-            )  # only retain tranlsations that we want - DONT SKIP
-            # slab, sidx = labels_where(b.samples, selection=Labels(names=["cell_shift_a", "cell_shift_b", "cell_shift_c"], values=np.array(desired_shifts1[:]).reshape(-1,3)), return_idx=True) # only retain tranlsations that we want - DONT SKIP
+            )
 
             blocks.append(
                 TensorBlock(
@@ -359,13 +387,11 @@ def pair_features(
         for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
             rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
 
-    # must compute rhoi as sum of rho_0ij
     if rhonu_i is None:
         rhonu_i = single_center_features(
             frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
         )
-        # rhonu_i = _standardize(rhonu_i)
-    # if not both_centers:
+
     rhonu_ij = cg_combine(
         rhonu_i,
         rho0_ij,
@@ -406,33 +432,29 @@ def pair_features(
             mp=True,  # for combining with neighbor
             feature_names=kwargs.get("feature_names", None),
         )
-        # combine with rhoi
-        # rhonu_nupij = cg_combine(
-        #     rhonu_i,
-        #     rhonuij,
-        #     lcut=lcut,
-        #     other_keys_match=["species_center"],
-        #     clebsch_gordan=cg,
-        #     feature_names=kwargs.get("feature_names", None),
-        # )
 
         return rhonu_nupij
-
-
-# TODO: MP feature
-# elements = np.unique(frames[0].numbers)#np.unique(np.hstack([f.numbers for f in frames]))
-# rhoMPi = contract_rho_ij(rhonu_nuijp, elements, rho(NU=nu+nu'+1)i.property_names)
-# print("MPi computed")
-
-# rhoMPij = cg_increment(rhoMPi, rho0_ij, lcut=lcut, other_keys_match=["species_center"], clebsch_gordan=cg)
 
 
 def twocenter_hermitian_features(
     single_center: TensorMap,
     pair: TensorMap,
 ) -> TensorMap:
-    # keep this function only for molecules - hanldle 000 shift using hermitian PBC - MIC mapping #FIXME
-    # actually special class of features for Hermitian (rank2 tensor)
+    """
+    Combines the atom-centred and pair-centred features to form features 
+    for Hamiltonian learning. The on-site elements of the Hamiltonian are
+    learned using the atom-centred features and the off-site elements are
+    learned using the pair-centred features. 
+    
+
+    Args:
+        single_center (TensorMap): single-centred features.
+        pair (TensorMap): pair-centred features.
+
+    Returns:
+        TensorMap: TensorMap containing the combined features.
+    """
+    
     keys = []
     blocks = []
     if single_center is not None:
@@ -830,8 +852,8 @@ def twocenter_hermitian_features_periodic(
     )
 
 
-from mlelec.targets import SingleCenter, TwoCenter
 from mlelec.data.dataset import MLDataset
+from mlelec.targets import SingleCenter, TwoCenter
 
 
 def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):

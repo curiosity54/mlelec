@@ -1,34 +1,74 @@
+import copy
+import os
+import warnings
+from collections import defaultdict
+from enum import Enum
 from typing import Dict, List, Optional, Union
 
 import ase
-import torch
-from torch.utils.data import Dataset, DataLoader
-from enum import Enum
-from ase.io import read
 import hickle
-from mlelec.targets import ModelTargets
-from metatensor import TensorMap, Labels
+import metatensor
 import metatensor.operations as operations
 import numpy as np
-import os
-import metatensor
-import warnings
+import torch
 import torch.utils.data as data
-import copy
-from collections import defaultdict
+from ase.io import read
+from metatensor import Labels, TensorMap
+from torch.utils.data import Dataset
+
+from mlelec.targets import ModelTargets
 
 
-# Dataset class  - to load and pass around structures, targets and
-# required auxillary data wherever necessary
-class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
+class precomputed_molecules(Enum):
+    """
+    Enumeration representing precomputed molecules.
+
+    This enumeration provides paths to precomputed molecular data for
+    various molecules. Each member represents a specific molecule with
+    its corresponding path to the precomputed data.
+
+    Attributes:
+        water_1000: Path to precomputed data for 1000 water molecules.
+        water_rotated: Path to precomputed data for rotated configurations of a water molecule.
+        ethane: Path to precomputed data for ethane.
+        qm7: Path to precomputed data for QM7 dataset.
+    """
+
     water_1000 = "examples/data/water_1000"
     water_rotated = "examples/data/water_rotated"
     ethane = "examples/data/ethane"
-    pbc_c2_rotated = "examples/data/pbc/c2_rotated"
+    qm7 = "examples/data/qm7"
 
 
-# No model/feature info here
 class MoleculeDataset(Dataset):
+    """
+    Dataset class for molecular data.
+
+    This class provides a dataset for molecular data. It loads molecular
+    structures, targets and auxiliary data from precomputed data or generates 
+    data from the .xyz files at the provided paths using a `PySCF` calculator. 
+    For Hamiltonian learning, at the moment the targets can be Fock matrices 
+    and dipole moments. The auxiliary data can be overlaps and orbitals.
+
+    Args:
+        path: Path to the data directory.
+        mol_name: Name of the molecule to load(chosen from the`precomputed_molecules`).
+        frame_slice: Slice object to select a subset of frames.
+        target: List of target names.
+        use_precomputed: Flag to use precomputed data.
+        aux: List of auxiliary data names.
+        data_path: Path to the data directory.
+        aux_path: Path to the auxiliary data directory.
+        frames: List of ASE Atoms objects.
+        target_data: Dictionary of target data.
+        aux_data: Dictionary of auxiliary data.
+        device: Device to load the data on.
+        basis: Basis set for the data.
+
+    Returns:
+        MoleculeDataset: A Dataset object for molecular data.
+    """
+
     def __init__(
         self,
         path: Optional[str] = None,
@@ -43,7 +83,7 @@ class MoleculeDataset(Dataset):
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
         device: str = "cpu",
-        orbs: str = "sto-3g",
+        basis: str = "sto-3g",
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
@@ -53,14 +93,14 @@ class MoleculeDataset(Dataset):
         self.use_precomputed = use_precomputed
         self.frame_slice = frame_slice
         self.target_names = target
-        self.basis = orbs
+        self.basis = basis
 
         self.target = {t: [] for t in self.target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
         if target_data is None:
-            self.data_path = os.path.join(self.path, orbs)
-            self.aux_path = os.path.join(self.path, orbs)
+            self.data_path = os.path.join(self.path, basis)
+            self.aux_path = os.path.join(self.path, basis)
             # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
@@ -124,36 +164,33 @@ class MoleculeDataset(Dataset):
                 self.target[t] = target_data[t].to(device=self.device)
 
         else:
-            try:
-                for t in self.target_names:
-                    print(self.data_path + "/{}.hickle".format(t))
-                    self.target[t] = hickle.load(
-                        self.data_path + "/{}.hickle".format(t)
-                    )[self.frame_slice].to(device=self.device)
-                    # os.join(self.aux_path, "{}.hickle".format(t))
-            except Exception as e:
-                print(e)
-                print("Generating data")
-                from mlelec.data.pyscf_calculator import calculator
+            for t in self.target_names:
+                print(self.data_path + "/{}.hickle".format(t))
+                self.target[t] = hickle.load(self.data_path + "/{}.hickle".format(t))[
+                    self.frame_slice
+                ]
+                # os.join(self.aux_path, "{}.hickle".format(t))
+            # except Exception as e:
+            #     print(e)
+            #     print("Generating data")
+            #     from mlelec.data.pyscf_calculator import calculator
 
-                calc = calculator(
-                    path=self.path,
-                    mol_name=self.mol_name,
-                    frame_slice=":",
-                    target=self.target_names,
-                )
-                calc.calculate(basis_set=self.basis, verbose=1)
-                calc.save_results()
-                # raise FileNotFoundError("Required target not found at the given path")
-                # TODO: generate data instead?
+            #     calc = calculator(
+            #         path=self.path,
+            #         mol_name=self.mol_name,
+            #         frame_slice=":",
+            #         target=self.target_names,
+            #     )
+            #     calc.calculate(basis_set=self.basis, verbose=1)
+            #     calc.save_results()
+            #     # raise FileNotFoundError("Required target not found at the given path")
+            #     # TODO: generate data instead?
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
             for t in self.aux_data_names:
                 if torch.is_tensor(aux_data[t]):
-                    self.aux_data[t] = aux_data[t][self.frame_slice].to(
-                        device=self.device
-                    )
+                    self.aux_data[t] = aux_data[t][self.frame_slice]
                 else:
                     self.aux_data[t] = aux_data[t]
 
@@ -179,7 +216,6 @@ class MoleculeDataset(Dataset):
                 ),
                 axis=1,
             )
-            # This, for each frame is the Trace(overlap @ Density matrix) = number of electrons
 
     def shuffle(self, indices: torch.tensor):
         self.structures = [self.structures[i] for i in indices]
@@ -194,6 +230,30 @@ class MoleculeDataset(Dataset):
 
 
 class MLDataset(Dataset):
+    """
+    Dataset class for machine learning data.
+
+    Contains all the data required for machine learning tasks, such as
+    input features, target data, auxillary data and also model type and
+    training strategies. The class provides methods to shuffle and split
+    the data into training, validation and test sets and to generate
+    dataloaders for these sets. The class also provides methods to set
+    the input features and the model return type.
+
+    Args:
+        molecule_data: MoleculeDataset object containing molecular data.
+        device: Device to load the data on.
+        model_type: Type of model to use.
+        features: Input features.
+        shuffle: Flag to shuffle the data.
+        shuffle_seed: Seed for shuffling.
+        kwargs: Additional keyword arguments.
+
+    Returns:
+        MLDataset: A Dataset object for machine learning data.
+
+    """
+
     def __init__(
         self,
         molecule_data: MoleculeDataset,
@@ -213,13 +273,10 @@ class MLDataset(Dataset):
         else:
             self.indices = self.indices = torch.arange(self.nstructs)
         self.molecule_data = copy.deepcopy(molecule_data)
-        # self.molecule_data.shuffle(self.indices)
-        # self.molecule_data = molecule_data
 
         self.structures = self.molecule_data.structures
         self.target = self.molecule_data.target
-        # print(self.target, next(iter(self.target.values())))
-        # sets the first target as the primary target - # FIXME
+
         self.target_class = ModelTargets(self.molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
             next(iter(self.molecule_data.target.values())),
@@ -234,7 +291,7 @@ class MLDataset(Dataset):
 
         self.aux_data = self.molecule_data.aux_data
         self.rng = None
-        self.model_type = model_type  # flag to know if we are using acdc features or want to cycle hrough positons
+        self.model_type = model_type
         if self.model_type == "acdc":
             self.features = features
 
@@ -247,21 +304,12 @@ class MLDataset(Dataset):
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-        self.indices = torch.randperm(
-            self.nstructs, generator=self.rng
-        )  # .to(self.device)
-
-        # update self.structures to reflect shuffling
-        # self.structures_original = self.structures.copy()
-        # self.structures = [self.structures_original[i] for i in self.indices]
-        # self.target.shuffle(self.indices)
-        # self.molecule_data.shuffle(self.indices)
+        self.indices = torch.randperm(self.nstructs, generator=self.rng)
 
     def _get_subset(self, y: TensorMap, indices: torch.tensor):
         indices = indices.cpu().numpy()
         assert isinstance(y, TensorMap)
-        # for k, b in y.items():
-        #     b = b.values.to(device=self.device)
+
         return operations.slice(
             y,
             axis="samples",
@@ -276,9 +324,7 @@ class MLDataset(Dataset):
         val_frac: float = None,
         test_frac: Optional[float] = None,
     ):
-        # TODO: handle this smarter
 
-        # overwrite self train/val/test indices
         if train_frac is not None:
             self.train_frac = train_frac
         if val_frac is not None:
@@ -303,16 +349,6 @@ class MLDataset(Dataset):
                 self.test_frac = 1 - (self.train_frac + self.val_frac)
                 assert self.test_frac > 0
 
-        # self.train_idx = torch.tensor(list(range(int(train_frac * self.nstructs))))
-        # self.val_idx = torch.tensor(list(
-        #     range(int(train_frac * self.nstructs), int((train_frac + val_frac) * self.nstructs))
-        # ))
-        # self.test_idx = torch.tensor(list(range(int((train_frac + val_frac) * self.nstructs), self.nstructs)))
-        # assert (
-        #     len(self.test_idx)
-        #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-        # ), "Split indices not generated properly"
-
         self.train_idx = self.indices[: int(self.train_frac * self.nstructs)].sort()[0]
         self.val_idx = self.indices[
             int(self.train_frac * self.nstructs) : int(
@@ -322,11 +358,8 @@ class MLDataset(Dataset):
         self.test_idx = self.indices[
             int((self.train_frac + self.val_frac) * self.nstructs) :
         ].sort()[0]
-        if self.test_frac>0:
-            assert (
-                len(self.test_idx)
-                > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-            ), "Split indices not generated properly"
+        if self.test_frac > 0:
+            assert len(self.test_idx) > 0, "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
@@ -346,7 +379,7 @@ class MLDataset(Dataset):
         self.feat_test = self._get_subset(self.features, self.test_idx)
 
     def _set_model_return(self, model_return: str = "blocks"):
-        ## Helper function to set output in __get_item__ for model training
+        # Helper function to set output in __get_item__ for model training
         assert model_return in [
             "blocks",
             "tensor",
@@ -358,7 +391,6 @@ class MLDataset(Dataset):
 
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
-            # idx = [i.item() for i in idx]
             idx = idx.tolist()
         if not self.model_type == "acdc":
             return self.structures[idx], self.target.tensor[idx]
@@ -383,9 +415,7 @@ class MLDataset(Dataset):
                 )
             else:
                 idx = [i.item() for i in idx]
-                y = self.target.tensor[idx]
-            # x = metatensor.to(x, "torch")
-            # y = metatensor.to(y, "torch")
+                y = [self.target.tensor[i] for i in idx]
 
             return x, y, idx
 
@@ -461,13 +491,14 @@ def get_dataloader(
         return test_loader
 
 
-from mlelec.data.pyscf_calculator import kpoint_to_translations, translations_to_kpoint
 from mlelec.data.pyscf_calculator import (
+    _map_transidx_to_relative_translation,
     get_scell_phase,
+    kpoint_to_translations,
+    map_mic_translations,
     map_supercell_to_relativetrans,
     translation_vectors_for_kmesh,
-    _map_transidx_to_relative_translation,
-    map_mic_translations,
+    translations_to_kpoint,
 )
 
 
@@ -806,7 +837,7 @@ class PySCFPeriodicDataset(Dataset):
 
         assert matrices_kpoint is not None
         self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
-        
+
         matrices_translation = self.kpts_to_translation_target(
             self.matrices_kpoint, nao
         )
@@ -824,7 +855,7 @@ class PySCFPeriodicDataset(Dataset):
             self.matrices_translation[tuple(k)] = torch.stack(
                 self.matrices_translation[tuple(k)]
             )
-        # DO the same for the overlap 
+        # DO the same for the overlap
         if overlap_kpoint is not None:
             self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
             overlap_translation = self.kpts_to_translation_target(
