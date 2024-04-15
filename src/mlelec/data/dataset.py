@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.utils.data as data
 from ase.io import read
-from metatensor import Labels, TensorMap
+from metatensor import Labels, TensorMap, load
 from torch.utils.data import Dataset
 
 from mlelec.targets import ModelTargets
@@ -377,6 +377,14 @@ class MLDataset(Dataset):
         self.feat_train = self._get_subset(self.features, self.train_idx)
         self.feat_val = self._get_subset(self.features, self.val_idx)
         self.feat_test = self._get_subset(self.features, self.test_idx)
+        
+    def _load_features(self, filename: str):
+        self.features = load(filename)
+        self.feature_names = self.features.keys.values
+        self.feat_train = self._get_subset(self.features, self.train_idx)
+        self.feat_val = self._get_subset(self.features, self.val_idx)
+        self.feat_test = self._get_subset(self.features, self.test_idx)
+
 
     def _set_model_return(self, model_return: str = "blocks"):
         # Helper function to set output in __get_item__ for model training
