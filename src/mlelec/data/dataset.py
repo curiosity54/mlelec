@@ -782,41 +782,47 @@ class PySCFPeriodicDataset(Dataset):
                 structure, self.kmesh[ifr], basis=self.basis_name
             )
             self.cells.append(cell)
+        self.set_kpts()
 
-        self._translation_counter = self.compute_translation_counter()
-        self._translation_dict = self.compute_translation_dict()
-
+        # Assign/compute Hamiltonian and Overlap matrices
         if fock_kspace is not None:
+            assert fock_realspace is None, "Only one between fock_realspace and fock_kspace must be provided."
             self.set_fock_kspace(fock_kspace)
-        if overlap_kspace is not None:
+            self._translation_counter = self.compute_translation_counter()
+            self._translation_dict = self.compute_translation_dict()
+            self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
+        else:
+            assert fock_realspace is not None, "At least one between fock_realspace and fock_kspace must be provided."
+            self.fock_realspace, self._fock_realspace_negative_translations = self._set_matrices_realspace(fock_realspace)
+            self.fock_kspace = self.compute_matrices_kspace(fock_realspace)
+            self._translation_counter = self.compute_translation_counter(mic = False)
+            self._translation_dict = self.compute_translation_dict()
+
+        # if fock_realspace is None: # FIXME: either kspace or realspace input should be allowed
+        #     assert (self.fock_kspace is not None), "Either real space or reciprocal space Fock matrices must be provided."
+        #     self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
+        #     self.realspace_translations = [list(m.keys()) for m in self.fock_realspace]
+        # else:
+        #     warnings.warn("real space hamiltonian from input")
+        #     self.fock_realspace = self._set_matrices_realspace(fock_realspace)
+
+        if overlap_kspace is None:
+            if overlap_realspace is not None:
+                warnings.warn("real space overlap from input")
+                self.overlap_realspace, self._overlap_realspace_negative_translations = self._set_matrices_realspace(overlap_realspace)
+                self.overlap_kspace = self.compute_matrices_kspace(self.overlap_realspace)
+            else:
+                warnings.warn("No real space or kspace overlap set")
+        else:
+            assert (overlap_realspace is None), "At most one between overlap_realspace and overlap_kspace must be provided."
             self.set_overlap_kspace(overlap_kspace)
+            self.overlap_realspace, self._overlap_realspace_negative_translations = (self.compute_matrices_realspace(self.overlap_kspace))
 
-        if fock_realspace is None:
-            assert (
-                self.fock_kspace is not None
-            ), "Either the real space or reciprocal space Fock matrices must be provided."
-            self.fock_realspace, self._fock_realspace_negative_translations = (
-                self.compute_matrices_realspace(self.fock_kspace)
-            )
-            self.realspace_translations = [list(m.keys()) for m in self.fock_realspace]
-        else:
-            raise NotImplementedError(
-                "For now only reciprocal space matrices are allowed."
-            )
-            # self.fock_realspace = self.set_matrices_realspace(fock_realspace)
-
-        if overlap_realspace is None and overlap_kspace is not None:
-            self.overlap_realspace, self._overlap_realspace_negative_translations = (
-                self.compute_matrices_realspace(self.overlap_kspace)
-            )
-        else:
-            warnings.warn("No real space or kspace overlap set")
-            # raise NotImplementedError("For now only reciprocal space matrices are allowed.")
-
-    def set_kpts(): 
-        pass 
+    def set_kpts(self):
+        self.kpts_rel = [c.make_kpts(k) for c, k in zip(self.cells, self.kmesh)]
+        self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
     
-    def compute_translation_counter(self):
+    def compute_translation_counter(self, mic = True):
         from itertools import product
         from mlelec.utils.pbc_utils import get_T_from_pair
 
@@ -832,9 +838,10 @@ class PySCFPeriodicDataset(Dataset):
             for dummy_T in shifts:
                 for i in range(frame.get_global_number_of_atoms()):
                     for j in range(frame.get_global_number_of_atoms()):
-                        _, _, mic_T = get_T_from_pair(
-                            frame, supercell, i, j, dummy_T, kmesh
-                        )
+                        if mic:
+                            _, _, mic_T = get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh)
+                        else:
+                            mic_T = dummy_T
                         mic_T = tuple(mic_T)
                         if mic_T not in counter_T[ifr]:
                             counter_T[ifr][mic_T] = np.zeros((natm, natm))
@@ -890,21 +897,28 @@ class PySCFPeriodicDataset(Dataset):
 
     def _set_matrices_realspace(self, matrices_realspace):
         _matrices_realspace = []
+        _matrices_realspace_neg = []
         for m in matrices_realspace:
             _matrices_realspace.append({})
+            _matrices_realspace_neg.append({})
             for k in m:
+                minus_k = tuple(-np.array(k))
                 if isinstance(m[k], torch.Tensor):
                     _matrices_realspace[-1][k] = m[k]
+                    _matrices_realspace_neg[-1][k] = m[minus_k]
                 elif isinstance(m[k], np.ndarray):
                     _matrices_realspace[-1][k] = torch.from_numpy(m[k])
+                    _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
+
                 elif isinstance(m[k], list):
                     _matrices_realspace[-1][k] = torch.tensor(m[k])
+                    _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
                 else:
                     raise ValueError(
                         "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
                     )
-
-        return _matrices_realspace
+    
+        return _matrices_realspace, _matrices_realspace_neg
 
     def _set_matrices_kspace(self, matrices_kspace):
         if isinstance(matrices_kspace, list):
@@ -1033,25 +1047,45 @@ class PySCFPeriodicDataset(Dataset):
                         inverse_fourier_transform(
                             torch.stack(list(H.values())),
                             torch.tensor(list(H.keys())),
-                            k,
+                            k
                         )
                     )
                 matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
         return matrices_kspace
 
+    # def compute_matrices_kspace(self, matrices_realspace):
+    #     from mlelec.utils.pbc_utils import inverse_fourier_transform, inverse_fft
+
+    #     matrices_kspace = []
+
+    #     if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
+    #         for ifr, H in enumerate(matrices_realspace):
+    #             matrices_kspace.append(torch.from_numpy(inverse_fft(np.array(list(H.values())), self.kmesh[ifr])))
+                
+    #     elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
+    #         for ifr, H in enumerate(matrices_realspace):
+    #             matrices_kspace.append(inverse_fft(torch.stack(list(H.values())), self.kmesh[ifr]))
+
+    #     return matrices_kspace
+
     def compute_matrices_kspace(self, matrices_realspace):
-        from mlelec.utils.pbc_utils import inverse_fourier_transform, inverse_fft
+        from mlelec.utils.pbc_utils import inverse_fourier_transform
 
         matrices_kspace = []
 
         if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
             for ifr, H in enumerate(matrices_realspace):
-                matrices_kspace.append(torch.from_numpy(inverse_fft(np.array(list(H.values())), self.kmesh[ifr])))
+                H_T = torch.from_numpy(np.array(list(H.values())))
+                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
+                k = torch.from_numpy(self.kpts_rel[ifr])
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k))))
                 
-
         elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
-                matrices_kspace.append(inverse_fft(torch.stack(list(H.values())), self.kmesh[ifr]))
+                H_T = torch.stack(list(H.values()))
+                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
+                k = torch.from_numpy(self.kpts_rel[ifr])
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k))))
 
         return matrices_kspace
 

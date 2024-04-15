@@ -16,7 +16,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
                    desired_ifr = None):
                    
     """L2 loss function for k-space matrices computed at given 'kpts' 
-    kpt: list(list of kpts) per frame 
+    kpts: list(list of kpts) per frame 
     target: list of Hks per frame
     ASSUMPTION: len(target) = len(kpts) and target[ifr] has the associated kpts in kpt[ifr].  
     Not implemented for ttarget = TensorMap
@@ -60,7 +60,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
         for ifr in range(len(target)):
             pred_H = torch.stack(list(pred_real[ifr].values()))
             T = torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype = np.float64)).to(pred_H)
-            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr])
+            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr], norm = 1/np.sqrt(kpts[ifr].shape[0])) #1/np.sqrt(T.shape[0]))
 
             # assert pred_kspace.shape == target_kspace[ifr].shape
             loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr]))
@@ -68,7 +68,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
     assert torch.norm(loss-loss.real) < 1e-10
     return loss.real
 
-def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap]):
+def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False):
     """L2 loss function"""
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)
@@ -81,14 +81,17 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
         assert isinstance(
             target, TensorMap
         ), "Target must be a TensorMap if prediction is a TensorMap"
-        loss = 0
+        losses = []
         for key, block in pred.items():
             targetblock = target.block(key)
             assert (
                 block.samples == targetblock.samples
             ), "Prediction and target must have the same samples"
-            loss += torch.sum((block.values - targetblock.values) ** 2)
-        return loss
+            losses.append(torch.sum((block.values - targetblock.values) ** 2))
+        if loss_per_block:
+            return losses, sum(losses)
+        else:
+            return sum(losses)
 
 
 def Eigval_loss(

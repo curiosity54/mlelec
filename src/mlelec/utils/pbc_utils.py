@@ -230,7 +230,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                        
                     # Skip the pair if their distance exceeds the cutoff
                     if cutoff is not None:
-                        for mic_T in dataset._translation_dict[A][T]:
+                        for mic_T in dataset._translation_dict[A][T]: # FIXME allow for mic=False
                             if dataset._translation_counter[A][mic_T][i, j]:
                                 ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(mic_T) + frame.positions[j] - frame.positions[i])
                                 if ij_distance > cutoff:
@@ -492,7 +492,7 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = N
 
         if "L" in blocks.keys.names:
             from mlelec.utils.twocenter_utils import _to_uncoupled_basis
-            blocks = _to_uncoupled_basis(blocks, cg = cg)
+            blocks = _to_uncoupled_basis(blocks, cg = cg, device = device)
         blocks = move_cell_shifts_to_keys(blocks)      
 
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
@@ -674,15 +674,17 @@ def fourier_transform(H_k, kpts, T):
     '''    
     return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki.cpu() for ki, H_ki in zip(kpts, H_k)], axis = 0)
     
-def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None):
+def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None, norm = None):
     '''
     Compute the Inverse Fourier Transform of a real-space tensor in a (list of) k points
     '''    
     # print( k, '<')
     # print(H_T.shape, T_list.shape)
     if isinstance(H_T, np.ndarray):
+        if norm is None:
+            norm = 1/np.sqrt(np.shape(T_list)[0])
         # H_T is a numpy array
-        return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
+        return norm*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
     
     elif isinstance(H_T, torch.Tensor):
         # H_T is a torch tensor
@@ -693,7 +695,9 @@ def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None):
             phase = torch.exp(2j * np.pi * torch.tensordot(T_list, k, dims = ([-1], [-1])))
             if len(phase.shape) == 1:
                 phase = phase.reshape(1, -1)
-        return torch.tensordot(H_T.to(phase), phase, dims = ([0], [0])).permute(2, 0, 1) / np.sqrt(phase.shape[0])
+        if norm is None:
+            norm = 1 / np.sqrt(phase.shape[0])
+        return norm*torch.tensordot(H_T.to(phase), phase, dims = ([0], [0])).permute(2, 0, 1) # FIXME: the normalization is incorrect when there are less Ts than kpoints (e.g., when there is a cutoff in real space)
         # return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")

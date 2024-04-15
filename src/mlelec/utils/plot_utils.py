@@ -267,6 +267,7 @@ def plot_bands_frame_(
     realover,
     pyscf_cell,
     kmesh,
+    R_vec_rel_in = None,
     special_symm=None,
     bandpath_str=None,
     kpath=None,
@@ -278,13 +279,13 @@ def plot_bands_frame_(
     color="blue",
     ls="-",
     marker=None,
-):
+    factor = 1,
+    ):
     """fourier"""
 
-    R_vec_rel = translation_vectors_for_kmesh(
-        pyscf_cell, kmesh, return_rel=True, wrap_around=True
-    )
-    R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, wrap_around=True)
+    R_vec_rel = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, return_rel=True, wrap_around=True)
+    R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, wrap_around=True)
+
 
     mask_x = np.where(R_vec_rel[:, 0] == -kmesh[0] // 2)[0]
     R_vec_rel[:, 0][mask_x] = kmesh[0] // 2
@@ -305,14 +306,15 @@ def plot_bands_frame_(
     else:
         assert kpath is not None
     kpts = kpath.kpts  # units of icell
-    kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
+    # kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
 
     xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
     special_xcoords = np.array(special_xcoords) / xcoords[-1]
     xcoords = np.array(xcoords) / xcoords[-1]
     Nk = np.prod(kmesh)
 
-    phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
+    # phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
+    phase = np.exp(2j * np.pi * np.dot(R_vec_rel, kpts.T))
     Hk = np.einsum("tk, tij ->kij", phase, realfock)
     Sk = np.einsum("tk, tij ->kij", phase, realover)
 
@@ -337,10 +339,12 @@ def plot_bands_frame_(
         ax_was_none = False
     nbands = pyscf_cell.nao_nr()
 
+    bandplot = []
     for n in range(nbands):
-        ax.plot(
-            xcoords, [e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
+        pl, = ax.plot(
+            xcoords, [factor * e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
         )
+        bandplot.append(pl)
 
     for p in special_xcoords:
         ax.plot([p, p], [emin, emax], "k-")
@@ -353,9 +357,9 @@ def plot_bands_frame_(
     ax.set_ylim(y_min, y_max)
 
     if ax_was_none:
-        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
+        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
     else:
-        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
+        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
 
 
 def plot_bands(

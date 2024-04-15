@@ -304,7 +304,7 @@ def map_mic_translations(
     return unique_Ls
 
 
-def translation_vectors_for_kmesh(cell, kmesh, wrap_around=False, return_rel=False):
+def translation_vectors_for_kmesh(cell, kmesh, R_vec_rel = None, wrap_around = False, return_rel = False):
     from pyscf import lib
 
     """
@@ -314,14 +314,22 @@ def translation_vectors_for_kmesh(cell, kmesh, wrap_around=False, return_rel=Fal
     identical to the k-point mesh of primitive cell
     """
     latt_vec = cell.lattice_vectors()
-    R_rel_a = np.arange(kmesh[0])
-    R_rel_b = np.arange(kmesh[1])
-    R_rel_c = np.arange(kmesh[2])
-    if wrap_around:
-        R_rel_a[(kmesh[0] + 1) // 2 :] -= kmesh[0]
-        R_rel_b[(kmesh[1] + 1) // 2 :] -= kmesh[1]
-        R_rel_c[(kmesh[2] + 1) // 2 :] -= kmesh[2]
-    R_vec_rel = lib.cartesian_prod((R_rel_a, R_rel_b, R_rel_c))
+    if R_vec_rel is None:
+        R_rel_a = np.arange(kmesh[0])
+        R_rel_b = np.arange(kmesh[1])
+        R_rel_c = np.arange(kmesh[2])
+        if wrap_around:
+            R_rel_a[(kmesh[0] + 1) // 2 :] -= kmesh[0]
+            R_rel_b[(kmesh[1] + 1) // 2 :] -= kmesh[1]
+            R_rel_c[(kmesh[2] + 1) // 2 :] -= kmesh[2]
+        R_vec_rel = lib.cartesian_prod((R_rel_a, R_rel_b, R_rel_c))
+    else:
+        if wrap_around:
+            for i in range(len(R_vec_rel)):
+                for a in range(3):
+                    if R_vec_rel[i][a] >= (kmesh[a] + 1) // 2:
+                        R_vec_rel[i][a] -= kmesh[a]
+        R_vec_rel = np.array(R_vec_rel)
     if return_rel:
         return R_vec_rel
     R_vec_abs = np.dot(R_vec_rel, latt_vec)

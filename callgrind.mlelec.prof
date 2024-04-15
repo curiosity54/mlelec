@@ -1,0 +1,5979 @@
+version: 1
+creator: yappi
+pid: 22114
+cmd:  train_pyscf.py
+part: 1
+
+events: Ticks
+
+fl=(198) /home/pegolo/Software/my_mlelec/src/mlelec/metrics.py
+fl=(310) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py
+fl=(309) torch
+fl=(308) torch
+fl=(301) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(300) __builtin__
+fl=(299) torch
+fl=(150) numpy
+fl=(147) __builtin__
+fl=(298) torch
+fl=(148) __builtin__
+fl=(71) builtins
+fl=(279) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(181) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(199) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(1) builtins
+fl=(199) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(273) builtins
+fl=(170) __builtin__
+fl=(297) __builtin__
+fl=(206) torch
+fl=(296) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(118) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(209) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(125) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(137) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(295) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(141) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(100) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(69) __builtin__
+fl=(294) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(293) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(292) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(283) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/ase/atoms.py
+fl=(284) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(282) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(281) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(233) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(201) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(200) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(139) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(101) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(233) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(183) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(172) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(278) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(171) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(151) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(115) numpy
+fl=(277) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(276) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(263) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(262) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(260) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(259) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(182) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(258) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(236) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(235) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(117) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(221) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(234) <frozen importlib._bootstrap>
+fl=(103) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(107) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(106) __builtin__
+fl=(105) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/_c_lib.py
+fl=(104) __builtin__
+fl=(107) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(116) __builtin__
+fl=(108) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(138) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(102) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py
+fl=(127) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(313) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(314) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(311) torch._C
+fl=(314) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(320) __builtin__
+fl=(317) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(316) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(315) torch._C
+fl=(320) __builtin__
+fl=(108) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(109) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(109) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(111) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py
+fl=(110) _functools
+fl=(137) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(172) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(180) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(124) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py
+fl=(130) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(178) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(173) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(161) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(156) /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py
+fl=(125) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(128) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(126) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(111) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py
+fl=(114) /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py
+fl=(113) _ctypes
+fl=(112) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py
+fl=(101) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(200) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(143) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(128) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(135) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(132) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(129) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(121) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(123) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(260) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(264) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(261) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(230) numpy
+fl=(71) builtins
+fl=(122) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(119) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(130) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(280) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(179) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(131) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(122) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(100) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(114) /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py
+fl=(171) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(135) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(183) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(189) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(187) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(185) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(184) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(264) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(275) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(94) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(50) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(48) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(266) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(265) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(151) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(155) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(154) numpy
+fl=(153) __builtin__
+fl=(152) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(129) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(115) numpy
+fl=(143) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(160) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(144) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(179) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(96) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(97) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(97) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(168) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/linear.py
+fl=(165) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(164) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(99) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(98) torch._C
+fl=(99) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(190) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(163) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(140) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(136) torch._C._linalg
+fl=(2) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(201) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(223) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(222) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(215) __builtin__
+fl=(216) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(213) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(205) /home/pegolo/Software/my_mlelec/src/mlelec/utils/symmetry.py
+fl=(204) torch
+fl=(203) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(202) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(118) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(120) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(173) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(177) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(176) _ctypes
+fl=(134) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(175) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(174) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(278) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(141) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(142) __builtin__
+fl=(126) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(155) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(159) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(158) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(157) __builtin__
+fl=(185) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(186) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(51) builtins
+fl=(271) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(52) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(187) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(188) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(50) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(271) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(274) __builtin__
+fl=(272) __builtin__
+fl=(258) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(263) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(194) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(182) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(16) builtins
+fl=(116) __builtin__
+fl=(249) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(272) __builtin__
+fl=(194) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(196) __builtin__
+fl=(41) builtins
+fl=(195) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(145) __builtin__
+fl=(322) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(83) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(367) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(324) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(167) __builtin__
+fl=(80) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(54) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(323) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(112) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py
+fl=(120) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(324) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(329) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(328) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py
+fl=(326) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/grad_mode.py
+fl=(325) torch
+fl=(117) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(329) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(348) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(343) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(330) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(297) __builtin__
+fl=(1) builtins
+fl=(4) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/parameter.py
+fl=(209) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(12) builtins
+fl=(211) __builtin__
+fl=(210) __builtin__
+fl=(348) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(355) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(218) builtins
+fl=(331) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_utils.py
+fl=(349) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(355) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(366) __builtin__
+fl=(365) __builtin__
+fl=(364) __builtin__
+fl=(362) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(361) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(360) __builtin__
+fl=(359) __builtin__
+fl=(358) __builtin__
+fl=(357) __builtin__
+fl=(356) torch
+fl=(84) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_jit_internal.py
+fl=(132) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py
+fl=(133) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(170) __builtin__
+fl=(205) /home/pegolo/Software/my_mlelec/src/mlelec/utils/symmetry.py
+fl=(212) __builtin__
+fl=(208) builtins
+fl=(207) builtins
+fl=(177) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py
+fl=(40) /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py
+fl=(39) /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py
+fl=(267) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(270) numpy
+fl=(269) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(268) numpy
+fl=(140) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(223) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(224) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(211) __builtin__
+fl=(196) __builtin__
+fl=(180) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(106) __builtin__
+fl=(164) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(10) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(165) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(166) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(69) __builtin__
+fl=(102) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py
+fl=(40) /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py
+fl=(43) __builtin__
+fl=(42) builtins
+fl=(266) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(168) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/linear.py
+fl=(169) torch._C._nn
+fl=(224) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(232) torch
+fl=(227) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(225) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(169) torch._C._nn
+fl=(236) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(257) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(256) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(250) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(247) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(193) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(192) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(238) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(237) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(41) builtins
+fl=(216) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(219) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(217) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(181) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(123) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(275) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(113) _ctypes
+fl=(152) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(110) _functools
+fl=(279) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(16) builtins
+fl=(144) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(149) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(146) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(295) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(127) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(142) __builtin__
+fl=(174) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(191) /home/pegolo/Software/my_mlelec/train_pyscf.py
+fl=(105) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/_c_lib.py
+fl=(186) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(13) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_compile.py
+fl=(44) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(14) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py
+fl=(188) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(175) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(131) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(269) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(94) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(104) __builtin__
+fl=(364) __builtin__
+fl=(161) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(162) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(159) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(150) numpy
+fl=(48) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(49) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(280) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(160) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(273) builtins
+fl=(250) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(290) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py
+fl=(289) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py
+fl=(231) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(286) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(285) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(254) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(253) numpy
+fl=(252) __builtin__
+fl=(251) __builtin__
+fl=(238) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(246) __builtin__
+fl=(245) __builtin__
+fl=(244) builtins
+fl=(243) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(239) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(195) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(119) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(14) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py
+fl=(21) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(18) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(17) builtins
+fl=(15) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(156) /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py
+fl=(133) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(136) torch._C._linalg
+fl=(134) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(0) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(6) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(49) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(21) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(38) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/skipfiles.py
+fl=(22) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(98) torch._C
+fl=(44) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(95) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(53) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(47) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(46) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(45) torch._C._dynamo.eval_frame
+fl=(20) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(357) __builtin__
+fl=(230) numpy
+fl=(153) __builtin__
+fl=(158) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(366) __builtin__
+fl=(145) __builtin__
+fl=(178) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py
+fl=(358) __builtin__
+fl=(193) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(343) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(347) torch
+fl=(346) torch
+fl=(344) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(53) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(3) __builtin__
+fl=(270) numpy
+fl=(212) __builtin__
+fl=(22) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(36) <frozen genericpath>
+fl=(32) builtins
+fl=(23) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/package/package_importer.py
+fl=(176) _ctypes
+fl=(42) builtins
+fl=(256) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(206) torch
+fl=(162) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(2) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(330) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(341) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/graphs.py
+fl=(333) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(332) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/backends/cuda/__init__.py
+fl=(80) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(81) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(239) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(241) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(240) _operator
+fl=(252) __builtin__
+fl=(124) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py
+fl=(83) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(93) __builtin__
+fl=(91) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(85) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(39) /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py
+fl=(294) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(360) __builtin__
+fl=(213) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(214) numpy
+fl=(301) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(307) __builtin__
+fl=(306) torch
+fl=(302) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py
+fl=(204) torch
+fl=(268) numpy
+fl=(210) __builtin__
+fl=(157) __builtin__
+fl=(81) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(82) torch._ops.profiler
+fl=(139) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(82) torch._ops.profiler
+fl=(274) __builtin__
+fl=(262) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(365) __builtin__
+fl=(221) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(349) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(353) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(352) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py
+fl=(350) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py
+fl=(184) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(333) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(340) torch._C
+fl=(335) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(334) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(6) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(7) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(203) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(91) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(92) torch._ops.profiler
+fl=(347) torch
+fl=(254) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(255) numpy
+fl=(310) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py
+fl=(312) torch._C._linalg
+fl=(232) torch
+fl=(23) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/package/package_importer.py
+fl=(25) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(24) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(222) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(379) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(227) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(229) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(228) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(218) builtins
+fl=(354) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(154) numpy
+fl=(335) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(336) <frozen os>
+fl=(92) torch._ops.profiler
+fl=(265) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py
+fl=(368) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(371) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(370) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(369) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(306) torch
+fl=(7) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(9) __builtin__
+fl=(8) __builtin__
+fl=(25) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(31) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(30) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(29) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(28) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(27) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(26) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(284) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(291) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(312) torch._C._linalg
+fl=(336) <frozen os>
+fl=(337) <frozen _collections_abc>
+fl=(361) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(321) __builtin__
+fl=(12) builtins
+fl=(54) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py
+fl=(79) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/jit/__init__.py
+fl=(55) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(43) __builtin__
+fl=(337) <frozen _collections_abc>
+fl=(338) <frozen os>
+fl=(298) torch
+fl=(32) builtins
+fl=(35) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(33) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(189) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py
+fl=(214) numpy
+fl=(215) __builtin__
+fl=(302) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py
+fl=(305) torch
+fl=(304) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_VF.py
+fl=(303) torch._C
+fl=(362) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(363) math
+fl=(4) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/parameter.py
+fl=(5) __builtin__
+fl=(259) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(353) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(277) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(36) <frozen genericpath>
+fl=(37) posix
+fl=(10) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(326) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/grad_mode.py
+fl=(327) torch._C
+fl=(338) <frozen os>
+fl=(339) <frozen os>
+fl=(305) torch
+fl=(149) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py
+fl=(251) __builtin__
+fl=(296) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(3) __builtin__
+fl=(37) posix
+fl=(247) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(248) __builtin__
+fl=(276) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(261) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(219) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(220) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(374) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(375) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(241) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(242) numpy.core._multiarray_umath
+fl=(375) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(376) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(18) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(19) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(208) builtins
+fl=(321) __builtin__
+fl=(341) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/graphs.py
+fl=(342) torch._C
+fl=(376) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(378) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(377) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(166) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(246) __builtin__
+fl=(342) torch._C
+fl=(229) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(19) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(35) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(34) __builtin__
+fl=(248) __builtin__
+fl=(33) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(55) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(64) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(56) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(339) <frozen os>
+fl=(354) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py
+fl=(344) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py
+fl=(345) builtins
+fl=(350) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py
+fl=(351) torch._C
+fl=(167) __builtin__
+fl=(249) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py
+fl=(244) builtins
+fl=(217) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(377) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(15) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(225) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(226) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(356) torch
+fl=(346) torch
+fl=(84) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_jit_internal.py
+fl=(327) torch._C
+fl=(24) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(34) __builtin__
+fl=(243) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(220) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(334) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py
+fl=(146) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(351) torch._C
+fl=(369) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(331) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_utils.py
+fl=(9) __builtin__
+fl=(352) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py
+fl=(317) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(319) torch
+fl=(318) __builtin__
+fl=(226) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(242) numpy.core._multiarray_umath
+fl=(325) torch
+fl=(309) torch
+fl=(26) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(253) numpy
+fl=(257) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(148) __builtin__
+fl=(359) __builtin__
+fl=(8) __builtin__
+fl=(163) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py
+fl=(27) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(240) _operator
+fl=(207) builtins
+fl=(30) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(29) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(255) numpy
+fl=(5) __builtin__
+fl=(31) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(363) math
+fl=(300) __builtin__
+fl=(371) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(283) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/ase/atoms.py
+fl=(282) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(245) __builtin__
+fl=(28) /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py
+fl=(345) builtins
+fl=(93) __builtin__
+fl=(85) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(88) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(87) torch._C
+fl=(86) torch._C
+fl=(76) __builtin__
+fl=(38) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/skipfiles.py
+fl=(45) torch._C._dynamo.eval_frame
+fl=(56) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(66) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(57) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(340) torch._C
+fl=(57) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(59) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(58) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(319) torch
+fl=(290) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py
+fl=(20) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(79) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/jit/__init__.py
+fl=(52) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py
+fl=(192) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(328) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py
+fl=(332) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/backends/cuda/__init__.py
+fl=(237) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py
+fl=(370) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py
+fl=(17) builtins
+fl=(293) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(147) __builtin__
+fl=(46) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(378) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py
+fl=(308) torch
+fl=(86) torch._C
+fl=(11) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(235) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py
+fl=(66) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(72) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(63) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(68) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(67) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(291) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(311) torch._C
+fl=(323) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(367) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py
+fl=(234) <frozen importlib._bootstrap>
+fl=(59) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(60) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(299) torch
+fl=(231) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py
+fl=(47) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(281) /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py
+fl=(286) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(287) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(228) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py
+fl=(307) __builtin__
+fl=(95) /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py
+fl=(287) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(288) __builtin__
+fl=(304) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_VF.py
+fl=(72) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(78) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(74) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(77) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(73) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(60) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(61) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(197) builtins
+fl=(88) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(90) __builtin__
+fl=(89) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(372) builtins
+fl=(61) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(62) builtins
+fl=(292) /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py
+fl=(315) torch._C
+fl=(62) builtins
+fl=(202) /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py
+fl=(74) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(75) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(73) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(316) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py
+fl=(63) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(318) __builtin__
+fl=(67) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(373) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py
+fl=(68) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(70) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(288) __builtin__
+fl=(303) torch._C
+fl=(75) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(87) torch._C
+fl=(70) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(285) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py
+fl=(289) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py
+fl=(190) /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py
+fl=(89) /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py
+fl=(64) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(65) builtins
+fl=(78) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(76) __builtin__
+fl=(77) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(58) /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py
+fl=(65) builtins
+fl=(90) __builtin__
+
+fn=(198) L2_kspace_loss /home/pegolo/Software/my_mlelec/src/mlelec/metrics.py:11
+fn=(310) norm /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py:1480
+fn=(309) sum torch:0
+fn=(308) conj torch:0
+fn=(301) inverse_fourier_transform /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:677
+fn=(300) <method 'to' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(299) from_numpy torch:0
+fn=(150) array numpy:0
+fn=(147) <method 'keys' of 'dict' objects> __builtin__:0
+fn=(298) stack torch:0
+fn=(148) <method 'values' of 'dict' objects> __builtin__:0
+fn=(71) len builtins:0
+fn=(279) TensorMap.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:129
+fn=(181) TensorBlock.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:159
+fn=(199) blocks_to_matrix /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:481
+fn=(1) isinstance builtins:0
+fn=(199) blocks_to_matrix /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:481
+fn=(273) abs builtins:0
+fn=(170) <method 'reshape' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(297) <method 'clone' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(206) zeros torch:0
+fn=(296) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:566
+fn=(118) Labels.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:411
+fn=(209) Tensor.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:980
+fn=(125) TensorBlock.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:233
+fn=(137) TensorBlock.samples /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:244
+fn=(295) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:545
+fn=(141) LabelsEntry.__getitem__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:125
+fn=(100) TensorMap.items /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:503
+fn=(69) <method 'append' of 'list' objects> __builtin__:0
+fn=(294) sum /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2177
+fn=(293) _sum_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2172
+fn=(292) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:526
+fn=(283) Atoms._get_atomic_numbers /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/ase/atoms.py:1938
+fn=(284) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:500
+fn=(282) _atom_blocks_idx /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:133
+fn=(281) _orbs_offsets /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:118
+fn=(233) move_cell_shifts_to_keys /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:331
+fn=(201) _to_uncoupled_basis /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:949
+fn=(200) TensorMap.sample_names /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:617
+fn=(139) Labels.names /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:552
+fn=(101) TensorMap.keys /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:295
+fn=(233) move_cell_shifts_to_keys /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:331
+fn=(183) TensorMap.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:46
+fn=(172) TensorBlock.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:68
+fn=(278) TensorBlock.properties /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:270
+fn=(171) TensorBlock.components /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:254
+fn=(151) Labels.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:270
+fn=(115) asarray numpy:0
+fn=(277) LabelsEntry.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:93
+fn=(276) where /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:346
+fn=(263) all /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2421
+fn=(262) _all_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2416
+fn=(260) isclose /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2249
+fn=(259) _isclose_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2245
+fn=(182) Labels.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:380
+fn=(258) Labels.view /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1001
+fn=(236) unique /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:138
+fn=(235) _unique_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:133
+fn=(117) LabelsValues.__array_finalize__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:35
+fn=(221) Labels.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:557
+fn=(234) _handle_fromlist <frozen importlib._bootstrap>:1207
+fn=(103) _from_mts_labels_t /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:363
+fn=(107) __new__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:21
+fn=(106) <method 'decode' of 'bytes' objects> __builtin__:0
+fn=(105) LibraryFinder.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/_c_lib.py:44
+fn=(104) <built-in method __new__ of type object at 0x557f73010880> __builtin__:0
+fn=(107) __new__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:21
+fn=(116) <method 'view' of 'numpy.ndarray' objects> __builtin__:0
+fn=(108) _ptr_to_const_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:54
+fn=(138) TensorBlock._labels /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:282
+fn=(102) _check_status /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py:28
+fn=(127) TensorBlock._ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:145
+fn=(313) Tensor.backward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:433
+fn=(314) backward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:149
+fn=(311) _has_torch_function_unary torch._C:0
+fn=(314) backward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:149
+fn=(320) <method 'run_backward' of 'torch._C._EngineBase' objects> __builtin__:0
+fn=(317) _make_grads /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:56
+fn=(316) _tensor_or_tensors_to_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:139
+fn=(315) _are_functorch_transforms_active torch._C:0
+fn=(320) <method 'run_backward' of 'torch._C._EngineBase' objects> __builtin__:0
+fn=(108) _ptr_to_const_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:54
+fn=(109) _ptr_to_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:42
+fn=(109) _ptr_to_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:42
+fn=(111) as_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py:506
+fn=(110) reduce _functools:0
+fn=(137) TensorBlock.samples /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:244
+fn=(172) TensorBlock.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:68
+fn=(180) array_device_is_cpu /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:105
+fn=(124) _check_pointer /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py:40
+fn=(130) inner /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:30
+fn=(178) ArrayWrapper.into_mts_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:203
+fn=(173) ArrayWrapper.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:163
+fn=(161) Labels._as_mts_labels_t /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:474
+fn=(156) ARRAY /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py:315
+fn=(125) TensorBlock.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:233
+fn=(128) mts_array_to_python_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:71
+fn=(126) TensorBlock._raw_values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:226
+fn=(111) as_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py:506
+fn=(114) cast /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py:511
+fn=(113) POINTER _ctypes:0
+fn=(112) _ctype_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py:351
+fn=(101) TensorMap.keys /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:295
+fn=(200) TensorMap.sample_names /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:617
+fn=(143) TensorMap.block /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:355
+fn=(128) mts_array_to_python_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:71
+fn=(135) _object_from_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:219
+fn=(132) _is_python_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:95
+fn=(129) data_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:99
+fn=(121) TensorMap.block_by_id /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:302
+fn=(123) _from_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:129
+fn=(260) isclose /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2249
+fn=(264) within_tol /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2330
+fn=(261) result_type /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:669
+fn=(230) asanyarray numpy:0
+fn=(71) len builtins:0
+fn=(122) TensorMap.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:148
+fn=(119) Labels.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:407
+fn=(130) inner /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:30
+fn=(280) _mts_array_destroy /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:312
+fn=(179) _mts_array_shape /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:252
+fn=(131) mts_array_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:180
+fn=(122) TensorMap.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:148
+fn=(100) TensorMap.items /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:503
+fn=(114) cast /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py:511
+fn=(171) TensorBlock.components /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:254
+fn=(135) _object_from_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:219
+fn=(183) TensorMap.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:46
+fn=(189) TensorBlock._move_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:155
+fn=(187) TensorBlock.dtype /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:457
+fn=(185) TensorBlock.device /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:465
+fn=(184) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:65
+fn=(264) within_tol /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2330
+fn=(275) errstate.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:435
+fn=(94) _GeneratorContextManager.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:141
+fn=(50) _GeneratorContextManager.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:132
+fn=(48) helper /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:299
+fn=(266) errstate.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:430
+fn=(265) errstate.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:426
+fn=(151) Labels.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:270
+fn=(155) _create_new_labels /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1075
+fn=(154) ascontiguousarray numpy:0
+fn=(153) <method 'astype' of 'numpy.ndarray' objects> __builtin__:0
+fn=(152) _normalize_names_type /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1047
+fn=(129) data_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:99
+fn=(115) asarray numpy:0
+fn=(143) TensorMap.block /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:355
+fn=(160) TensorMap.blocks_matching /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:329
+fn=(144) _normalize_selection /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:735
+fn=(179) _mts_array_shape /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:252
+fn=(96) LinearModelPeriodic._wrapped_call_impl /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1514
+fn=(97) LinearModelPeriodic._call_impl /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1520
+fn=(97) LinearModelPeriodic._call_impl /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1520
+fn=(168) Linear.forward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/linear.py:113
+fn=(165) Sequential.forward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:213
+fn=(164) MLP.forward /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:156
+fn=(99) LinearModelPeriodic.forward /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:478
+fn=(98) _get_tracing_state torch._C:0
+fn=(99) LinearModelPeriodic.forward /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:478
+fn=(190) LinearModelPeriodic.model_return /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:557
+fn=(163) LabelsEntry.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:121
+fn=(140) map_targetkeys_to_featkeys /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:1026
+fn=(136) linalg_norm torch._C._linalg:0
+fn=(2) LinearModelPeriodic.__setattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1697
+fn=(201) _to_uncoupled_basis /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:949
+fn=(223) TensorBuilder.build /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:73
+fn=(222) TensorBuilderPerSamples.add_samples /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:110
+fn=(215) <method 'reshape' of 'numpy.ndarray' objects> __builtin__:0
+fn=(216) TensorBuilder.add_block /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:24
+fn=(213) _components_idx /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:103
+fn=(205) ClebschGordanReal.decouple /home/pegolo/Software/my_mlelec/src/mlelec/utils/symmetry.py:479
+fn=(204) moveaxis torch:0
+fn=(203) Labels.position /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:755
+fn=(202) TensorBuilder.__init__ /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:16
+fn=(118) Labels.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:411
+fn=(120) LabelsEntry.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:73
+fn=(173) ArrayWrapper.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:163
+fn=(177) catch_exceptions /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:29
+fn=(176) pointer _ctypes:0
+fn=(134) _origin_pytorch /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:50
+fn=(175) _is_torch_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:31
+fn=(174) _is_numpy_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:27
+fn=(278) TensorBlock.properties /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:270
+fn=(141) LabelsEntry.__getitem__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:125
+fn=(142) <method 'index' of 'list' objects> __builtin__:0
+fn=(126) TensorBlock._raw_values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:226
+fn=(155) _create_new_labels /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1075
+fn=(159) _ctypes.data_as /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:267
+fn=(158) _ctypes.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:250
+fn=(157) <method 'encode' of 'str' objects> __builtin__:0
+fn=(185) TensorBlock.device /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:465
+fn=(186) array_device /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:95
+fn=(51) next builtins:0
+fn=(271) _no_nep50_warning /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:452
+fn=(52) enable_dynamic /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:205
+fn=(187) TensorBlock.dtype /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:457
+fn=(188) array_dtype /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:77
+fn=(50) _GeneratorContextManager.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:132
+fn=(271) _no_nep50_warning /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:452
+fn=(274) <method 'reset' of '_contextvars.ContextVar' objects> __builtin__:0
+fn=(272) <method 'set' of '_contextvars.ContextVar' objects> __builtin__:0
+fn=(258) Labels.view /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1001
+fn=(263) all /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2421
+fn=(194) _wrapreduction /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:71
+fn=(182) Labels.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:380
+fn=(16) hasattr builtins:0
+fn=(116) <method 'view' of 'numpy.ndarray' objects> __builtin__:0
+fn=(249) _view_is_safe /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:525
+fn=(272) <method 'set' of '_contextvars.ContextVar' objects> __builtin__:0
+fn=(194) _wrapreduction /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:71
+fn=(196) <method 'reduce' of 'numpy.ufunc' objects> __builtin__:0
+fn=(41) getattr builtins:0
+fn=(195) <dictcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:72
+fn=(145) <method 'items' of 'dict' objects> __builtin__:0
+fn=(322) wrapper /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:356
+fn=(83) record_function.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:636
+fn=(367) Adam._optimizer_step_code /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:340
+fn=(324) Adam._use_grad /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:58
+fn=(167) <method 'values' of 'collections.OrderedDict' objects> __builtin__:0
+fn=(80) record_function.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:630
+fn=(54) record_function.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:619
+fn=(323) cast /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:2268
+fn=(112) _ctype_ndarray /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/ctypeslib.py:351
+fn=(120) LabelsEntry.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:73
+fn=(324) Adam._use_grad /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:58
+fn=(329) Adam.step /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:130
+fn=(328) graph_break /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py:141
+fn=(326) set_grad_enabled.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/grad_mode.py:182
+fn=(325) is_grad_enabled torch:0
+fn=(117) LabelsValues.__array_finalize__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:35
+fn=(329) Adam.step /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:130
+fn=(348) adam /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:254
+fn=(343) Adam._init_group /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:80
+fn=(330) Adam._cuda_graph_capture_health_check /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:309
+fn=(297) <method 'clone' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(1) isinstance builtins:0
+fn=(4) _ParameterMeta.__instancecheck__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/parameter.py:8
+fn=(209) Tensor.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:980
+fn=(12) iter builtins:0
+fn=(211) <method 'unbind' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(210) <method 'dim' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(348) adam /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:254
+fn=(355) _single_tensor_adam /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:330
+fn=(218) all builtins:0
+fn=(331) is_compiling /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_utils.py:841
+fn=(349) _default_to_fused_or_foreach /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:109
+fn=(355) _single_tensor_adam /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:330
+fn=(366) <method 'addcdiv_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(365) <method 'add_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(364) <method 'sqrt' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(362) _dispatch_sqrt /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:97
+fn=(361) _get_value /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:84
+fn=(360) <method 'addcmul_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(359) <method 'conj' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(358) <method 'mul_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(357) <method 'lerp_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(356) is_complex torch:0
+fn=(84) is_scripting /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_jit_internal.py:1109
+fn=(132) _is_python_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/extract.py:95
+fn=(133) _origin_numpy /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:42
+fn=(170) <method 'reshape' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(205) ClebschGordanReal.decouple /home/pegolo/Software/my_mlelec/src/mlelec/utils/symmetry.py:479
+fn=(212) <method 'type' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(208) min builtins:0
+fn=(207) max builtins:0
+fn=(177) catch_exceptions /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/utils.py:29
+fn=(40) update_wrapper /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py:35
+fn=(39) wraps /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py:65
+fn=(267) seterr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:33
+fn=(270) seterrobj numpy:0
+fn=(269) geterr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:132
+fn=(268) geterrobj numpy:0
+fn=(140) map_targetkeys_to_featkeys /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:1026
+fn=(223) TensorBuilder.build /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:73
+fn=(224) TensorBuilderPerSamples.build /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:128
+fn=(211) <method 'unbind' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(196) <method 'reduce' of 'numpy.ufunc' objects> __builtin__:0
+fn=(180) array_device_is_cpu /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:105
+fn=(106) <method 'decode' of 'bytes' objects> __builtin__:0
+fn=(164) MLP.forward /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:156
+fn=(10) LinearModelPeriodic.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1682
+fn=(165) Sequential.forward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:213
+fn=(166) Sequential.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:205
+fn=(69) <method 'append' of 'list' objects> __builtin__:0
+fn=(102) _check_status /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py:28
+fn=(40) update_wrapper /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py:35
+fn=(43) <method 'update' of 'dict' objects> __builtin__:0
+fn=(42) setattr builtins:0
+fn=(266) errstate.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:430
+fn=(168) Linear.forward /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/linear.py:113
+fn=(169) linear torch._C._nn:0
+fn=(224) TensorBuilderPerSamples.build /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:128
+fn=(232) cat torch:0
+fn=(227) vstack /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:219
+fn=(225) _vhstack_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:215
+fn=(169) linear torch._C._nn:0
+fn=(236) unique /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:138
+fn=(257) _unpack_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:125
+fn=(256) reshape_uniq /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:310
+fn=(250) _unique1d /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:323
+fn=(247) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:289
+fn=(193) prod /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2979
+fn=(192) _prod_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2974
+fn=(238) moveaxis /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1393
+fn=(237) _moveaxis_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1389
+fn=(41) getattr builtins:0
+fn=(216) TensorBuilder.add_block /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:24
+fn=(219) TensorBuilderPerSamples.__init__ /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:96
+fn=(217) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:42
+fn=(181) TensorBlock.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:159
+fn=(123) _from_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:129
+fn=(275) errstate.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:435
+fn=(113) POINTER _ctypes:0
+fn=(152) _normalize_names_type /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1047
+fn=(110) reduce _functools:0
+fn=(279) TensorMap.__del__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:129
+fn=(16) hasattr builtins:0
+fn=(144) _normalize_selection /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:735
+fn=(149) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:751
+fn=(146) can_cast /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:503
+fn=(295) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:545
+fn=(127) TensorBlock._ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:145
+fn=(142) <method 'index' of 'list' objects> __builtin__:0
+fn=(174) _is_numpy_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:27
+fn=(191) <listcomp> /home/pegolo/Software/my_mlelec/train_pyscf.py:240
+fn=(105) LibraryFinder.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/_c_lib.py:44
+fn=(186) array_device /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:95
+fn=(13) inner /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_compile.py:20
+fn=(44) _fn /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:307
+fn=(14) disable /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py:33
+fn=(188) array_dtype /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:77
+fn=(175) _is_torch_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:31
+fn=(131) mts_array_origin /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:180
+fn=(269) geterr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:132
+fn=(94) _GeneratorContextManager.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:141
+fn=(104) <built-in method __new__ of type object at 0x557f73010880> __builtin__:0
+fn=(364) <method 'sqrt' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(161) Labels._as_mts_labels_t /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:474
+fn=(162) Labels.is_view /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1032
+fn=(159) _ctypes.data_as /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:267
+fn=(150) array numpy:0
+fn=(48) helper /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:299
+fn=(49) _GeneratorContextManager.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:104
+fn=(280) _mts_array_destroy /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:312
+fn=(160) TensorMap.blocks_matching /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:329
+fn=(273) abs builtins:0
+fn=(250) _unique1d /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:323
+fn=(290) diff /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py:1324
+fn=(289) _diff_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py:1320
+fn=(231) concatenate /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:153
+fn=(286) nonzero /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:1881
+fn=(285) _nonzero_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:1877
+fn=(254) _promote_fields /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:436
+fn=(253) empty numpy:0
+fn=(252) <method 'sort' of 'numpy.ndarray' objects> __builtin__:0
+fn=(251) <method 'flatten' of 'numpy.ndarray' objects> __builtin__:0
+fn=(238) moveaxis /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1393
+fn=(246) <method 'transpose' of 'numpy.ndarray' objects> __builtin__:0
+fn=(245) <method 'insert' of 'list' objects> __builtin__:0
+fn=(244) sorted builtins:0
+fn=(243) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1455
+fn=(239) normalize_axis_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1330
+fn=(195) <dictcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:72
+fn=(119) Labels.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:407
+fn=(14) disable /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py:33
+fn=(21) DisableContext.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:267
+fn=(18) DisableContext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:442
+fn=(17) callable builtins:0
+fn=(15) innermost_fn /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:192
+fn=(156) ARRAY /home/pegolo/micromamba/envs/sci/lib/python3.11/ctypes/__init__.py:315
+fn=(133) _origin_numpy /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:42
+fn=(136) linalg_norm torch._C._linalg:0
+fn=(134) _origin_pytorch /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:50
+fn=(0) LinearModelPeriodic.train /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2379
+fn=(6) LinearModelPeriodic.children /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2278
+fn=(49) _GeneratorContextManager.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:104
+fn=(21) DisableContext.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:267
+fn=(38) check /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/skipfiles.py:205
+fn=(22) getsourcefile /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:936
+fn=(98) _get_tracing_state torch._C:0
+fn=(44) _fn /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:307
+fn=(95) nullcontext.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:769
+fn=(53) Adam.zero_grad /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:776
+fn=(47) nullcontext.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:766
+fn=(46) nullcontext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:763
+fn=(45) set_eval_frame torch._C._dynamo.eval_frame:0
+fn=(20) nothing /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:188
+fn=(357) <method 'lerp_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(230) asanyarray numpy:0
+fn=(153) <method 'astype' of 'numpy.ndarray' objects> __builtin__:0
+fn=(158) _ctypes.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:250
+fn=(366) <method 'addcdiv_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(145) <method 'items' of 'dict' objects> __builtin__:0
+fn=(178) ArrayWrapper.into_mts_array /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/data/array.py:203
+fn=(358) <method 'mul_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(193) prod /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2979
+fn=(343) Adam._init_group /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:80
+fn=(347) zeros_like torch:0
+fn=(346) tensor torch:0
+fn=(344) Parameter.__hash__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:1002
+fn=(53) Adam.zero_grad /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:776
+fn=(3) <method 'get' of 'dict' objects> __builtin__:0
+fn=(270) seterrobj numpy:0
+fn=(212) <method 'type' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(22) getsourcefile /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:936
+fn=(36) exists <frozen genericpath>:16
+fn=(32) any builtins:0
+fn=(23) _patched_getfile /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/package/package_importer.py:692
+fn=(176) pointer _ctypes:0
+fn=(42) setattr builtins:0
+fn=(256) reshape_uniq /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:310
+fn=(206) zeros torch:0
+fn=(162) Labels.is_view /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:1032
+fn=(2) LinearModelPeriodic.__setattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1697
+fn=(330) Adam._cuda_graph_capture_health_check /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:309
+fn=(341) is_current_stream_capturing /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/graphs.py:26
+fn=(333) is_available /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:125
+fn=(332) is_built /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/backends/cuda/__init__.py:29
+fn=(80) record_function.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:630
+fn=(81) OpOverloadPacket.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:687
+fn=(239) normalize_axis_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1330
+fn=(241) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1380
+fn=(240) index _operator:0
+fn=(252) <method 'sort' of 'numpy.ndarray' objects> __builtin__:0
+fn=(124) _check_pointer /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/status.py:40
+fn=(83) record_function.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:636
+fn=(93) <method '__exit__' of 'torch._C.DisableTorchFunctionSubclass' objects> __builtin__:0
+fn=(91) OpOverload.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:447
+fn=(85) OpOverloadPacket.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:641
+fn=(39) wraps /home/pegolo/micromamba/envs/sci/lib/python3.11/functools.py:65
+fn=(294) sum /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2177
+fn=(360) <method 'addcmul_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(213) _components_idx /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:103
+fn=(214) arange numpy:0
+fn=(301) inverse_fourier_transform /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:677
+fn=(307) <method 'permute' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(306) exp torch:0
+fn=(302) tensordot /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py:1105
+fn=(204) moveaxis torch:0
+fn=(268) geterrobj numpy:0
+fn=(210) <method 'dim' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(157) <method 'encode' of 'str' objects> __builtin__:0
+fn=(81) OpOverloadPacket.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:687
+fn=(82) _record_function_enter_new torch._ops.profiler:0
+fn=(139) Labels.names /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:552
+fn=(82) _record_function_enter_new torch._ops.profiler:0
+fn=(274) <method 'reset' of '_contextvars.ContextVar' objects> __builtin__:0
+fn=(262) _all_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2416
+fn=(365) <method 'add_' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(221) Labels.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:557
+fn=(349) _default_to_fused_or_foreach /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:109
+fn=(353) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:122
+fn=(352) _get_foreach_kernels_supported_devices /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py:8
+fn=(350) _get_fused_kernels_supported_devices /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py:14
+fn=(184) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:65
+fn=(333) is_available /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:125
+fn=(340) _cuda_getDeviceCount torch._C:0
+fn=(335) _nvml_based_avail /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:121
+fn=(334) _is_compiled /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:116
+fn=(6) LinearModelPeriodic.children /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2278
+fn=(7) LinearModelPeriodic.named_children /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2287
+fn=(203) Labels.position /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:755
+fn=(91) OpOverload.__call__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:447
+fn=(92)  torch._ops.profiler:0
+fn=(347) zeros_like torch:0
+fn=(254) _promote_fields /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:436
+fn=(255) promote_types numpy:0
+fn=(310) norm /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py:1480
+fn=(312) linalg_vector_norm torch._C._linalg:0
+fn=(232) cat torch:0
+fn=(23) _patched_getfile /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/package/package_importer.py:692
+fn=(25) getfile /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:896
+fn=(24) isclass /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:292
+fn=(222) TensorBuilderPerSamples.add_samples /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:110
+fn=(379) Tensor.norm /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:696
+fn=(227) vstack /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:219
+fn=(229) atleast_2d /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:81
+fn=(228) _atleast_2d_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:77
+fn=(218) all builtins:0
+fn=(354) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:296
+fn=(154) ascontiguousarray numpy:0
+fn=(335) _nvml_based_avail /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:121
+fn=(336) getenv <frozen os>:773
+fn=(92)  torch._ops.profiler:0
+fn=(265) errstate.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_ufunc_config.py:426
+fn=(368) ReduceLROnPlateau.step /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1000
+fn=(371) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1024
+fn=(370) ReduceLROnPlateau.in_cooldown /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1037
+fn=(369) ReduceLROnPlateau.is_better /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1041
+fn=(306) exp torch:0
+fn=(7) LinearModelPeriodic.named_children /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2287
+fn=(9) <method 'add' of 'set' objects> __builtin__:0
+fn=(8) <method 'items' of 'collections.OrderedDict' objects> __builtin__:0
+fn=(25) getfile /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:896
+fn=(31) iscode /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:480
+fn=(30) isframe /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:466
+fn=(29) istraceback /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:456
+fn=(28) isfunction /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:378
+fn=(27) ismethod /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:300
+fn=(26) ismodule /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:283
+fn=(284) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:500
+fn=(291) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:502
+fn=(312) linalg_vector_norm torch._C._linalg:0
+fn=(336) getenv <frozen os>:773
+fn=(337) _Environ.get <frozen _collections_abc>:771
+fn=(361) _get_value /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:84
+fn=(321) <method 'item' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(12) iter builtins:0
+fn=(54) record_function.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/profiler.py:619
+fn=(79) annotate /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/jit/__init__.py:124
+fn=(55) inner /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:359
+fn=(43) <method 'update' of 'dict' objects> __builtin__:0
+fn=(337) _Environ.get <frozen _collections_abc>:771
+fn=(338) _Environ.__getitem__ <frozen os>:674
+fn=(298) stack torch:0
+fn=(32) any builtins:0
+fn=(35) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:946
+fn=(33) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:943
+fn=(189) TensorBlock._move_ptr /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/block.py:155
+fn=(214) arange numpy:0
+fn=(215) <method 'reshape' of 'numpy.ndarray' objects> __builtin__:0
+fn=(302) tensordot /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/functional.py:1105
+fn=(305) tensordot torch:0
+fn=(304) VFModule.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_VF.py:26
+fn=(303) _has_torch_function_variadic torch._C:0
+fn=(362) _dispatch_sqrt /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:97
+fn=(363) sqrt math:0
+fn=(4) _ParameterMeta.__instancecheck__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/parameter.py:8
+fn=(5) <function _ParameterMeta.__instancecheck__ at 0x7f8b41ba0cc0> __builtin__:0
+fn=(259) _isclose_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:2245
+fn=(353) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:122
+fn=(277) LabelsEntry.values /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:93
+fn=(36) exists <frozen genericpath>:16
+fn=(37) stat posix:0
+fn=(10) LinearModelPeriodic.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:1682
+fn=(326) set_grad_enabled.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/grad_mode.py:182
+fn=(327) _set_grad_enabled torch._C:0
+fn=(338) _Environ.__getitem__ <frozen os>:674
+fn=(339) encode <frozen os>:756
+fn=(305) tensordot torch:0
+fn=(149) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/tensor.py:751
+fn=(251) <method 'flatten' of 'numpy.ndarray' objects> __builtin__:0
+fn=(296) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:566
+fn=(3) <method 'get' of 'dict' objects> __builtin__:0
+fn=(37) stat posix:0
+fn=(247) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:289
+fn=(248) <method 'format' of 'str' objects> __builtin__:0
+fn=(276) where /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:346
+fn=(261) result_type /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:669
+fn=(219) TensorBuilderPerSamples.__init__ /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:96
+fn=(220) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:98
+fn=(374) MLP.parameters /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2170
+fn=(375) MLP.named_parameters /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2195
+fn=(241) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1380
+fn=(242) normalize_axis_index numpy.core._multiarray_umath:0
+fn=(375) MLP.named_parameters /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2195
+fn=(376) MLP._named_members /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2156
+fn=(18) DisableContext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:442
+fn=(19) DisableContext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:221
+fn=(208) min builtins:0
+fn=(321) <method 'item' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(341) is_current_stream_capturing /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/graphs.py:26
+fn=(342) _cuda_isCurrentStreamCapturing torch._C:0
+fn=(376) MLP._named_members /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2156
+fn=(378) <lambda> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2224
+fn=(377) MLP.named_modules /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2335
+fn=(166) Sequential.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:205
+fn=(246) <method 'transpose' of 'numpy.ndarray' objects> __builtin__:0
+fn=(342) _cuda_isCurrentStreamCapturing torch._C:0
+fn=(229) atleast_2d /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:81
+fn=(19) DisableContext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:221
+fn=(35) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:946
+fn=(34) <method 'endswith' of 'str' objects> __builtin__:0
+fn=(248) <method 'format' of 'str' objects> __builtin__:0
+fn=(33) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:943
+fn=(55) inner /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:359
+fn=(64) ForwardRef.__hash__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:911
+fn=(56) _SpecialForm.__getitem__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:486
+fn=(339) encode <frozen os>:756
+fn=(354) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/adam.py:296
+fn=(344) Parameter.__hash__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_tensor.py:1002
+fn=(345) id builtins:0
+fn=(350) _get_fused_kernels_supported_devices /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py:14
+fn=(351) _get_privateuse1_backend_name torch._C:0
+fn=(167) <method 'values' of 'collections.OrderedDict' objects> __builtin__:0
+fn=(249) _view_is_safe /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/_internal.py:525
+fn=(244) sorted builtins:0
+fn=(217) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:42
+fn=(377) MLP.named_modules /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2335
+fn=(15) innermost_fn /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:192
+fn=(225) _vhstack_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:215
+fn=(226) _arrays_for_stack_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:207
+fn=(356) is_complex torch:0
+fn=(346) tensor torch:0
+fn=(84) is_scripting /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_jit_internal.py:1109
+fn=(327) _set_grad_enabled torch._C:0
+fn=(24) isclass /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:292
+fn=(34) <method 'endswith' of 'str' objects> __builtin__:0
+fn=(243) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1455
+fn=(220) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:98
+fn=(334) _is_compiled /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/cuda/__init__.py:116
+fn=(146) can_cast /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:503
+fn=(351) _get_privateuse1_backend_name torch._C:0
+fn=(369) ReduceLROnPlateau.is_better /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1041
+fn=(331) is_compiling /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_utils.py:841
+fn=(9) <method 'add' of 'set' objects> __builtin__:0
+fn=(352) _get_foreach_kernels_supported_devices /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/utils/_foreach_utils.py:8
+fn=(317) _make_grads /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:56
+fn=(319) ones_like torch:0
+fn=(318) <method 'numel' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(226) _arrays_for_stack_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:207
+fn=(242) normalize_axis_index numpy.core._multiarray_umath:0
+fn=(325) is_grad_enabled torch:0
+fn=(309) sum torch:0
+fn=(26) ismodule /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:283
+fn=(253) empty numpy:0
+fn=(257) _unpack_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:125
+fn=(148) <method 'values' of 'dict' objects> __builtin__:0
+fn=(359) <method 'conj' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(8) <method 'items' of 'collections.OrderedDict' objects> __builtin__:0
+fn=(163) LabelsEntry.__len__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/metatensor/labels.py:121
+fn=(27) ismethod /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:300
+fn=(240) index _operator:0
+fn=(207) max builtins:0
+fn=(30) isframe /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:466
+fn=(29) istraceback /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:456
+fn=(255) promote_types numpy:0
+fn=(5) <function _ParameterMeta.__instancecheck__ at 0x7f8b41ba0cc0> __builtin__:0
+fn=(31) iscode /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:480
+fn=(363) sqrt math:0
+fn=(300) <method 'to' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(371) <listcomp> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1024
+fn=(283) Atoms._get_atomic_numbers /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/ase/atoms.py:1938
+fn=(282) _atom_blocks_idx /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:133
+fn=(245) <method 'insert' of 'list' objects> __builtin__:0
+fn=(28) isfunction /home/pegolo/micromamba/envs/sci/lib/python3.11/inspect.py:378
+fn=(345) id builtins:0
+fn=(93) <method '__exit__' of 'torch._C.DisableTorchFunctionSubclass' objects> __builtin__:0
+fn=(85) OpOverloadPacket.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:641
+fn=(88) OpOverload.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:406
+fn=(87) _get_schema torch._C:0
+fn=(86) _get_operation_overload torch._C:0
+fn=(76) <method 'startswith' of 'str' objects> __builtin__:0
+fn=(38) check /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/skipfiles.py:205
+fn=(45) set_eval_frame torch._C._dynamo.eval_frame:0
+fn=(56) _SpecialForm.__getitem__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:486
+fn=(66) _SpecialForm.Union /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:665
+fn=(57) _SpecialForm.Optional /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:709
+fn=(340) _cuda_getDeviceCount torch._C:0
+fn=(57) _SpecialForm.Optional /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:709
+fn=(59) _type_check /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:168
+fn=(58) _SpecialForm.__repr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:465
+fn=(319) ones_like torch:0
+fn=(290) diff /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py:1324
+fn=(20) nothing /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:188
+fn=(79) annotate /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/jit/__init__.py:124
+fn=(52) enable_dynamic /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/eval_frame.py:205
+fn=(192) _prod_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2974
+fn=(328) graph_break /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_dynamo/decorators.py:141
+fn=(332) is_built /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/backends/cuda/__init__.py:29
+fn=(237) _moveaxis_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/numeric.py:1389
+fn=(370) ReduceLROnPlateau.in_cooldown /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/lr_scheduler.py:1037
+fn=(17) callable builtins:0
+fn=(293) _sum_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:2172
+fn=(147) <method 'keys' of 'dict' objects> __builtin__:0
+fn=(46) nullcontext.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:763
+fn=(378) <lambda> /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/module.py:2224
+fn=(308) conj torch:0
+fn=(86) _get_operation_overload torch._C:0
+fn=(11) ModuleDict.__iter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:471
+fn=(235) _unique_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/arraysetops.py:133
+fn=(66) _SpecialForm.Union /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:665
+fn=(72) _UnionGenericAlias.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1360
+fn=(63) ForwardRef.__eq__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:902
+fn=(68) _remove_dups_flatten /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:320
+fn=(67) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:701
+fn=(291) <dictcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:502
+fn=(311) _has_torch_function_unary torch._C:0
+fn=(323) cast /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:2268
+fn=(367) Adam._optimizer_step_code /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/optim/optimizer.py:340
+fn=(234) _handle_fromlist <frozen importlib._bootstrap>:1207
+fn=(59) _type_check /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:168
+fn=(60) _type_convert /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:159
+fn=(299) from_numpy torch:0
+fn=(231) concatenate /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/multiarray.py:153
+fn=(47) nullcontext.__enter__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:766
+fn=(281) _orbs_offsets /home/pegolo/Software/my_mlelec/src/mlelec/utils/twocenter_utils.py:118
+fn=(286) nonzero /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:1881
+fn=(287) _wrapfunc /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:53
+fn=(228) _atleast_2d_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/shape_base.py:77
+fn=(307) <method 'permute' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(95) nullcontext.__exit__ /home/pegolo/micromamba/envs/sci/lib/python3.11/contextlib.py:769
+fn=(287) _wrapfunc /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:53
+fn=(288) <method 'nonzero' of 'numpy.ndarray' objects> __builtin__:0
+fn=(304) VFModule.__getattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_VF.py:26
+fn=(72) _UnionGenericAlias.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1360
+fn=(78) _collect_parameters /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:251
+fn=(74) _UnionGenericAlias.__setattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1304
+fn=(77) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1365
+fn=(73) _UnionGenericAlias.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1265
+fn=(60) _type_convert /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:159
+fn=(61) ForwardRef.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:852
+fn=(197) sum builtins:0
+fn=(88) OpOverload.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:406
+fn=(90) <method 'split' of 'str' objects> __builtin__:0
+fn=(89) OpOverload.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:41
+fn=(372) print builtins:0
+fn=(61) ForwardRef.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:852
+fn=(62) compile builtins:0
+fn=(292) <listcomp> /home/pegolo/Software/my_mlelec/src/mlelec/utils/pbc_utils.py:526
+fn=(315) _are_functorch_transforms_active torch._C:0
+fn=(62) compile builtins:0
+fn=(202) TensorBuilder.__init__ /home/pegolo/Software/my_mlelec/src/mlelec/utils/metatensor_utils.py:16
+fn=(74) _UnionGenericAlias.__setattr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1304
+fn=(75) _is_dunder /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1252
+fn=(73) _UnionGenericAlias.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1265
+fn=(316) _tensor_or_tensors_to_tuple /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/autograd/__init__.py:139
+fn=(63) ForwardRef.__eq__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:902
+fn=(318) <method 'numel' of 'torch._C._TensorBase' objects> __builtin__:0
+fn=(67) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:701
+fn=(373) ModuleDict.__getitem__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/nn/modules/container.py:457
+fn=(68) _remove_dups_flatten /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:320
+fn=(70) _deduplicate /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:306
+fn=(288) <method 'nonzero' of 'numpy.ndarray' objects> __builtin__:0
+fn=(303) _has_torch_function_variadic torch._C:0
+fn=(75) _is_dunder /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1252
+fn=(87) _get_schema torch._C:0
+fn=(70) _deduplicate /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:306
+fn=(285) _nonzero_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/core/fromnumeric.py:1877
+fn=(289) _diff_dispatcher /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/numpy/lib/function_base.py:1320
+fn=(190) LinearModelPeriodic.model_return /home/pegolo/Software/my_mlelec/src/mlelec/models/linear.py:557
+fn=(89) OpOverload.__init__ /home/pegolo/micromamba/envs/sci/lib/python3.11/site-packages/torch/_ops.py:41
+fn=(64) ForwardRef.__hash__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:911
+fn=(65) hash builtins:0
+fn=(78) _collect_parameters /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:251
+fn=(76) <method 'startswith' of 'str' objects> __builtin__:0
+fn=(77) <genexpr> /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:1365
+fn=(58) _SpecialForm.__repr__ /home/pegolo/micromamba/envs/sci/lib/python3.11/typing.py:465
+fn=(65) hash builtins:0
+fn=(90) <method 'split' of 'str' objects> __builtin__:0
+
+fl=(198)
+fn=(198)
+11 1591
+cfl=(310)
+cfn=(310)
+calls=10 0
+0 300
+cfl=(309)
+cfn=(309)
+calls=10 0
+0 178
+cfl=(308)
+cfn=(308)
+calls=10 0
+0 64
+cfl=(301)
+cfn=(301)
+calls=10 0
+0 3962
+cfl=(300)
+cfn=(300)
+calls=10 0
+0 28
+cfl=(299)
+cfn=(299)
+calls=10 0
+0 42
+cfl=(150)
+cfn=(150)
+calls=10 0
+0 176
+cfl=(147)
+cfn=(147)
+calls=10 0
+0 4
+cfl=(298)
+cfn=(298)
+calls=10 0
+0 1357
+cfl=(148)
+cfn=(148)
+calls=10 0
+0 5
+cfl=(71)
+cfn=(71)
+calls=10 0
+0 2
+cfl=(279)
+cfn=(279)
+calls=10 0
+0 21400
+cfl=(181)
+cfn=(181)
+calls=10 0
+0 17
+cfl=(199)
+cfn=(199)
+calls=10 0
+0 5857463
+cfl=(1)
+cfn=(1)
+calls=40 0
+0 5
+
+fl=(199)
+fn=(199)
+481 983468
+cfl=(273)
+cfn=(273)
+calls=16380 0
+0 3557
+cfl=(170)
+cfn=(170)
+calls=16380 0
+0 57268
+cfl=(297)
+cfn=(297)
+calls=16380 0
+0 79511
+cfl=(206)
+cfn=(206)
+calls=350 0
+0 2509
+cfl=(296)
+cfn=(296)
+calls=350 0
+0 910
+cfl=(118)
+cfn=(118)
+calls=22770 0
+0 117296
+cfl=(209)
+cfn=(209)
+calls=6390 0
+0 65032
+cfl=(125)
+cfn=(125)
+calls=6390 0
+0 170524
+cfl=(137)
+cfn=(137)
+calls=6390 0
+0 140414
+cfl=(295)
+cfn=(295)
+calls=6390 0
+0 21204
+cfl=(141)
+cfn=(141)
+calls=113040 0
+0 138253
+cfl=(100)
+cfn=(100)
+calls=6400 0
+0 309838
+cfl=(69)
+cfn=(69)
+calls=20 0
+0 1
+cfl=(294)
+cfn=(294)
+calls=360 0
+0 4132
+cfl=(293)
+cfn=(293)
+calls=360 0
+0 72
+cfl=(292)
+cfn=(292)
+calls=10 0
+0 14
+cfl=(283)
+cfn=(283)
+calls=360 0
+0 117
+cfl=(71)
+cfn=(71)
+calls=10 0
+0 0
+cfl=(284)
+cfn=(284)
+calls=10 0
+0 1709
+cfl=(282)
+cfn=(282)
+calls=10 0
+0 129
+cfl=(281)
+cfn=(281)
+calls=10 0
+0 40
+cfl=(279)
+cfn=(279)
+calls=10 0
+0 1540
+cfl=(233)
+cfn=(233)
+calls=10 0
+0 3530928
+cfl=(181)
+cfn=(181)
+calls=12790 0
+0 19129
+cfl=(201)
+cfn=(201)
+calls=10 0
+0 207287
+cfl=(200)
+cfn=(200)
+calls=30 0
+0 1842
+cfl=(139)
+cfn=(139)
+calls=40 0
+0 3
+cfl=(101)
+cfn=(101)
+calls=40 0
+0 731
+
+fl=(233)
+fn=(233)
+331 313423
+cfl=(183)
+cfn=(183)
+calls=10 0
+0 281226
+cfl=(139)
+cfn=(139)
+calls=10 0
+0 1
+cfl=(101)
+cfn=(101)
+calls=10 0
+0 227
+cfl=(181)
+cfn=(181)
+calls=260 0
+0 355
+cfl=(172)
+cfn=(172)
+calls=6390 0
+0 599283
+cfl=(278)
+cfn=(278)
+calls=6390 0
+0 160353
+cfl=(171)
+cfn=(171)
+calls=6390 0
+0 315725
+cfl=(125)
+cfn=(125)
+calls=6390 0
+0 69600
+cfl=(151)
+cfn=(151)
+calls=6400 0
+0 223141
+cfl=(115)
+cfn=(115)
+calls=6400 0
+0 6371
+cfl=(200)
+cfn=(200)
+calls=6390 0
+0 486915
+cfl=(69)
+cfn=(69)
+calls=12780 0
+0 1882
+cfl=(277)
+cfn=(277)
+calls=6390 0
+0 1084
+cfl=(71)
+cfn=(71)
+calls=6390 0
+0 1176
+cfl=(276)
+cfn=(276)
+calls=6390 0
+0 847
+cfl=(263)
+cfn=(263)
+calls=6390 0
+0 35220
+cfl=(262)
+cfn=(262)
+calls=6390 0
+0 1036
+cfl=(260)
+cfn=(260)
+calls=6390 0
+0 430478
+cfl=(259)
+cfn=(259)
+calls=6390 0
+0 1122
+cfl=(150)
+cfn=(150)
+calls=12780 0
+0 13935
+cfl=(182)
+cfn=(182)
+calls=6390 0
+0 6326
+cfl=(258)
+cfn=(258)
+calls=6390 0
+0 107156
+cfl=(236)
+cfn=(236)
+calls=270 0
+0 32936
+cfl=(235)
+cfn=(235)
+calls=270 0
+0 49
+cfl=(117)
+cfn=(117)
+calls=6660 0
+0 4741
+cfl=(221)
+cfn=(221)
+calls=13050 0
+0 1821
+cfl=(137)
+cfn=(137)
+calls=13050 0
+0 423099
+cfl=(100)
+cfn=(100)
+calls=280 0
+0 11347
+cfl=(234)
+cfn=(234)
+calls=10 0
+0 44
+
+fl=(103)
+fn=(103)
+363 329140
+cfl=(182)
+cfn=(182)
+calls=626 0
+0 772
+cfl=(107)
+cfn=(107)
+calls=68520 0
+0 940224
+cfl=(69)
+cfn=(69)
+calls=336760 0
+0 35094
+cfl=(106)
+cfn=(106)
+calls=336760 0
+0 45603
+cfl=(105)
+cfn=(105)
+calls=68520 0
+0 12660
+cfl=(104)
+cfn=(104)
+calls=68520 0
+0 13007
+
+fl=(107)
+fn=(107)
+21 96680
+cfl=(182)
+cfn=(182)
+calls=657 0
+0 887
+cfl=(116)
+cfn=(116)
+calls=76340 0
+0 104187
+cfl=(108)
+cfn=(108)
+calls=76340 0
+0 826585
+
+fl=(138)
+fn=(138)
+282 101690
+cfl=(103)
+cfn=(103)
+calls=46570 0
+0 889207
+cfl=(102)
+cfn=(102)
+calls=46570 0
+0 8497
+cfl=(127)
+cfn=(127)
+calls=46570 0
+0 7953
+
+fl=(313)
+fn=(313)
+433 85
+cfl=(314)
+cfn=(314)
+calls=10 0
+0 910953
+cfl=(311)
+cfn=(311)
+calls=10 0
+0 5
+
+fl=(314)
+fn=(314)
+149 139
+cfl=(320)
+cfn=(320)
+calls=10 0
+0 910574
+cfl=(317)
+cfn=(317)
+calls=10 0
+0 209
+cfl=(316)
+cfn=(316)
+calls=10 0
+0 10
+cfl=(71)
+cfn=(71)
+calls=10 0
+0 2
+cfl=(1)
+cfn=(1)
+calls=20 0
+0 4
+cfl=(315)
+cfn=(315)
+calls=10 0
+0 14
+
+fl=(320)
+fn=(320)
+0 910574
+
+fl=(108)
+fn=(108)
+54 63861
+cfl=(182)
+cfn=(182)
+calls=3930 0
+0 4724
+cfl=(109)
+cfn=(109)
+calls=76340 0
+0 758000
+
+fl=(109)
+fn=(109)
+42 167692
+cfl=(111)
+cfn=(111)
+calls=76340 0
+0 564723
+cfl=(110)
+cfn=(110)
+calls=76340 0
+0 25585
+
+fl=(137)
+fn=(137)
+244 15854
+cfl=(138)
+cfn=(138)
+calls=27070 0
+0 693371
+
+fl=(172)
+fn=(172)
+68 92614
+cfl=(182)
+cfn=(182)
+calls=760 0
+0 905
+cfl=(180)
+cfn=(180)
+calls=6990 0
+0 46362
+cfl=(125)
+cfn=(125)
+calls=6990 0
+0 65669
+cfl=(124)
+cfn=(124)
+calls=6990 0
+0 1405
+cfl=(130)
+cfn=(130)
+calls=6990 0
+0 227290
+cfl=(178)
+cfn=(178)
+calls=6990 0
+0 6751
+cfl=(173)
+cfn=(173)
+calls=6990 0
+0 174604
+cfl=(161)
+cfn=(161)
+calls=27630 0
+0 15740
+cfl=(156)
+cfn=(156)
+calls=6990 0
+0 3217
+cfl=(71)
+cfn=(71)
+calls=13980 0
+0 1774
+cfl=(1)
+cfn=(1)
+calls=27630 0
+0 2364
+cfl=(105)
+cfn=(105)
+calls=6990 0
+0 1228
+
+fl=(125)
+fn=(125)
+233 45163
+cfl=(128)
+cfn=(128)
+calls=62850 0
+0 477859
+cfl=(126)
+cfn=(126)
+calls=62850 0
+0 109195
+
+fl=(111)
+fn=(111)
+506 133053
+cfl=(115)
+cfn=(115)
+calls=76340 0
+0 241797
+cfl=(114)
+cfn=(114)
+calls=76340 0
+0 71872
+cfl=(113)
+cfn=(113)
+calls=76340 0
+0 13235
+cfl=(112)
+cfn=(112)
+calls=76340 0
+0 88929
+cfl=(1)
+cfn=(1)
+calls=76340 0
+0 15834
+
+fl=(101)
+fn=(101)
+295 55708
+cfl=(103)
+cfn=(103)
+calls=21950 0
+0 487295
+cfl=(102)
+cfn=(102)
+calls=21950 0
+0 5004
+
+fl=(200)
+fn=(200)
+617 20236
+cfl=(139)
+cfn=(139)
+calls=6430 0
+0 1148
+cfl=(181)
+cfn=(181)
+calls=6430 0
+0 8064
+cfl=(137)
+cfn=(137)
+calls=6430 0
+0 115895
+cfl=(143)
+cfn=(143)
+calls=6430 0
+0 174971
+cfl=(71)
+cfn=(71)
+calls=6430 0
+0 6437
+cfl=(101)
+cfn=(101)
+calls=6430 0
+0 162609
+
+fl=(128)
+fn=(128)
+71 65841
+cfl=(135)
+cfn=(135)
+calls=62850 0
+0 104125
+cfl=(132)
+cfn=(132)
+calls=62850 0
+0 61786
+cfl=(129)
+cfn=(129)
+calls=62850 0
+0 246106
+
+fl=(121)
+fn=(121)
+302 42568
+cfl=(123)
+cfn=(123)
+calls=14740 0
+0 28489
+cfl=(102)
+cfn=(102)
+calls=14740 0
+0 3186
+cfl=(113)
+cfn=(113)
+calls=14740 0
+0 2317
+cfl=(71)
+cfn=(71)
+calls=14740 0
+0 396418
+
+fl=(260)
+fn=(260)
+2249 51573
+cfl=(264)
+cfn=(264)
+calls=6390 0
+0 296722
+cfl=(263)
+cfn=(263)
+calls=12780 0
+0 70940
+cfl=(262)
+cfn=(262)
+calls=12780 0
+0 2045
+cfl=(261)
+cfn=(261)
+calls=6390 0
+0 833
+cfl=(230)
+cfn=(230)
+calls=19170 0
+0 8362
+
+fl=(71)
+fn=(71)
+0 37786
+cfl=(122)
+cfn=(122)
+calls=14740 0
+0 388608
+cfl=(119)
+cfn=(119)
+calls=27940 0
+0 10805
+
+fl=(130)
+fn=(130)
+30 139498
+cfl=(280)
+cfn=(280)
+calls=6957 0
+0 13370
+cfl=(182)
+cfn=(182)
+calls=4788 0
+0 6184
+cfl=(179)
+cfn=(179)
+calls=6990 0
+0 222484
+cfl=(131)
+cfn=(131)
+calls=83820 0
+0 17817
+
+fl=(122)
+fn=(122)
+148 11368
+cfl=(71)
+cfn=(71)
+calls=14740 0
+0 11724
+cfl=(101)
+cfn=(101)
+calls=14740 0
+0 365515
+
+fl=(100)
+fn=(100)
+503 10093
+cfl=(121)
+cfn=(121)
+calls=7650 0
+0 287049
+cfl=(118)
+cfn=(118)
+calls=7700 0
+0 62683
+cfl=(101)
+cfn=(101)
+calls=50 0
+0 1919
+
+fl=(114)
+fn=(114)
+511 328158
+cfl=(182)
+cfn=(182)
+calls=5424 0
+0 7187
+
+fl=(171)
+fn=(171)
+254 27091
+cfl=(69)
+cfn=(69)
+calls=13110 0
+0 1553
+cfl=(138)
+cfn=(138)
+calls=13110 0
+0 224631
+cfl=(71)
+cfn=(71)
+calls=6720 0
+0 1331
+cfl=(125)
+cfn=(125)
+calls=6720 0
+0 72356
+
+fl=(135)
+fn=(135)
+219 67893
+cfl=(182)
+cfn=(182)
+calls=1318 0
+0 1573
+cfl=(114)
+cfn=(114)
+calls=76797 0
+0 244384
+cfl=(113)
+cfn=(113)
+calls=76797 0
+0 10020
+
+fl=(183)
+fn=(183)
+46 28974
+cfl=(182)
+cfn=(182)
+calls=193 0
+0 239
+cfl=(124)
+cfn=(124)
+calls=30 0
+0 7
+cfl=(130)
+cfn=(130)
+calls=6990 0
+0 3129
+cfl=(161)
+cfn=(161)
+calls=30 0
+0 22
+cfl=(189)
+cfn=(189)
+calls=6990 0
+0 1340
+cfl=(180)
+cfn=(180)
+calls=30 0
+0 154
+cfl=(125)
+cfn=(125)
+calls=30 0
+0 189
+cfl=(187)
+cfn=(187)
+calls=13980 0
+0 114658
+cfl=(185)
+cfn=(185)
+calls=13980 0
+0 115378
+cfl=(129)
+cfn=(129)
+calls=13980 0
+0 22611
+cfl=(126)
+cfn=(126)
+calls=13980 0
+0 18553
+cfl=(184)
+cfn=(184)
+calls=30 0
+0 2686
+cfl=(71)
+cfn=(71)
+calls=90 0
+0 14
+cfl=(113)
+cfn=(113)
+calls=30 0
+0 9
+cfl=(105)
+cfn=(105)
+calls=30 0
+0 7
+cfl=(1)
+cfn=(1)
+calls=7020 0
+0 544
+
+fl=(264)
+fn=(264)
+2330 80237
+cfl=(182)
+cfn=(182)
+calls=57 0
+0 65
+cfl=(275)
+cfn=(275)
+calls=6390 0
+0 27898
+cfl=(94)
+cfn=(94)
+calls=6390 0
+0 16793
+cfl=(273)
+cfn=(273)
+calls=12780 0
+0 9006
+cfl=(50)
+cfn=(50)
+calls=6390 0
+0 108910
+cfl=(48)
+cfn=(48)
+calls=6390 0
+0 13885
+cfl=(266)
+cfn=(266)
+calls=6390 0
+0 38106
+cfl=(265)
+cfn=(265)
+calls=6390 0
+0 1821
+
+fl=(151)
+fn=(151)
+270 35484
+cfl=(107)
+cfn=(107)
+calls=7820 0
+0 88117
+cfl=(155)
+cfn=(155)
+calls=7820 0
+0 126342
+cfl=(105)
+cfn=(105)
+calls=7820 0
+0 1575
+cfl=(154)
+cfn=(154)
+calls=7820 0
+0 1269
+cfl=(153)
+cfn=(153)
+calls=7820 0
+0 8159
+cfl=(71)
+cfn=(71)
+calls=23460 0
+0 2683
+cfl=(1)
+cfn=(1)
+calls=7820 0
+0 705
+cfl=(152)
+cfn=(152)
+calls=7820 0
+0 14747
+
+fl=(129)
+fn=(129)
+99 113345
+cfl=(182)
+cfn=(182)
+calls=1743 0
+0 2083
+cfl=(130)
+cfn=(130)
+calls=76830 0
+0 153287
+
+fl=(115)
+fn=(115)
+0 229554
+cfl=(182)
+cfn=(182)
+calls=14639 0
+0 19681
+
+fl=(143)
+fn=(143)
+355 7234
+cfl=(121)
+cfn=(121)
+calls=7090 0
+0 185932
+cfl=(71)
+cfn=(71)
+calls=660 0
+0 85
+cfl=(160)
+cfn=(160)
+calls=330 0
+0 13167
+cfl=(144)
+cfn=(144)
+calls=330 0
+0 21880
+cfl=(1)
+cfn=(1)
+calls=7090 0
+0 896
+cfl=(143)
+cfn=(143)
+calls=330 0
+0 44957
+
+fl=(179)
+fn=(179)
+252 10815
+cfl=(182)
+cfn=(182)
+calls=63 0
+0 77
+cfl=(71)
+cfn=(71)
+calls=6990 0
+0 843
+cfl=(135)
+cfn=(135)
+calls=6990 0
+0 210749
+
+fl=(96)
+fn=(96)
+1514 1875
+cfl=(182)
+cfn=(182)
+calls=159 0
+0 232
+cfl=(97)
+cfn=(97)
+calls=1330 0
+0 214008
+
+fl=(97)
+fn=(97)
+1520 2744
+cfl=(181)
+cfn=(181)
+calls=350 0
+0 531
+cfl=(168)
+cfn=(168)
+calls=660 0
+0 37867
+cfl=(165)
+cfn=(165)
+calls=330 0
+0 41729
+cfl=(164)
+cfn=(164)
+calls=330 0
+0 44424
+cfl=(99)
+cfn=(99)
+calls=10 0
+0 213272
+cfl=(98)
+cfn=(98)
+calls=1330 0
+0 723
+
+fl=(99)
+fn=(99)
+478 6947
+cfl=(190)
+cfn=(190)
+calls=10 0
+0 2
+cfl=(183)
+cfn=(183)
+calls=10 0
+0 15382
+cfl=(101)
+cfn=(101)
+calls=10 0
+0 248
+cfl=(181)
+cfn=(181)
+calls=640 0
+0 877
+cfl=(69)
+cfn=(69)
+calls=330 0
+0 58
+cfl=(172)
+cfn=(172)
+calls=330 0
+0 22827
+cfl=(171)
+cfn=(171)
+calls=330 0
+0 11240
+cfl=(170)
+cfn=(170)
+calls=330 0
+0 1191
+cfl=(96)
+cfn=(96)
+calls=330 0
+0 45981
+cfl=(141)
+cfn=(141)
+calls=2970 0
+0 2016
+cfl=(163)
+cfn=(163)
+calls=330 0
+0 157
+cfl=(140)
+cfn=(140)
+calls=330 0
+0 50535
+cfl=(139)
+cfn=(139)
+calls=330 0
+0 69
+cfl=(137)
+cfn=(137)
+calls=660 0
+0 18025
+cfl=(136)
+cfn=(136)
+calls=660 0
+0 9327
+cfl=(125)
+cfn=(125)
+calls=1320 0
+0 13368
+cfl=(100)
+cfn=(100)
+calls=340 0
+0 14867
+cfl=(2)
+cfn=(2)
+calls=20 0
+0 154
+
+fl=(201)
+fn=(201)
+949 7597
+cfl=(223)
+cfn=(223)
+calls=10 0
+0 49307
+cfl=(222)
+cfn=(222)
+calls=270 0
+0 2075
+cfl=(215)
+cfn=(215)
+calls=270 0
+0 184
+cfl=(221)
+cfn=(221)
+calls=540 0
+0 62
+cfl=(137)
+cfn=(137)
+calls=540 0
+0 11791
+cfl=(216)
+cfn=(216)
+calls=270 0
+0 30809
+cfl=(213)
+cfn=(213)
+calls=540 0
+0 3968
+cfl=(115)
+cfn=(115)
+calls=540 0
+0 874
+cfl=(205)
+cfn=(205)
+calls=270 0
+0 55852
+cfl=(204)
+cfn=(204)
+calls=600 0
+0 3943
+cfl=(181)
+cfn=(181)
+calls=920 0
+0 1258
+cfl=(125)
+cfn=(125)
+calls=330 0
+0 4352
+cfl=(143)
+cfn=(143)
+calls=330 0
+0 9014
+cfl=(203)
+cfn=(203)
+calls=330 0
+0 2500
+cfl=(141)
+cfn=(141)
+calls=2640 0
+0 3173
+cfl=(100)
+cfn=(100)
+calls=340 0
+0 12660
+cfl=(202)
+cfn=(202)
+calls=10 0
+0 12
+cfl=(200)
+cfn=(200)
+calls=10 0
+0 602
+cfl=(139)
+cfn=(139)
+calls=10 0
+0 0
+cfl=(101)
+cfn=(101)
+calls=340 0
+0 7251
+
+fl=(118)
+fn=(118)
+411 61213
+cfl=(182)
+cfn=(182)
+calls=320 0
+0 388
+cfl=(120)
+cfn=(120)
+calls=24030 0
+0 88564
+cfl=(117)
+cfn=(117)
+calls=24030 0
+0 23302
+cfl=(71)
+cfn=(71)
+calls=6440 0
+0 6509
+
+fl=(173)
+fn=(173)
+163 91557
+cfl=(182)
+cfn=(182)
+calls=1196 0
+0 1457
+cfl=(177)
+cfn=(177)
+calls=6990 0
+0 54639
+cfl=(114)
+cfn=(114)
+calls=6990 0
+0 9512
+cfl=(176)
+cfn=(176)
+calls=6990 0
+0 5190
+cfl=(134)
+cfn=(134)
+calls=6990 0
+0 1016
+cfl=(175)
+cfn=(175)
+calls=6990 0
+0 4019
+cfl=(174)
+cfn=(174)
+calls=6990 0
+0 4755
+cfl=(156)
+cfn=(156)
+calls=6990 0
+0 1650
+cfl=(71)
+cfn=(71)
+calls=6990 0
+0 808
+
+fl=(278)
+fn=(278)
+270 10633
+cfl=(138)
+cfn=(138)
+calls=6390 0
+0 89346
+cfl=(71)
+cfn=(71)
+calls=6390 0
+0 888
+cfl=(125)
+cfn=(125)
+calls=6390 0
+0 59486
+
+fl=(141)
+fn=(141)
+125 104031
+cfl=(142)
+cfn=(142)
+calls=117660 0
+0 17263
+cfl=(1)
+cfn=(1)
+calls=238290 0
+0 24672
+
+fl=(126)
+fn=(126)
+226 103477
+cfl=(182)
+cfn=(182)
+calls=9 0
+0 14
+cfl=(102)
+cfn=(102)
+calls=76830 0
+0 12327
+cfl=(127)
+cfn=(127)
+calls=76830 0
+0 11928
+
+fl=(155)
+fn=(155)
+1075 90042
+cfl=(182)
+cfn=(182)
+calls=445 0
+0 607
+cfl=(102)
+cfn=(102)
+calls=7820 0
+0 1576
+cfl=(159)
+cfn=(159)
+calls=7820 0
+0 15760
+cfl=(113)
+cfn=(113)
+calls=7820 0
+0 1297
+cfl=(158)
+cfn=(158)
+calls=7820 0
+0 7771
+cfl=(157)
+cfn=(157)
+calls=23420 0
+0 3496
+cfl=(156)
+cfn=(156)
+calls=7820 0
+0 4227
+cfl=(71)
+cfn=(71)
+calls=15640 0
+0 1563
+
+fl=(185)
+fn=(185)
+465 8708
+cfl=(186)
+cfn=(186)
+calls=13980 0
+0 19542
+cfl=(125)
+cfn=(125)
+calls=13980 0
+0 87128
+
+fl=(51)
+fn=(51)
+0 6450
+cfl=(182)
+cfn=(182)
+calls=90 0
+0 109
+cfl=(271)
+cfn=(271)
+calls=12780 0
+0 108332
+cfl=(52)
+cfn=(52)
+calls=660 0
+0 89
+
+fl=(187)
+fn=(187)
+457 8695
+cfl=(188)
+cfn=(188)
+calls=13980 0
+0 19316
+cfl=(125)
+cfn=(125)
+calls=13980 0
+0 86647
+
+fl=(50)
+fn=(50)
+132 4118
+cfl=(51)
+cfn=(51)
+calls=6720 0
+0 105088
+
+fl=(271)
+fn=(271)
+452 6942
+cfl=(274)
+cfn=(274)
+calls=6390 0
+0 3098
+cfl=(272)
+cfn=(272)
+calls=6390 0
+0 98290
+
+fl=(258)
+fn=(258)
+1001 79171
+cfl=(105)
+cfn=(105)
+calls=6390 0
+0 1365
+cfl=(104)
+cfn=(104)
+calls=6390 0
+0 1187
+cfl=(117)
+cfn=(117)
+calls=6390 0
+0 4898
+cfl=(221)
+cfn=(221)
+calls=6390 0
+0 834
+cfl=(69)
+cfn=(69)
+calls=19170 0
+0 1926
+cfl=(142)
+cfn=(142)
+calls=19170 0
+0 3479
+cfl=(139)
+cfn=(139)
+calls=19170 0
+0 2348
+cfl=(152)
+cfn=(152)
+calls=6390 0
+0 11947
+
+fl=(263)
+fn=(263)
+2421 17477
+cfl=(194)
+cfn=(194)
+calls=19170 0
+0 88685
+
+fl=(182)
+fn=(182)
+380 79594
+cfl=(102)
+cfn=(102)
+calls=78535 0
+0 9264
+cfl=(16)
+cfn=(16)
+calls=169850 0
+0 16832
+
+fl=(116)
+fn=(116)
+0 52210
+cfl=(249)
+cfn=(249)
+calls=560 0
+0 381
+cfl=(117)
+cfn=(117)
+calls=76340 0
+0 52774
+
+fl=(272)
+fn=(272)
+0 56241
+cfl=(182)
+cfn=(182)
+calls=34138 0
+0 42050
+
+fl=(194)
+fn=(194)
+71 31873
+cfl=(196)
+cfn=(196)
+calls=20140 0
+0 47275
+cfl=(41)
+cfn=(41)
+calls=970 0
+0 811
+cfl=(195)
+cfn=(195)
+calls=20140 0
+0 10903
+cfl=(145)
+cfn=(145)
+calls=20140 0
+0 6977
+
+fl=(322)
+fn=(322)
+356 2639
+cfl=(83)
+cfn=(83)
+calls=330 0
+0 2568
+cfl=(367)
+cfn=(367)
+calls=330 0
+0 46
+cfl=(324)
+cfn=(324)
+calls=330 0
+0 88086
+cfl=(167)
+cfn=(167)
+calls=1320 0
+0 180
+cfl=(80)
+cfn=(80)
+calls=330 0
+0 2704
+cfl=(54)
+cfn=(54)
+calls=330 0
+0 832
+cfl=(323)
+cfn=(323)
+calls=330 0
+0 48
+
+fl=(112)
+fn=(112)
+351 87136
+cfl=(182)
+cfn=(182)
+calls=1474 0
+0 1792
+
+fl=(120)
+fn=(120)
+73 69665
+cfl=(71)
+cfn=(71)
+calls=24030 0
+0 3833
+cfl=(1)
+cfn=(1)
+calls=170910 0
+0 15066
+
+fl=(324)
+fn=(324)
+58 1640
+cfl=(329)
+cfn=(329)
+calls=330 0
+0 85288
+cfl=(328)
+cfn=(328)
+calls=660 0
+0 87
+cfl=(326)
+cfn=(326)
+calls=660 0
+0 1011
+cfl=(325)
+cfn=(325)
+calls=330 0
+0 59
+
+fl=(117)
+fn=(117)
+35 66387
+cfl=(41)
+cfn=(41)
+calls=113960 0
+0 19687
+
+fl=(329)
+fn=(329)
+130 1483
+cfl=(348)
+cfn=(348)
+calls=330 0
+0 73133
+cfl=(41)
+cfn=(41)
+calls=660 0
+0 80
+cfl=(343)
+cfn=(343)
+calls=330 0
+0 6118
+cfl=(330)
+cfn=(330)
+calls=330 0
+0 4473
+
+fl=(297)
+fn=(297)
+0 79511
+
+fl=(1)
+fn=(1)
+0 75906
+cfl=(182)
+cfn=(182)
+calls=680 0
+0 905
+cfl=(4)
+cfn=(4)
+calls=1360 0
+0 1143
+
+fl=(209)
+fn=(209)
+980 13510
+cfl=(12)
+cfn=(12)
+calls=8220 0
+0 1336
+cfl=(211)
+cfn=(211)
+calls=8220 0
+0 47701
+cfl=(98)
+cfn=(98)
+calls=8220 0
+0 7970
+cfl=(210)
+cfn=(210)
+calls=8220 0
+0 3702
+
+fl=(348)
+fn=(348)
+254 1052
+cfl=(355)
+cfn=(355)
+calls=330 0
+0 68617
+cfl=(218)
+cfn=(218)
+calls=330 0
+0 614
+cfl=(331)
+cfn=(331)
+calls=330 0
+0 34
+cfl=(349)
+cfn=(349)
+calls=330 0
+0 2816
+
+fl=(355)
+fn=(355)
+330 19454
+cfl=(366)
+cfn=(366)
+calls=660 0
+0 7231
+cfl=(365)
+cfn=(365)
+calls=660 0
+0 2980
+cfl=(364)
+cfn=(364)
+calls=660 0
+0 16533
+cfl=(362)
+cfn=(362)
+calls=660 0
+0 1161
+cfl=(361)
+cfn=(361)
+calls=660 0
+0 1598
+cfl=(360)
+cfn=(360)
+calls=660 0
+0 4090
+cfl=(359)
+cfn=(359)
+calls=660 0
+0 164
+cfl=(358)
+cfn=(358)
+calls=660 0
+0 6435
+cfl=(357)
+cfn=(357)
+calls=660 0
+0 8534
+cfl=(356)
+cfn=(356)
+calls=660 0
+0 309
+cfl=(331)
+cfn=(331)
+calls=660 0
+0 85
+cfl=(84)
+cfn=(84)
+calls=330 0
+0 42
+
+fl=(132)
+fn=(132)
+95 44237
+cfl=(134)
+cfn=(134)
+calls=62850 0
+0 8149
+cfl=(133)
+cfn=(133)
+calls=62850 0
+0 9401
+
+fl=(170)
+fn=(170)
+0 58459
+
+fl=(205)
+fn=(205)
+479 37420
+cfl=(182)
+cfn=(182)
+calls=168 0
+0 213
+cfl=(212)
+cfn=(212)
+calls=2160 0
+0 5465
+cfl=(209)
+cfn=(209)
+calls=1830 0
+0 9189
+cfl=(208)
+cfn=(208)
+calls=540 0
+0 719
+cfl=(207)
+cfn=(207)
+calls=270 0
+0 144
+cfl=(206)
+cfn=(206)
+calls=270 0
+0 2328
+cfl=(51)
+cfn=(51)
+calls=540 0
+0 113
+cfl=(12)
+cfn=(12)
+calls=540 0
+0 109
+cfl=(148)
+cfn=(148)
+calls=540 0
+0 94
+cfl=(145)
+cfn=(145)
+calls=270 0
+0 53
+
+fl=(177)
+fn=(177)
+29 11257
+cfl=(182)
+cfn=(182)
+calls=136 0
+0 176
+cfl=(40)
+cfn=(40)
+calls=6990 0
+0 39223
+cfl=(39)
+cfn=(39)
+calls=6990 0
+0 3982
+
+fl=(267)
+fn=(267)
+33 25547
+cfl=(182)
+cfn=(182)
+calls=1206 0
+0 1531
+cfl=(270)
+cfn=(270)
+calls=12780 0
+0 5614
+cfl=(269)
+cfn=(269)
+calls=12780 0
+0 17744
+cfl=(268)
+cfn=(268)
+calls=12780 0
+0 2374
+
+fl=(140)
+fn=(140)
+1026 2800
+cfl=(143)
+cfn=(143)
+calls=330 0
+0 45211
+cfl=(141)
+cfn=(141)
+calls=1980 0
+0 2523
+
+fl=(223)
+fn=(223)
+73 571
+cfl=(183)
+cfn=(183)
+calls=10 0
+0 11908
+cfl=(69)
+cfn=(69)
+calls=270 0
+0 49
+cfl=(224)
+cfn=(224)
+calls=270 0
+0 35947
+cfl=(1)
+cfn=(1)
+calls=810 0
+0 97
+cfl=(148)
+cfn=(148)
+calls=10 0
+0 5
+cfl=(151)
+cfn=(151)
+calls=10 0
+0 636
+cfl=(150)
+cfn=(150)
+calls=10 0
+0 89
+cfl=(147)
+cfn=(147)
+calls=10 0
+0 3
+
+fl=(211)
+fn=(211)
+0 47653
+cfl=(182)
+cfn=(182)
+calls=42 0
+0 49
+
+fl=(196)
+fn=(196)
+0 47275
+
+fl=(180)
+fn=(180)
+105 38206
+cfl=(175)
+cfn=(175)
+calls=7020 0
+0 3741
+cfl=(174)
+cfn=(174)
+calls=7020 0
+0 4569
+
+fl=(106)
+fn=(106)
+0 45603
+
+fl=(164)
+fn=(164)
+156 696
+cfl=(96)
+cfn=(96)
+calls=330 0
+0 43310
+cfl=(10)
+cfn=(10)
+calls=330 0
+0 416
+
+fl=(165)
+fn=(165)
+213 1008
+cfl=(96)
+cfn=(96)
+calls=660 0
+0 40065
+cfl=(166)
+cfn=(166)
+calls=330 0
+0 656
+
+fl=(69)
+fn=(69)
+0 41259
+
+fl=(102)
+fn=(102)
+28 40873
+
+fl=(40)
+fn=(40)
+35 25113
+cfl=(182)
+cfn=(182)
+calls=304 0
+0 385
+cfl=(43)
+cfn=(43)
+calls=7320 0
+0 1436
+cfl=(42)
+cfn=(42)
+calls=36600 0
+0 5084
+cfl=(41)
+cfn=(41)
+calls=51240 0
+0 8734
+
+fl=(266)
+fn=(266)
+430 6435
+cfl=(267)
+cfn=(267)
+calls=6390 0
+0 31672
+
+fl=(168)
+fn=(168)
+113 1402
+cfl=(169)
+cfn=(169)
+calls=660 0
+0 35932
+cfl=(10)
+cfn=(10)
+calls=1320 0
+0 533
+
+fl=(224)
+fn=(224)
+128 1611
+cfl=(172)
+cfn=(172)
+calls=270 0
+0 17817
+cfl=(232)
+cfn=(232)
+calls=270 0
+0 2131
+cfl=(151)
+cfn=(151)
+calls=270 0
+0 12147
+cfl=(227)
+cfn=(227)
+calls=270 0
+0 1924
+cfl=(225)
+cfn=(225)
+calls=270 0
+0 317
+
+fl=(169)
+fn=(169)
+0 35932
+
+fl=(236)
+fn=(236)
+138 2882
+cfl=(257)
+cfn=(257)
+calls=280 0
+0 168
+cfl=(256)
+cfn=(256)
+calls=280 0
+0 4951
+cfl=(250)
+cfn=(250)
+calls=280 0
+0 11854
+cfl=(116)
+cfn=(116)
+calls=280 0
+0 802
+cfl=(247)
+cfn=(247)
+calls=280 0
+0 856
+cfl=(154)
+cfn=(154)
+calls=280 0
+0 620
+cfl=(215)
+cfn=(215)
+calls=280 0
+0 536
+cfl=(193)
+cfn=(193)
+calls=280 0
+0 3405
+cfl=(192)
+cfn=(192)
+calls=280 0
+0 44
+cfl=(238)
+cfn=(238)
+calls=280 0
+0 8258
+cfl=(237)
+cfn=(237)
+calls=280 0
+0 44
+cfl=(230)
+cfn=(230)
+calls=280 0
+0 63
+
+fl=(41)
+fn=(41)
+0 30802
+cfl=(182)
+cfn=(182)
+calls=189 0
+0 233
+
+fl=(216)
+fn=(216)
+24 1957
+cfl=(219)
+cfn=(219)
+calls=270 0
+0 808
+cfl=(1)
+cfn=(1)
+calls=270 0
+0 56
+cfl=(69)
+cfn=(69)
+calls=540 0
+0 82
+cfl=(151)
+cfn=(151)
+calls=810 0
+0 27465
+cfl=(218)
+cfn=(218)
+calls=270 0
+0 69
+cfl=(217)
+cfn=(217)
+calls=270 0
+0 370
+
+fl=(181)
+fn=(181)
+159 23282
+cfl=(102)
+cfn=(102)
+calls=6990 0
+0 874
+cfl=(16)
+cfn=(16)
+calls=65190 0
+0 6444
+
+fl=(123)
+fn=(123)
+129 19851
+cfl=(105)
+cfn=(105)
+calls=14740 0
+0 3052
+cfl=(104)
+cfn=(104)
+calls=14740 0
+0 2776
+cfl=(124)
+cfn=(124)
+calls=14740 0
+0 2809
+
+fl=(275)
+fn=(275)
+435 6758
+cfl=(267)
+cfn=(267)
+calls=6390 0
+0 21140
+
+fl=(113)
+fn=(113)
+0 26879
+
+fl=(152)
+fn=(152)
+1047 20526
+cfl=(182)
+cfn=(182)
+calls=93 0
+0 169
+cfl=(1)
+cfn=(1)
+calls=56800 0
+0 5999
+
+fl=(110)
+fn=(110)
+0 25079
+cfl=(182)
+cfn=(182)
+calls=413 0
+0 505
+
+fl=(279)
+fn=(279)
+129 8263
+cfl=(102)
+cfn=(102)
+calls=29 0
+0 4
+cfl=(130)
+cfn=(130)
+calls=6957 0
+0 15647
+cfl=(16)
+cfn=(16)
+calls=58 0
+0 4
+
+fl=(16)
+fn=(16)
+0 23622
+
+fl=(144)
+fn=(144)
+735 4048
+cfl=(182)
+cfn=(182)
+calls=48 0
+0 84
+cfl=(151)
+cfn=(151)
+calls=330 0
+0 15694
+cfl=(150)
+cfn=(150)
+calls=330 0
+0 554
+cfl=(149)
+cfn=(149)
+calls=330 0
+0 977
+cfl=(148)
+cfn=(148)
+calls=330 0
+0 59
+cfl=(147)
+cfn=(147)
+calls=330 0
+0 65
+cfl=(71)
+cfn=(71)
+calls=330 0
+0 65
+cfl=(146)
+cfn=(146)
+calls=1650 0
+0 237
+cfl=(145)
+cfn=(145)
+calls=330 0
+0 59
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 32
+
+fl=(295)
+fn=(295)
+545 21204
+
+fl=(127)
+fn=(127)
+145 20992
+
+fl=(142)
+fn=(142)
+0 20742
+
+fl=(174)
+fn=(174)
+27 15384
+cfl=(1)
+cfn=(1)
+calls=41970 0
+0 5137
+
+fl=(191)
+fn=(191)
+240 1072
+cfl=(181)
+cfn=(181)
+calls=320 0
+0 359
+cfl=(193)
+cfn=(193)
+calls=330 0
+0 2925
+cfl=(192)
+cfn=(192)
+calls=330 0
+0 44
+cfl=(125)
+cfn=(125)
+calls=330 0
+0 2895
+cfl=(100)
+cfn=(100)
+calls=340 0
+0 13033
+
+fl=(105)
+fn=(105)
+44 19888
+
+fl=(186)
+fn=(186)
+95 8614
+cfl=(175)
+cfn=(175)
+calls=13980 0
+0 5383
+cfl=(174)
+cfn=(174)
+calls=13980 0
+0 5545
+
+fl=(13)
+fn=(13)
+20 557
+cfl=(44)
+cfn=(44)
+calls=330 0
+0 8617
+cfl=(14)
+cfn=(14)
+calls=330 0
+0 10244
+
+fl=(188)
+fn=(188)
+77 8334
+cfl=(175)
+cfn=(175)
+calls=13980 0
+0 5330
+cfl=(174)
+cfn=(174)
+calls=13980 0
+0 5652
+
+fl=(175)
+fn=(175)
+31 15021
+cfl=(1)
+cfn=(1)
+calls=41970 0
+0 3450
+
+fl=(131)
+fn=(131)
+180 17817
+
+fl=(269)
+fn=(269)
+132 16403
+cfl=(268)
+cfn=(268)
+calls=12780 0
+0 1341
+
+fl=(94)
+fn=(94)
+141 7421
+cfl=(51)
+cfn=(51)
+calls=6720 0
+0 9778
+
+fl=(104)
+fn=(104)
+0 16970
+
+fl=(364)
+fn=(364)
+0 16533
+
+fl=(161)
+fn=(161)
+474 11106
+cfl=(182)
+cfn=(182)
+calls=126 0
+0 165
+cfl=(162)
+cfn=(162)
+calls=27990 0
+0 4763
+
+fl=(159)
+fn=(159)
+267 6183
+cfl=(114)
+cfn=(114)
+calls=7820 0
+0 9576
+
+fl=(150)
+fn=(150)
+0 14757
+
+fl=(48)
+fn=(48)
+299 5475
+cfl=(49)
+cfn=(49)
+calls=6720 0
+0 8920
+
+fl=(280)
+fn=(280)
+312 4373
+cfl=(135)
+cfn=(135)
+calls=6957 0
+0 8997
+
+fl=(160)
+fn=(160)
+329 2204
+cfl=(69)
+cfn=(69)
+calls=330 0
+0 46
+cfl=(102)
+cfn=(102)
+calls=330 0
+0 59
+cfl=(161)
+cfn=(161)
+calls=330 0
+0 272
+cfl=(156)
+cfn=(156)
+calls=330 0
+0 763
+cfl=(71)
+cfn=(71)
+calls=330 0
+0 314
+cfl=(101)
+cfn=(101)
+calls=330 0
+0 9507
+
+fl=(273)
+fn=(273)
+0 12563
+
+fl=(250)
+fn=(250)
+323 4098
+cfl=(290)
+cfn=(290)
+calls=10 0
+0 93
+cfl=(289)
+cfn=(289)
+calls=10 0
+0 2
+cfl=(231)
+cfn=(231)
+calls=10 0
+0 4
+cfl=(286)
+cfn=(286)
+calls=10 0
+0 40
+cfl=(285)
+cfn=(285)
+calls=10 0
+0 2
+cfl=(254)
+cfn=(254)
+calls=280 0
+0 2196
+cfl=(253)
+cfn=(253)
+calls=280 0
+0 170
+cfl=(252)
+cfn=(252)
+calls=280 0
+0 4246
+cfl=(251)
+cfn=(251)
+calls=280 0
+0 946
+cfl=(230)
+cfn=(230)
+calls=280 0
+0 54
+
+fl=(238)
+fn=(238)
+1393 4372
+cfl=(182)
+cfn=(182)
+calls=1187 0
+0 1522
+cfl=(246)
+cfn=(246)
+calls=560 0
+0 607
+cfl=(245)
+cfn=(245)
+calls=560 0
+0 129
+cfl=(244)
+cfn=(244)
+calls=560 0
+0 370
+cfl=(243)
+cfn=(243)
+calls=560 0
+0 252
+cfl=(71)
+cfn=(71)
+calls=1120 0
+0 99
+cfl=(239)
+cfn=(239)
+calls=1120 0
+0 4312
+
+fl=(195)
+fn=(195)
+72 10903
+
+fl=(119)
+fn=(119)
+407 10805
+
+fl=(14)
+fn=(14)
+33 561
+cfl=(21)
+cfn=(21)
+calls=330 0
+0 8737
+cfl=(18)
+cfn=(18)
+calls=330 0
+0 725
+cfl=(17)
+cfn=(17)
+calls=330 0
+0 23
+cfl=(15)
+cfn=(15)
+calls=330 0
+0 198
+
+fl=(156)
+fn=(156)
+315 9956
+
+fl=(133)
+fn=(133)
+42 9401
+
+fl=(136)
+fn=(136)
+0 9327
+
+fl=(134)
+fn=(134)
+50 9165
+
+fl=(0)
+fn=(0)
+2379 1795
+cfl=(0)
+cfn=(0)
+calls=1330 0
+0 8818
+cfl=(6)
+cfn=(6)
+calls=2670 0
+0 2621
+cfl=(2)
+cfn=(2)
+calls=1340 0
+0 4519
+cfl=(1)
+cfn=(1)
+calls=1340 0
+0 138
+
+fl=(49)
+fn=(49)
+104 7284
+cfl=(41)
+cfn=(41)
+calls=6720 0
+0 1635
+
+fl=(21)
+fn=(21)
+267 1318
+cfl=(16)
+cfn=(16)
+calls=330 0
+0 35
+cfl=(40)
+cfn=(40)
+calls=330 0
+0 1530
+cfl=(39)
+cfn=(39)
+calls=330 0
+0 156
+cfl=(38)
+cfn=(38)
+calls=330 0
+0 101
+cfl=(22)
+cfn=(22)
+calls=330 0
+0 5341
+cfl=(17)
+cfn=(17)
+calls=330 0
+0 28
+cfl=(1)
+cfn=(1)
+calls=660 0
+0 93
+cfl=(15)
+cfn=(15)
+calls=330 0
+0 133
+
+fl=(98)
+fn=(98)
+0 8694
+
+fl=(44)
+fn=(44)
+307 1202
+cfl=(95)
+cfn=(95)
+calls=330 0
+0 37
+cfl=(94)
+cfn=(94)
+calls=330 0
+0 406
+cfl=(53)
+cfn=(53)
+calls=330 0
+0 5876
+cfl=(50)
+cfn=(50)
+calls=330 0
+0 297
+cfl=(48)
+cfn=(48)
+calls=330 0
+0 509
+cfl=(47)
+cfn=(47)
+calls=330 0
+0 41
+cfl=(46)
+cfn=(46)
+calls=330 0
+0 68
+cfl=(45)
+cfn=(45)
+calls=660 0
+0 99
+cfl=(20)
+cfn=(20)
+calls=330 0
+0 46
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 34
+
+fl=(357)
+fn=(357)
+0 8534
+
+fl=(230)
+fn=(230)
+0 8518
+
+fl=(153)
+fn=(153)
+0 8159
+
+fl=(158)
+fn=(158)
+250 7574
+cfl=(182)
+cfn=(182)
+calls=161 0
+0 197
+
+fl=(366)
+fn=(366)
+0 7231
+
+fl=(145)
+fn=(145)
+0 5320
+cfl=(182)
+cfn=(182)
+calls=1418 0
+0 1769
+
+fl=(178)
+fn=(178)
+203 6751
+
+fl=(358)
+fn=(358)
+0 6435
+
+fl=(193)
+fn=(193)
+2979 705
+cfl=(194)
+cfn=(194)
+calls=610 0
+0 5625
+
+fl=(343)
+fn=(343)
+80 2835
+cfl=(347)
+cfn=(347)
+calls=132 0
+0 2201
+cfl=(346)
+cfn=(346)
+calls=66 0
+0 301
+cfl=(71)
+cfn=(71)
+calls=660 0
+0 96
+cfl=(344)
+cfn=(344)
+calls=726 0
+0 346
+cfl=(69)
+cfn=(69)
+calls=3300 0
+0 339
+
+fl=(53)
+fn=(53)
+776 1800
+cfl=(83)
+cfn=(83)
+calls=330 0
+0 1616
+cfl=(80)
+cfn=(80)
+calls=330 0
+0 1617
+cfl=(54)
+cfn=(54)
+calls=330 0
+0 643
+cfl=(16)
+cfn=(16)
+calls=330 0
+0 78
+cfl=(3)
+cfn=(3)
+calls=660 0
+0 122
+
+fl=(270)
+fn=(270)
+0 5614
+
+fl=(212)
+fn=(212)
+0 5465
+
+fl=(22)
+fn=(22)
+936 812
+cfl=(36)
+cfn=(36)
+calls=330 0
+0 1076
+cfl=(32)
+cfn=(32)
+calls=660 0
+0 1341
+cfl=(23)
+cfn=(23)
+calls=330 0
+0 2111
+
+fl=(176)
+fn=(176)
+0 5111
+cfl=(182)
+cfn=(182)
+calls=61 0
+0 79
+
+fl=(42)
+fn=(42)
+0 5085
+
+fl=(256)
+fn=(256)
+310 899
+cfl=(238)
+cfn=(238)
+calls=280 0
+0 3407
+cfl=(237)
+cfn=(237)
+calls=280 0
+0 40
+cfl=(215)
+cfn=(215)
+calls=280 0
+0 188
+cfl=(116)
+cfn=(116)
+calls=280 0
+0 377
+cfl=(71)
+cfn=(71)
+calls=280 0
+0 40
+
+fl=(206)
+fn=(206)
+0 4837
+
+fl=(162)
+fn=(162)
+1032 4830
+
+fl=(2)
+fn=(2)
+1697 2222
+cfl=(1)
+cfn=(1)
+calls=2720 0
+0 1666
+cfl=(3)
+cfn=(3)
+calls=4080 0
+0 784
+
+fl=(330)
+fn=(330)
+309 904
+cfl=(41)
+cfn=(41)
+calls=330 0
+0 75
+cfl=(341)
+cfn=(341)
+calls=330 0
+0 701
+cfl=(333)
+cfn=(333)
+calls=330 0
+0 2669
+cfl=(332)
+cfn=(332)
+calls=330 0
+0 84
+cfl=(331)
+cfn=(331)
+calls=330 0
+0 37
+
+fl=(80)
+fn=(80)
+630 746
+cfl=(81)
+cfn=(81)
+calls=660 0
+0 3574
+
+fl=(239)
+fn=(239)
+1330 2911
+cfl=(182)
+cfn=(182)
+calls=196 0
+0 250
+cfl=(71)
+cfn=(71)
+calls=2240 0
+0 229
+cfl=(241)
+cfn=(241)
+calls=1120 0
+0 776
+cfl=(240)
+cfn=(240)
+calls=1120 0
+0 145
+
+fl=(252)
+fn=(252)
+0 4246
+
+fl=(124)
+fn=(124)
+40 4221
+
+fl=(83)
+fn=(83)
+636 1637
+cfl=(93)
+cfn=(93)
+calls=660 0
+0 113
+cfl=(91)
+cfn=(91)
+calls=660 0
+0 2268
+cfl=(85)
+cfn=(85)
+calls=1 0
+0 102
+cfl=(84)
+cfn=(84)
+calls=660 0
+0 64
+
+fl=(39)
+fn=(39)
+65 4138
+
+fl=(294)
+fn=(294)
+2177 557
+cfl=(194)
+cfn=(194)
+calls=360 0
+0 3529
+cfl=(1)
+cfn=(1)
+calls=360 0
+0 47
+
+fl=(360)
+fn=(360)
+0 4090
+
+fl=(213)
+fn=(213)
+103 2413
+cfl=(215)
+cfn=(215)
+calls=540 0
+0 318
+cfl=(214)
+cfn=(214)
+calls=540 0
+0 1238
+
+fl=(301)
+fn=(301)
+677 798
+cfl=(307)
+cfn=(307)
+calls=10 0
+0 39
+cfl=(300)
+cfn=(300)
+calls=10 0
+0 104
+cfl=(71)
+cfn=(71)
+calls=10 0
+0 4
+cfl=(306)
+cfn=(306)
+calls=10 0
+0 1808
+cfl=(302)
+cfn=(302)
+calls=20 0
+0 1202
+cfl=(1)
+cfn=(1)
+calls=20 0
+0 6
+
+fl=(204)
+fn=(204)
+0 3943
+
+fl=(268)
+fn=(268)
+0 3715
+
+fl=(210)
+fn=(210)
+0 3702
+
+fl=(157)
+fn=(157)
+0 3593
+
+fl=(81)
+fn=(81)
+687 363
+cfl=(82)
+cfn=(82)
+calls=660 0
+0 3209
+
+fl=(139)
+fn=(139)
+552 3568
+
+fl=(82)
+fn=(82)
+0 3209
+
+fl=(274)
+fn=(274)
+0 3098
+
+fl=(262)
+fn=(262)
+2416 3081
+
+fl=(365)
+fn=(365)
+0 2980
+
+fl=(221)
+fn=(221)
+557 2826
+
+fl=(349)
+fn=(349)
+109 935
+cfl=(353)
+cfn=(353)
+calls=330 0
+0 51
+cfl=(218)
+cfn=(218)
+calls=330 0
+0 1174
+cfl=(352)
+cfn=(352)
+calls=330 0
+0 210
+cfl=(350)
+cfn=(350)
+calls=330 0
+0 401
+cfl=(84)
+cfn=(84)
+calls=330 0
+0 44
+
+fl=(184)
+fn=(184)
+65 1576
+cfl=(127)
+cfn=(127)
+calls=6990 0
+0 1109
+
+fl=(333)
+fn=(333)
+125 437
+cfl=(340)
+cfn=(340)
+calls=330 0
+0 98
+cfl=(335)
+cfn=(335)
+calls=330 0
+0 1883
+cfl=(334)
+cfn=(334)
+calls=330 0
+0 250
+
+fl=(6)
+fn=(6)
+2278 866
+cfl=(7)
+cfn=(7)
+calls=2670 0
+0 1754
+
+fl=(203)
+fn=(203)
+755 2212
+cfl=(102)
+cfn=(102)
+calls=330 0
+0 79
+cfl=(156)
+cfn=(156)
+calls=330 0
+0 99
+cfl=(71)
+cfn=(71)
+calls=330 0
+0 41
+cfl=(162)
+cfn=(162)
+calls=330 0
+0 68
+
+fl=(91)
+fn=(91)
+447 399
+cfl=(92)
+cfn=(92)
+calls=660 0
+0 1869
+
+fl=(347)
+fn=(347)
+0 2201
+
+fl=(254)
+fn=(254)
+436 1870
+cfl=(69)
+cfn=(69)
+calls=830 0
+0 98
+cfl=(71)
+cfn=(71)
+calls=830 0
+0 89
+cfl=(255)
+cfn=(255)
+calls=830 0
+0 139
+
+fl=(310)
+fn=(310)
+1480 435
+cfl=(312)
+cfn=(312)
+calls=142 0
+0 1704
+cfl=(1)
+cfn=(1)
+calls=142 0
+0 16
+cfl=(311)
+cfn=(311)
+calls=142 0
+0 22
+
+fl=(232)
+fn=(232)
+0 2131
+
+fl=(23)
+fn=(23)
+692 245
+cfl=(25)
+cfn=(25)
+calls=330 0
+0 1715
+cfl=(24)
+cfn=(24)
+calls=330 0
+0 150
+
+fl=(222)
+fn=(222)
+110 1615
+cfl=(69)
+cfn=(69)
+calls=540 0
+0 63
+cfl=(115)
+cfn=(115)
+calls=270 0
+0 155
+cfl=(71)
+cfn=(71)
+calls=540 0
+0 53
+cfl=(221)
+cfn=(221)
+calls=810 0
+0 108
+cfl=(1)
+cfn=(1)
+calls=540 0
+0 82
+
+fl=(379)
+fn=(379)
+696 89
+cfl=(310)
+cfn=(310)
+calls=132 0
+0 1877
+cfl=(311)
+cfn=(311)
+calls=132 0
+0 21
+
+fl=(227)
+fn=(227)
+219 1307
+cfl=(231)
+cfn=(231)
+calls=270 0
+0 37
+cfl=(1)
+cfn=(1)
+calls=270 0
+0 29
+cfl=(229)
+cfn=(229)
+calls=270 0
+0 510
+cfl=(228)
+cfn=(228)
+calls=270 0
+0 39
+
+fl=(218)
+fn=(218)
+0 474
+cfl=(354)
+cfn=(354)
+calls=990 0
+0 406
+cfl=(353)
+cfn=(353)
+calls=330 0
+0 1037
+
+fl=(154)
+fn=(154)
+0 1890
+
+fl=(335)
+fn=(335)
+121 279
+cfl=(336)
+cfn=(336)
+calls=330 0
+0 1604
+
+fl=(92)
+fn=(92)
+0 1869
+
+fl=(265)
+fn=(265)
+426 1821
+
+fl=(368)
+fn=(368)
+1000 1384
+cfl=(371)
+cfn=(371)
+calls=330 0
+0 130
+cfl=(370)
+cfn=(370)
+calls=330 0
+0 77
+cfl=(369)
+cfn=(369)
+calls=330 0
+0 227
+
+fl=(306)
+fn=(306)
+0 1808
+
+fl=(7)
+fn=(7)
+2287 1455
+cfl=(9)
+cfn=(9)
+calls=1330 0
+0 160
+cfl=(8)
+cfn=(8)
+calls=1340 0
+0 139
+
+fl=(25)
+fn=(25)
+896 727
+cfl=(31)
+cfn=(31)
+calls=330 0
+0 136
+cfl=(30)
+cfn=(30)
+calls=330 0
+0 143
+cfl=(29)
+cfn=(29)
+calls=330 0
+0 141
+cfl=(28)
+cfn=(28)
+calls=330 0
+0 126
+cfl=(27)
+cfn=(27)
+calls=330 0
+0 154
+cfl=(24)
+cfn=(24)
+calls=330 0
+0 113
+cfl=(26)
+cfn=(26)
+calls=330 0
+0 174
+
+fl=(284)
+fn=(284)
+500 72
+cfl=(291)
+cfn=(291)
+calls=10 0
+0 49
+cfl=(236)
+cfn=(236)
+calls=10 0
+0 1548
+cfl=(235)
+cfn=(235)
+calls=10 0
+0 1
+cfl=(115)
+cfn=(115)
+calls=10 0
+0 39
+
+fl=(312)
+fn=(312)
+0 1704
+
+fl=(336)
+fn=(336)
+773 227
+cfl=(337)
+cfn=(337)
+calls=330 0
+0 1375
+
+fl=(361)
+fn=(361)
+84 861
+cfl=(321)
+cfn=(321)
+calls=660 0
+0 603
+cfl=(331)
+cfn=(331)
+calls=660 0
+0 58
+cfl=(84)
+cfn=(84)
+calls=660 0
+0 75
+
+fl=(12)
+fn=(12)
+0 1555
+
+fl=(54)
+fn=(54)
+619 968
+cfl=(79)
+cfn=(79)
+calls=660 0
+0 89
+cfl=(55)
+cfn=(55)
+calls=660 0
+0 417
+
+fl=(43)
+fn=(43)
+0 1398
+cfl=(182)
+cfn=(182)
+calls=31 0
+0 37
+
+fl=(337)
+fn=(337)
+771 372
+cfl=(338)
+cfn=(338)
+calls=330 0
+0 1003
+
+fl=(298)
+fn=(298)
+0 1357
+
+fl=(32)
+fn=(32)
+0 455
+cfl=(35)
+cfn=(35)
+calls=1320 0
+0 463
+cfl=(33)
+cfn=(33)
+calls=990 0
+0 421
+
+fl=(189)
+fn=(189)
+155 1340
+
+fl=(214)
+fn=(214)
+0 1238
+
+fl=(215)
+fn=(215)
+0 1046
+cfl=(117)
+cfn=(117)
+calls=270 0
+0 179
+
+fl=(302)
+fn=(302)
+1105 165
+cfl=(305)
+cfn=(305)
+calls=20 0
+0 988
+cfl=(304)
+cfn=(304)
+calls=20 0
+0 26
+cfl=(1)
+cfn=(1)
+calls=80 0
+0 16
+cfl=(303)
+cfn=(303)
+calls=20 0
+0 7
+
+fl=(362)
+fn=(362)
+97 790
+cfl=(363)
+cfn=(363)
+calls=660 0
+0 133
+cfl=(1)
+cfn=(1)
+calls=660 0
+0 181
+cfl=(84)
+cfn=(84)
+calls=660 0
+0 56
+
+fl=(4)
+fn=(4)
+8 808
+cfl=(1)
+cfn=(1)
+calls=1360 0
+0 198
+cfl=(5)
+cfn=(5)
+calls=1360 0
+0 137
+
+fl=(259)
+fn=(259)
+2245 1122
+
+fl=(353)
+fn=(353)
+122 1088
+
+fl=(277)
+fn=(277)
+93 1084
+
+fl=(36)
+fn=(36)
+16 200
+cfl=(37)
+cfn=(37)
+calls=330 0
+0 874
+
+fl=(10)
+fn=(10)
+1682 1027
+
+fl=(326)
+fn=(326)
+182 615
+cfl=(327)
+cfn=(327)
+calls=660 0
+0 272
+cfl=(325)
+cfn=(325)
+calls=660 0
+0 122
+
+fl=(338)
+fn=(338)
+674 589
+cfl=(339)
+cfn=(339)
+calls=330 0
+0 414
+
+fl=(305)
+fn=(305)
+0 988
+
+fl=(149)
+fn=(149)
+751 977
+
+fl=(251)
+fn=(251)
+0 946
+
+fl=(296)
+fn=(296)
+566 910
+
+fl=(3)
+fn=(3)
+0 906
+
+fl=(37)
+fn=(37)
+0 874
+
+fl=(247)
+fn=(247)
+289 395
+cfl=(248)
+cfn=(248)
+calls=830 0
+0 461
+
+fl=(276)
+fn=(276)
+346 847
+
+fl=(261)
+fn=(261)
+669 833
+
+fl=(219)
+fn=(219)
+96 468
+cfl=(218)
+cfn=(218)
+calls=270 0
+0 59
+cfl=(220)
+cfn=(220)
+calls=270 0
+0 250
+cfl=(1)
+cfn=(1)
+calls=270 0
+0 29
+
+fl=(374)
+fn=(374)
+2170 42
+cfl=(375)
+cfn=(375)
+calls=99 0
+0 743
+
+fl=(241)
+fn=(241)
+1380 572
+cfl=(242)
+cfn=(242)
+calls=1120 0
+0 203
+
+fl=(375)
+fn=(375)
+2195 54
+cfl=(376)
+cfn=(376)
+calls=99 0
+0 687
+
+fl=(18)
+fn=(18)
+442 254
+cfl=(19)
+cfn=(19)
+calls=330 0
+0 470
+
+fl=(208)
+fn=(208)
+0 719
+
+fl=(321)
+fn=(321)
+0 717
+
+fl=(341)
+fn=(341)
+26 165
+cfl=(342)
+cfn=(342)
+calls=330 0
+0 536
+
+fl=(376)
+fn=(376)
+2156 208
+cfl=(9)
+cfn=(9)
+calls=66 0
+0 41
+cfl=(344)
+cfn=(344)
+calls=66 0
+0 36
+cfl=(378)
+cfn=(378)
+calls=132 0
+0 65
+cfl=(377)
+cfn=(377)
+calls=165 0
+0 336
+
+fl=(166)
+fn=(166)
+205 366
+cfl=(12)
+cfn=(12)
+calls=330 0
+0 89
+cfl=(167)
+cfn=(167)
+calls=330 0
+0 200
+
+fl=(246)
+fn=(246)
+0 430
+cfl=(117)
+cfn=(117)
+calls=270 0
+0 177
+
+fl=(342)
+fn=(342)
+0 536
+
+fl=(229)
+fn=(229)
+81 406
+cfl=(71)
+cfn=(71)
+calls=270 0
+0 34
+cfl=(69)
+cfn=(69)
+calls=270 0
+0 35
+cfl=(230)
+cfn=(230)
+calls=270 0
+0 36
+
+fl=(19)
+fn=(19)
+221 399
+cfl=(20)
+cfn=(20)
+calls=330 0
+0 47
+cfl=(17)
+cfn=(17)
+calls=330 0
+0 24
+
+fl=(35)
+fn=(35)
+946 339
+cfl=(34)
+cfn=(34)
+calls=990 0
+0 122
+
+fl=(248)
+fn=(248)
+0 461
+
+fl=(33)
+fn=(33)
+943 289
+cfl=(34)
+cfn=(34)
+calls=660 0
+0 133
+
+fl=(55)
+fn=(55)
+359 321
+cfl=(64)
+cfn=(64)
+calls=1 0
+0 1
+cfl=(56)
+cfn=(56)
+calls=2 0
+0 98
+
+fl=(339)
+fn=(339)
+756 263
+cfl=(157)
+cfn=(157)
+calls=330 0
+0 96
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 54
+
+fl=(354)
+fn=(354)
+296 336
+cfl=(1)
+cfn=(1)
+calls=660 0
+0 70
+
+fl=(344)
+fn=(344)
+1002 292
+cfl=(345)
+cfn=(345)
+calls=858 0
+0 113
+
+fl=(350)
+fn=(350)
+14 220
+cfl=(351)
+cfn=(351)
+calls=330 0
+0 179
+
+fl=(167)
+fn=(167)
+0 321
+cfl=(182)
+cfn=(182)
+calls=47 0
+0 61
+
+fl=(249)
+fn=(249)
+525 381
+
+fl=(244)
+fn=(244)
+0 370
+
+fl=(217)
+fn=(217)
+42 261
+cfl=(1)
+cfn=(1)
+calls=540 0
+0 109
+
+fl=(377)
+fn=(377)
+2335 312
+cfl=(377)
+cfn=(377)
+calls=264 0
+0 223
+cfl=(8)
+cfn=(8)
+calls=132 0
+0 11
+cfl=(9)
+cfn=(9)
+calls=132 0
+0 12
+
+fl=(15)
+fn=(15)
+192 252
+cfl=(16)
+cfn=(16)
+calls=660 0
+0 78
+
+fl=(225)
+fn=(225)
+215 109
+cfl=(226)
+cfn=(226)
+calls=270 0
+0 208
+
+fl=(356)
+fn=(356)
+0 309
+
+fl=(346)
+fn=(346)
+0 301
+
+fl=(84)
+fn=(84)
+1109 281
+
+fl=(327)
+fn=(327)
+0 272
+
+fl=(24)
+fn=(24)
+292 197
+cfl=(1)
+cfn=(1)
+calls=660 0
+0 68
+
+fl=(34)
+fn=(34)
+0 256
+
+fl=(243)
+fn=(243)
+1455 252
+
+fl=(220)
+fn=(220)
+98 202
+cfl=(1)
+cfn=(1)
+calls=540 0
+0 48
+
+fl=(334)
+fn=(334)
+116 169
+cfl=(16)
+cfn=(16)
+calls=330 0
+0 80
+
+fl=(146)
+fn=(146)
+503 237
+
+fl=(351)
+fn=(351)
+0 236
+
+fl=(369)
+fn=(369)
+1041 227
+
+fl=(331)
+fn=(331)
+841 216
+
+fl=(9)
+fn=(9)
+0 189
+cfl=(344)
+cfn=(344)
+calls=66 0
+0 23
+
+fl=(352)
+fn=(352)
+8 155
+cfl=(351)
+cfn=(351)
+calls=330 0
+0 56
+
+fl=(317)
+fn=(317)
+56 99
+cfl=(69)
+cfn=(69)
+calls=10 0
+0 5
+cfl=(319)
+cfn=(319)
+calls=10 0
+0 94
+cfl=(318)
+cfn=(318)
+calls=10 0
+0 9
+cfl=(1)
+cfn=(1)
+calls=10 0
+0 2
+
+fl=(226)
+fn=(226)
+207 150
+cfl=(16)
+cfn=(16)
+calls=270 0
+0 58
+
+fl=(242)
+fn=(242)
+0 207
+
+fl=(325)
+fn=(325)
+0 181
+
+fl=(309)
+fn=(309)
+0 178
+
+fl=(26)
+fn=(26)
+283 141
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 32
+
+fl=(253)
+fn=(253)
+0 170
+
+fl=(257)
+fn=(257)
+125 133
+cfl=(71)
+cfn=(71)
+calls=280 0
+0 35
+
+fl=(148)
+fn=(148)
+0 164
+
+fl=(359)
+fn=(359)
+0 164
+
+fl=(8)
+fn=(8)
+0 161
+
+fl=(163)
+fn=(163)
+121 157
+
+fl=(27)
+fn=(27)
+300 118
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 36
+
+fl=(240)
+fn=(240)
+0 145
+
+fl=(207)
+fn=(207)
+0 144
+
+fl=(30)
+fn=(30)
+466 104
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 39
+
+fl=(29)
+fn=(29)
+456 111
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 31
+
+fl=(255)
+fn=(255)
+0 139
+
+fl=(5)
+fn=(5)
+0 137
+
+fl=(31)
+fn=(31)
+480 113
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 22
+
+fl=(363)
+fn=(363)
+0 133
+
+fl=(300)
+fn=(300)
+0 131
+
+fl=(371)
+fn=(371)
+1024 130
+
+fl=(283)
+fn=(283)
+1938 129
+
+fl=(282)
+fn=(282)
+133 113
+cfl=(283)
+cfn=(283)
+calls=30 0
+0 12
+cfl=(1)
+cfn=(1)
+calls=10 0
+0 3
+
+fl=(245)
+fn=(245)
+0 129
+
+fl=(28)
+fn=(28)
+378 103
+cfl=(1)
+cfn=(1)
+calls=330 0
+0 23
+
+fl=(345)
+fn=(345)
+0 113
+
+fl=(93)
+fn=(93)
+0 113
+
+fl=(85)
+fn=(85)
+641 13
+cfl=(69)
+cfn=(69)
+calls=1 0
+0 1
+cfl=(42)
+cfn=(42)
+calls=1 0
+0 1
+cfl=(88)
+cfn=(88)
+calls=1 0
+0 20
+cfl=(87)
+cfn=(87)
+calls=1 0
+0 4
+cfl=(86)
+cfn=(86)
+calls=1 0
+0 63
+cfl=(76)
+cfn=(76)
+calls=1 0
+0 0
+
+fl=(38)
+fn=(38)
+205 101
+
+fl=(45)
+fn=(45)
+0 99
+
+fl=(56)
+fn=(56)
+486 4
+cfl=(66)
+cfn=(66)
+calls=1 0
+0 49
+cfl=(57)
+cfn=(57)
+calls=1 0
+0 96
+
+fl=(340)
+fn=(340)
+0 98
+
+fl=(57)
+fn=(57)
+709 6
+cfl=(55)
+cfn=(55)
+calls=1 0
+0 56
+cfl=(59)
+cfn=(59)
+calls=1 0
+0 34
+cfl=(58)
+cfn=(58)
+calls=1 0
+0 0
+
+fl=(319)
+fn=(319)
+0 94
+
+fl=(290)
+fn=(290)
+1324 84
+cfl=(71)
+cfn=(71)
+calls=10 0
+0 1
+cfl=(69)
+cfn=(69)
+calls=10 0
+0 1
+cfl=(242)
+cfn=(242)
+calls=10 0
+0 4
+cfl=(230)
+cfn=(230)
+calls=10 0
+0 3
+
+fl=(20)
+fn=(20)
+188 93
+
+fl=(79)
+fn=(79)
+124 89
+
+fl=(52)
+fn=(52)
+205 89
+
+fl=(192)
+fn=(192)
+2974 88
+
+fl=(328)
+fn=(328)
+141 87
+
+fl=(332)
+fn=(332)
+29 84
+
+fl=(237)
+fn=(237)
+1389 84
+
+fl=(370)
+fn=(370)
+1037 77
+
+fl=(17)
+fn=(17)
+0 75
+
+fl=(293)
+fn=(293)
+2172 72
+
+fl=(147)
+fn=(147)
+0 72
+
+fl=(46)
+fn=(46)
+763 68
+
+fl=(378)
+fn=(378)
+2224 54
+cfl=(8)
+cfn=(8)
+calls=132 0
+0 12
+
+fl=(308)
+fn=(308)
+0 64
+
+fl=(86)
+fn=(86)
+0 63
+
+fl=(11)
+fn=(11)
+471 40
+cfl=(12)
+cfn=(12)
+calls=21 0
+0 18
+
+fl=(235)
+fn=(235)
+133 51
+
+fl=(66)
+fn=(66)
+665 9
+cfl=(72)
+cfn=(72)
+calls=1 0
+0 23
+cfl=(63)
+cfn=(63)
+calls=1 0
+0 1
+cfl=(71)
+cfn=(71)
+calls=2 0
+0 0
+cfl=(68)
+cfn=(68)
+calls=1 0
+0 8
+cfl=(67)
+cfn=(67)
+calls=3 0
+0 9
+cfl=(1)
+cfn=(1)
+calls=1 0
+0 0
+
+fl=(291)
+fn=(291)
+502 49
+
+fl=(311)
+fn=(311)
+0 48
+
+fl=(323)
+fn=(323)
+2268 48
+
+fl=(367)
+fn=(367)
+340 46
+
+fl=(234)
+fn=(234)
+1207 26
+cfl=(16)
+cfn=(16)
+calls=30 0
+0 13
+cfl=(1)
+cfn=(1)
+calls=30 0
+0 5
+
+fl=(59)
+fn=(59)
+168 10
+cfl=(63)
+cfn=(63)
+calls=16 0
+0 8
+cfl=(1)
+cfn=(1)
+calls=6 0
+0 2
+cfl=(60)
+cfn=(60)
+calls=3 0
+0 23
+
+fl=(299)
+fn=(299)
+0 42
+
+fl=(231)
+fn=(231)
+153 41
+
+fl=(47)
+fn=(47)
+766 41
+
+fl=(281)
+fn=(281)
+118 40
+
+fl=(286)
+fn=(286)
+1881 12
+cfl=(287)
+cfn=(287)
+calls=10 0
+0 28
+
+fl=(228)
+fn=(228)
+77 39
+
+fl=(307)
+fn=(307)
+0 39
+
+fl=(95)
+fn=(95)
+769 37
+
+fl=(287)
+fn=(287)
+53 14
+cfl=(288)
+cfn=(288)
+calls=10 0
+0 8
+cfl=(41)
+cfn=(41)
+calls=10 0
+0 5
+
+fl=(304)
+fn=(304)
+26 20
+cfl=(41)
+cfn=(41)
+calls=20 0
+0 6
+
+fl=(72)
+fn=(72)
+1360 7
+cfl=(78)
+cfn=(78)
+calls=1 0
+0 2
+cfl=(74)
+cfn=(74)
+calls=3 0
+0 4
+cfl=(77)
+cfn=(77)
+calls=3 0
+0 0
+cfl=(1)
+cfn=(1)
+calls=1 0
+0 0
+cfl=(73)
+cfn=(73)
+calls=1 0
+0 10
+
+fl=(60)
+fn=(60)
+159 7
+cfl=(61)
+cfn=(61)
+calls=1 0
+0 16
+cfl=(1)
+cfn=(1)
+calls=3 0
+0 0
+
+fl=(197)
+fn=(197)
+0 20
+
+fl=(88)
+fn=(88)
+406 18
+cfl=(90)
+cfn=(90)
+calls=1 0
+0 0
+cfl=(89)
+cfn=(89)
+calls=1 0
+0 2
+
+fl=(372)
+fn=(372)
+0 18
+
+fl=(61)
+fn=(61)
+852 3
+cfl=(62)
+cfn=(62)
+calls=1 0
+0 13
+cfl=(1)
+cfn=(1)
+calls=1 0
+0 0
+
+fl=(292)
+fn=(292)
+526 14
+
+fl=(315)
+fn=(315)
+0 14
+
+fl=(62)
+fn=(62)
+0 13
+
+fl=(202)
+fn=(202)
+16 12
+
+fl=(74)
+fn=(74)
+1304 6
+cfl=(75)
+cfn=(75)
+calls=7 0
+0 5
+
+fl=(73)
+fn=(73)
+1265 3
+cfl=(74)
+cfn=(74)
+calls=4 0
+0 7
+
+fl=(316)
+fn=(316)
+139 10
+
+fl=(63)
+fn=(63)
+902 5
+cfl=(1)
+cfn=(1)
+calls=17 0
+0 4
+
+fl=(318)
+fn=(318)
+0 9
+
+fl=(67)
+fn=(67)
+701 0
+cfl=(59)
+cfn=(59)
+calls=2 0
+0 9
+
+fl=(373)
+fn=(373)
+457 8
+
+fl=(68)
+fn=(68)
+320 5
+cfl=(70)
+cfn=(70)
+calls=1 0
+0 3
+cfl=(69)
+cfn=(69)
+calls=2 0
+0 0
+cfl=(1)
+cfn=(1)
+calls=2 0
+0 0
+
+fl=(288)
+fn=(288)
+0 8
+
+fl=(303)
+fn=(303)
+0 7
+
+fl=(75)
+fn=(75)
+1252 4
+cfl=(34)
+cfn=(34)
+calls=4 0
+0 0
+cfl=(76)
+cfn=(76)
+calls=7 0
+0 1
+
+fl=(87)
+fn=(87)
+0 4
+
+fl=(70)
+fn=(70)
+306 2
+cfl=(71)
+cfn=(71)
+calls=2 0
+0 0
+cfl=(64)
+cfn=(64)
+calls=1 0
+0 1
+
+fl=(285)
+fn=(285)
+1877 2
+
+fl=(289)
+fn=(289)
+1320 2
+
+fl=(190)
+fn=(190)
+557 2
+
+fl=(89)
+fn=(89)
+41 2
+
+fl=(64)
+fn=(64)
+911 2
+cfl=(65)
+cfn=(65)
+calls=2 0
+0 0
+
+fl=(78)
+fn=(78)
+251 2
+cfl=(41)
+cfn=(41)
+calls=1 0
+0 0
+cfl=(16)
+cfn=(16)
+calls=1 0
+0 0
+cfl=(1)
+cfn=(1)
+calls=3 0
+0 0
+
+fl=(76)
+fn=(76)
+0 1
+
+fl=(77)
+fn=(77)
+1365 0
+
+fl=(58)
+fn=(58)
+465 0
+
+fl=(65)
+fn=(65)
+0 0
+
+fl=(90)
+fn=(90)
+0 0

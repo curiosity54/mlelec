@@ -629,7 +629,7 @@ class LinearModelPeriodic(nn.Module):
                 if k["L"] == 0 and set_bias:
                     bias = True
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-                nsamples, _, _ = block.values.shape
+                nsamples, ncomp, _ = block.values.shape
 
                 assert np.all(block.samples.values == feat.samples.values[:, :6]), (k, block.samples.values.shape, feat.samples.values.shape)
 
