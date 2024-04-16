@@ -13,6 +13,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
                    dataset: PySCFPeriodicDataset,
                    cg: Optional[ClebschGordanReal] = None,
                    kpts: Union[List, torch.Tensor] =  [[0.,0.,0.]],
+                   norm = None,
                    desired_ifr = None):
                    
     """L2 loss function for k-space matrices computed at given 'kpts' 
@@ -60,7 +61,9 @@ def L2_kspace_loss(pred: Union[TensorMap],
         for ifr in range(len(target)):
             pred_H = torch.stack(list(pred_real[ifr].values()))
             T = torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype = np.float64)).to(pred_H)
-            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr], norm = 1/np.sqrt(kpts[ifr].shape[0])) #1/np.sqrt(T.shape[0]))
+            if norm is None:
+                norm = 1/np.sqrt(kpts[ifr].shape[0])
+            pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr], norm = norm) #1/np.sqrt(T.shape[0]))
 
             # assert pred_kspace.shape == target_kspace[ifr].shape
             loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr]))

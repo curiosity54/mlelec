@@ -819,7 +819,7 @@ class PySCFPeriodicDataset(Dataset):
             self.overlap_realspace, self._overlap_realspace_negative_translations = (self.compute_matrices_realspace(self.overlap_kspace))
 
     def set_kpts(self):
-        self.kpts_rel = [c.make_kpts(k) for c, k in zip(self.cells, self.kmesh)]
+        self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
         self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
     
     def compute_translation_counter(self, mic = True):
