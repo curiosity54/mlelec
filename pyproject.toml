@@ -8,16 +8,19 @@ readme = "README.md"
 # license = TODO
 description = "TODO"
 
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 dependencies = [
-     "pyscf >= 2.3.0",
-     "metatensor",
-     "rascaline@git+https://github.com/Luthaf/rascaline.git",
-     "wigners",
-     "torch",
-     "scikit-learn",
-     "numpy",
-     "hickle",
+    "pyscf >= 2.3.0",
+    "metatensor-learn",
+    "metatensor-operations",
+    "rascaline@git+https://github.com/Luthaf/rascaline.git@5ac2ee9e6b45f31ba608c02d6d8dd7d82b2009a9",
+    "wigners",
+    "torch",
+    "scikit-learn",
+    "numpy",
+    "hickle",
+    "tqdm",
+    "pyscfad@git+https://github.com/fishjojo/pyscfad.git@d9793a45314270daa00f9b3cd4e46f03f620993f"
 ]
 
 keywords = [] # TODO
