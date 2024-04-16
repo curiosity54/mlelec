@@ -7,7 +7,7 @@ from enum import Enum
 from ase.io import read
 import hickle
 from mlelec.targets import ModelTargets
-from metatensor import TensorMap, Labels
+from metatensor import TensorMap, Labels, TensorBlock
 import metatensor.operations as operations
 import numpy as np
 import os
@@ -16,6 +16,7 @@ import warnings
 import torch.utils.data as data
 import copy
 from collections import defaultdict
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
 
 
 # Dataset class  - to load and pass around structures, targets and
@@ -228,6 +229,8 @@ class MLDataset(Dataset):
             device=device,
             **kwargs,
         )
+        #assign blocks back to the original molecule data in case we overwrite/further refine the targets here (by matching with feats)
+        self.molecule_data.target_blocks = copy.deepcopy(self.target.blocks)
 
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
@@ -344,6 +347,26 @@ class MLDataset(Dataset):
         self.feat_train = self._get_subset(self.features, self.train_idx)
         self.feat_val = self._get_subset(self.features, self.val_idx)
         self.feat_test = self._get_subset(self.features, self.test_idx)
+        self._match_feature_and_target_samples()
+
+    def _match_feature_and_target_samples(self):
+        new_blocks = []
+        for k, target_block in self.molecule_data.target_blocks.items():
+            feat_block = map_targetkeys_to_featkeys(self.features, k)
+            intersection, _, idx = feat_block.samples.intersection_and_mapping(target_block.samples)
+            idx = np.where(idx != -1)
+
+            new_blocks.append(
+                TensorBlock(values = target_block.values[idx],
+                            samples = intersection,
+                            properties = target_block.properties,
+                            components = target_block.components)
+            )
+        
+        self.target._set_blocks(TensorMap(self.molecule_data.target_blocks.keys, new_blocks))
+        self.target_train = self._get_subset(self.target.blocks, self.train_idx)
+        self.target_val = self._get_subset(self.target.blocks, self.val_idx)
+        self.target_test = self._get_subset(self.target.blocks, self.test_idx)
 
     def _set_model_return(self, model_return: str = "blocks"):
         ## Helper function to set output in __get_item__ for model training
