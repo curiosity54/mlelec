@@ -70,8 +70,7 @@ def plot_hamiltonian(
 
     return fig, ax, mappable
 
-
-def plot_block_errors(target_blocks, pred_blocks, plot_loss=False):
+def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
     try:
         # coupled block
         x = [
@@ -79,13 +78,18 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False):
             for lbl in target_blocks.keys.values.tolist()
         ]
     except:
-        # uncouoled block
+        # uncoupled block
         x = [
             ",".join([str(lbl[i]) for i in [0, 2, 3, 5, 6]])
             for lbl in target_blocks.keys()
         ]
     fs = plt.rcParams["figure.figsize"]
-    fig, ax = plt.subplots(figsize=(fs[0] * 5, fs[1]))
+
+    return_ax = False
+    if ax is None:
+        return_ax = True
+        fig, ax = plt.subplots(figsize=(fs[0] * 3, fs[1]))
+
     ax_loss = ax.twinx()
     # s = (0,0,0)
     prediction_ = np.array([torch.linalg.norm(b.values).item() for b in pred_blocks])
@@ -112,16 +116,19 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False):
         )
         handles.append(pl)
         labels.append("Loss")
-        ax_loss.set_ylabel(r"$|H-\tilde{H}|^2$ \ a.u.")
+        ax_loss.set_ylabel(r"$|H-\tilde{H}|^2$  (a.u.)")
         ax_loss.set_yscale("log")
     ax.set_ylim(1e-7, 1000)
     ax.set_xticks(3.5 * np.arange(len(prediction_)) + 3.5 / 3 - 0.5)
     ax.set_xticklabels(x, rotation=90)
     ax.legend(handles, labels, loc="best")
-    ax.set_ylabel("|H| \ a.u.")
+    ax.set_ylabel("|H| (a.u.)")
 
     ax_loss.set_ylim(1e-10)
     ax.set_yscale("log")
+
+    if return_ax:
+        return fig, ax, ax_loss
 
 
 from mlelec.data.pyscf_calculator import translation_vectors_for_kmesh
