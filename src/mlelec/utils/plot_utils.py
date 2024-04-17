@@ -277,7 +277,8 @@ def plot_bands_frame_(
     y_max=2 * Hartree,
     ax=None,
     color="blue",
-    ls="-",
+    ls = "-",
+    lw = 1,
     marker=None,
     factor = 1,
     ):
@@ -342,7 +343,7 @@ def plot_bands_frame_(
     bandplot = []
     for n in range(nbands):
         pl, = ax.plot(
-            xcoords, [factor * e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
+            xcoords, [factor * e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker, lw = lw,
         )
         bandplot.append(pl)
 

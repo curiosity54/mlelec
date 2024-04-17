@@ -2,6 +2,7 @@ import numpy as np
 import warnings
 from scipy.fft import fftn, ifftn
 from torch.fft import fftn as torch_fftn, ifftn as torch_ifftn
+from ase.units import Bohr
 
 
 def scidx_from_unitcell(frame, j=0, T=[0, 0, 0], kmesh=None):
@@ -138,8 +139,26 @@ from mlelec.utils.twocenter_utils import (
 )
 import torch
 
+def inverse_bloch_sum(dataset, matrix, A, cutoff):
+    dimension = dataset.dimension
+    T_list = np.linalg.solve(dataset.cells[A].lattice_vectors().T, dataset.cells[A].get_lattice_Ls(rcut = cutoff/Bohr, dimension = dimension).T).T
+    assert np.linalg.norm(T_list - np.round(T_list)) < 1e-9, np.linalg.norm(Ts - np.round(Ts))
+    Ts = torch.from_numpy(np.round(T_list))
+    k_list = torch.from_numpy(dataset.kpts_rel[A])
+    if isinstance(matrix, np.ndarray):
+        matrix = torch.from_numpy(matrix)
+    else:
+        assert isinstance(matrix, torch.Tensor), f"Matrix must be np.ndarray or torch.Tensor, but it's {type(matrix)}"
+    HT = fourier_transform(matrix, T_list = Ts, k = k_list, norm = 1)
 
-def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = True, cutoff = None, target='fock'):
+    T_list = np.int32(np.round(T_list))
+    H_T = {}
+    for T, H in zip(T_list, HT):
+        assert torch.norm(H - H.real) < 1e-10
+        H_T[tuple(T)] = H.real
+    return H_T
+
+def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -182,34 +201,48 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
         property_names,
     )
 
+    if cutoff is None:
+        cutoff_was_none = True
+    else:
+        cutoff_was_none = False
+
     from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
-    if target.lower() == "fock":
-        matrices = dataset.fock_realspace
-    elif target.lower() == "overlap":
-        matrices = dataset.overlap_realspace
-    else:
-        raise ValueError("target must be either 'fock' or 'overlap'")
+    # if target.lower() == "fock":
+    #     matrices = inverse_bloch_sum(dataset.fock_kspace, cutoff)
+    # elif target.lower() == "overlap":
+    #     matrices = inverse_bloch_sum(dataset.overlap_kspace, cutoff)
+    # else:
+    #     raise ValueError("target must be either 'fock' or 'overlap'")
     # for T in dataset.desired_shifts: # Loop over translations given in input
 
-    for A in range(len(dataset.structures)):  # Loop over frames
+    for A, frame in enumerate(dataset.structures):  # Loop over frames
 
-        frame = dataset.structures[A]
+        if cutoff_was_none:
+            cutoff = dataset.cells[A].rcut * Bohr
+            warnings.warn('Automatic choice of the cutoff for structure {A}. rcut = {rcut:.2f} Angstrom')
 
-        for T in matrices[A]:  # Loop over the actual translations (in MIC) which label dataset.fock_realspace
+        if target.lower() == "fock":
+            matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+        elif target.lower() == "overlap":
+            matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+        else:
+            raise ValueError("target must be either 'fock' or 'overlap'")
 
-            matrixT = matrices[A][T]
+        for T in matrices:
 
-            # Take the H given in input and labeled by the same T
-            matrixmT = negative_shift_matrices[A][T]
+            mT = tuple(-t for t in T)
+            assert mT in matrices, f"{mT} not in the real space matrix keys"
 
+            matrixT = matrices[T]
+            matrixmT = matrices[mT]
             if isinstance(matrixT, np.ndarray):
                 matrixT = torch.from_numpy(matrixT).to(device)
                 matrixmT = torch.from_numpy(matrixmT).to(device)
             else:
                 matrixT = matrixT.to(device)
                 matrixmT = matrixmT.to(device)
-            assert np.isclose( torch.norm(matrixT - matrixmT.T).item(), 0.0), (T, torch.norm(matrixT), torch.norm(matrixmT), torch.norm(matrixT - matrixmT.T), matrixT.shape, matrixmT.shape)
+            assert np.isclose(torch.norm(matrixT - matrixmT.T).item(), 0.0), f"Failed to check H({T}) = H({mT})^\dagger"
 
             i_start = 0
             for i, ai in enumerate(frame.numbers):
@@ -218,8 +251,7 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
 
                 for j, aj in enumerate(frame.numbers):
 
-                    skip_pair = False
-
+                    # skip_pair = False # uncomment for MIC
                     if not all_pairs: # not all orbital pairs
                         if i > j and ai == aj: # skip block type 1 if i>j 
                             j_start += orbs_tot[aj]
@@ -229,16 +261,20 @@ def matrix_to_blocks(dataset, negative_shift_matrices, device=None, all_pairs = 
                             continue
                        
                     # Skip the pair if their distance exceeds the cutoff
-                    if cutoff is not None:
-                        for mic_T in dataset._translation_dict[A][T]: # FIXME allow for mic=False
-                            if dataset._translation_counter[A][mic_T][i, j]:
-                                ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(mic_T) + frame.positions[j] - frame.positions[i])
-                                if ij_distance > cutoff:
-                                    skip_pair = True
-                                break
-                    if skip_pair:
+                    ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(T) + frame.positions[j] - frame.positions[i])
+                    if ij_distance > cutoff:
                         j_start += orbs_tot[aj]
                         continue
+                    # if cutoff is not None: # uncomment for MIC
+                        # for mic_T in dataset._translation_dict[A][T]: # FIXME allow for mic=False # uncomment for MIC
+                        #     if dataset._translation_counter[A][mic_T][i, j]: # uncomment for MIC
+                        #         ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(mic_T) + frame.positions[j] - frame.positions[i]) # uncomment for MIC
+                        #         if ij_distance > cutoff: # uncomment for MIC
+                        #             skip_pair = True # uncomment for MIC
+                        #         break # uncomment for MIC
+                    # if skip_pair: # uncomment for MIC
+                        # j_start += orbs_tot[aj] # uncomment for MIC
+                        # continue # uncomment for MIC
                         
                     orbs_j = orbs_mult[aj]
 
@@ -668,11 +704,33 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = N
         return reconstructed_matrices_plus, reconstructed_matrices_minus
     return reconstructed_matrices_plus
 
-def fourier_transform(H_k, kpts, T):
+# def fourier_transform(H_k, kpts, T):
+#     '''
+#     Compute the Fourier Transform
+#     '''    
+#     return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki.cpu() for ki, H_ki in zip(kpts, H_k)], axis = 0)
+
+def fourier_transform(H_k, T_list = None, k = None, phase = None, norm = None):
     '''
-    Compute the Fourier Transform
+    Compute the Fourier Transform of a k-space tensor in a (list of) T lattice vectors
     '''    
-    return 1/np.sqrt(np.shape(kpts)[0])*np.sum([np.exp(-2j*np.pi * np.dot(ki, T)) * H_ki.cpu() for ki, H_ki in zip(kpts, H_k)], axis = 0)
+    if isinstance(H_k, np.ndarray):
+        H_k = torch.from_numpy(H_k)
+    
+    if isinstance(H_k, torch.Tensor):
+        # H_T is a torch tensor
+        # also k must be a tensor on the same device as T
+        # k = torch.tensor(k).to(T_list.device)
+        if phase is None:
+            assert T_list is not None and k is not None, "T_list and k must be provided when phase is None"
+            phase = torch.exp(-2j * np.pi * torch.tensordot(k, T_list, dims = ([-1], [-1])))
+            if len(phase.shape) == 1:
+                phase = phase.reshape(1, -1)
+        if norm is None:
+            norm = 1 / np.sqrt(phase.shape[0])
+        return norm*torch.tensordot(H_k.to(phase), phase, dims = ([0], [0])).permute(2, 0, 1) # FIXME: the normalization is incorrect when there are less Ts than kpoints (e.g., when there is a cutoff in real space)
+    else:
+        raise ValueError("H_k must be np.ndarray or torch.Tensor")
     
 def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None, norm = None):
     '''

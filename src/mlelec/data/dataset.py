@@ -194,6 +194,7 @@ class MoleculeDataset(Dataset):
 
 
 class MLDataset(Dataset):
+    # TODO: add compatibility with PeriodicDataset
     def __init__(
         self,
         molecule_data: MoleculeDataset,
@@ -726,6 +727,10 @@ class PeriodicDataset(Dataset):
 
 
 class PySCFPeriodicDataset(Dataset):
+    # TODO: wrap with generic PeriodicDataset class (or lose PySCF in the class name)
+    '''
+    Class containing information about the quantum chemistry calculation and its results.
+    '''
     from mlelec.utils.pbc_utils import (
         fourier_transform,
         inverse_fourier_transform,
@@ -747,7 +752,9 @@ class PySCFPeriodicDataset(Dataset):
         device="cuda",
         orbs_name: str = "sto-3g",
         orbs: List = None,
+        dimension: int = 3
     ):
+    
         self.structures = frames
         self.frame_slice = frame_slice
         self.nstructs = len(frames)
@@ -767,6 +774,7 @@ class PySCFPeriodicDataset(Dataset):
         self.basis = orbs  # actual orbitals
         self.basis_name = orbs_name
         self.use_precomputed = use_precomputed
+        self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
 
@@ -784,45 +792,47 @@ class PySCFPeriodicDataset(Dataset):
             self.cells.append(cell)
         self.set_kpts()
 
-        # Assign/compute Hamiltonian and Overlap matrices
-        if fock_kspace is not None:
-            assert fock_realspace is None, "Only one between fock_realspace and fock_kspace must be provided."
+        # Input matrices. 
+        # If the input is in k-space, no real space counterpart is computed.
+        # If the input is in real space, the k-space counterpart is computed via Bloch sums.
+        # If both real space and k-space inputs are provided, their consistency is checked.
+
+        # Assign/compute Hamiltonian
+        if (fock_kspace is not None) and (fock_realspace is None):
             self.set_fock_kspace(fock_kspace)
-            self._translation_counter = self.compute_translation_counter()
-            self._translation_dict = self.compute_translation_dict()
-            self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
+            # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
+        elif (fock_kspace is None) and (fock_realspace is not None):
+            self.fock_realspace = self._set_matrices_realspace(fock_realspace)
+            self.fock_kspace = self.bloch_sum(fock_realspace)
+        elif (fock_kspace is None) and (fock_realspace is None):
+            raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
+        elif (fock_kspace is not None) and (fock_realspace is not None):
+            raise NotImplementedError("TBI: check consistency.")
         else:
-            assert fock_realspace is not None, "At least one between fock_realspace and fock_kspace must be provided."
-            self.fock_realspace, self._fock_realspace_negative_translations = self._set_matrices_realspace(fock_realspace)
-            self.fock_kspace = self.compute_matrices_kspace(fock_realspace)
-            self._translation_counter = self.compute_translation_counter(mic = False)
-            self._translation_dict = self.compute_translation_dict()
-
-        # if fock_realspace is None: # FIXME: either kspace or realspace input should be allowed
-        #     assert (self.fock_kspace is not None), "Either real space or reciprocal space Fock matrices must be provided."
-        #     self.fock_realspace, self._fock_realspace_negative_translations = self.compute_matrices_realspace(self.fock_kspace)
-        #     self.realspace_translations = [list(m.keys()) for m in self.fock_realspace]
-        # else:
-        #     warnings.warn("real space hamiltonian from input")
-        #     self.fock_realspace = self._set_matrices_realspace(fock_realspace)
-
-        if overlap_kspace is None:
-            if overlap_realspace is not None:
-                warnings.warn("real space overlap from input")
-                self.overlap_realspace, self._overlap_realspace_negative_translations = self._set_matrices_realspace(overlap_realspace)
-                self.overlap_kspace = self.compute_matrices_kspace(self.overlap_realspace)
-            else:
-                warnings.warn("No real space or kspace overlap set")
-        else:
-            assert (overlap_realspace is None), "At most one between overlap_realspace and overlap_kspace must be provided."
+            raise NotImplementedError("Weird condition not handled")
+        
+        # Assign/compute Overlap
+        if (overlap_kspace is not None) and (overlap_realspace is None):
             self.set_overlap_kspace(overlap_kspace)
-            self.overlap_realspace, self._overlap_realspace_negative_translations = (self.compute_matrices_realspace(self.overlap_kspace))
+            # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
+        elif (overlap_kspace is None) and (overlap_realspace is not None):
+            self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
+            self.overlap_kspace = self.bloch_sum(overlap_realspace)
+        elif (overlap_kspace is None) and (overlap_realspace is None):
+            warnings.warn("Overlap matrices not provided")
+            self.overlap_realspace = None
+            self.overlap_kspace = None
+        elif (overlap_kspace is not None) and (overlap_realspace is not None):
+            raise NotImplementedError("TBI: check consistency.")
+        else:
+            raise NotImplementedError("Weird condition not handled")
+
 
     def set_kpts(self):
         self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
         self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
     
-    def compute_translation_counter(self, mic = True):
+    def compute_translation_counter(self, mic = True): # TODO:remove
         from itertools import product
         from mlelec.utils.pbc_utils import get_T_from_pair
 
@@ -848,7 +858,7 @@ class PySCFPeriodicDataset(Dataset):
                         counter_T[ifr][mic_T][i, j] += 1
         return counter_T
 
-    def compute_translation_dict(self):
+    def compute_translation_dict(self): # TODO:remove
         T_dict = []
 
         for ifr, counter in enumerate(self._translation_counter):
@@ -921,6 +931,7 @@ class PySCFPeriodicDataset(Dataset):
         return _matrices_realspace, _matrices_realspace_neg
 
     def _set_matrices_kspace(self, matrices_kspace):
+        '''Returns a list of torch.Tensors from a list of np.ndarrays or torch.Tensors'''
         if isinstance(matrices_kspace, list):
             if isinstance(matrices_kspace[0], np.ndarray):
                 _matrices_kspace = [
@@ -962,113 +973,106 @@ class PySCFPeriodicDataset(Dataset):
         self.overlap_kspace = self._set_matrices_kspace(overlap_kspace)
 
     def compute_matrices_realspace(self, matrices_kspace):
-        from mlelec.utils.pbc_utils import fourier_transform
+        """From a list of matrices in kspace, compute a list of dictionaries labeled by real space translations"""
+        # When only kspace input is provided, the right moment to compute real space dummy targets is at the instantiation of (the analogue of) the MLDataset class.
+        # Here, only the genuine data given by the DFT code should be used 
+        raise NotImplementedError("This must happen when the targets are computed!")
 
-        H_T_plus = []
-        H_T_minus = []
+    # def compute_matrices_realspace_OLD(self, matrices_kspace):
+    #     from mlelec.utils.pbc_utils import fourier_transform
 
-        for ifr, (kmesh, H_k) in enumerate(zip(self.kmesh, matrices_kspace)):
+    #     H_T_plus = []
+    #     H_T_minus = []
 
-            H_T_plus.append({})
-            H_T_minus.append({})
+    #     for ifr, (kmesh, H_k) in enumerate(zip(self.kmesh, matrices_kspace)):
 
-            kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(kmesh))
-            natm = self.structures[ifr].get_global_number_of_atoms()
-            nao = self.cells[ifr].nao // natm  # FIXME: in general this is wrong
+    #         H_T_plus.append({})
+    #         H_T_minus.append({})
 
-            for T_dummy in self._translation_dict[ifr]:
+    #         kpts = self.cells[ifr].get_scaled_kpts(self.cells[ifr].make_kpts(kmesh))
+    #         natm = self.structures[ifr].get_global_number_of_atoms()
+    #         nao = self.cells[ifr].nao // natm  # FIXME: in general this is wrong
 
-                H_T_plus[ifr][T_dummy] = np.zeros(
-                    (natm * nao, natm * nao), dtype=np.complex128
-                )
-                H_T_minus[ifr][T_dummy] = np.zeros(
-                    (natm * nao, natm * nao), dtype=np.complex128
-                )
+    #         for T_dummy in self._translation_dict[ifr]:
 
-                for T in self._translation_dict[ifr][T_dummy]:
-                    pairs = np.where(self._translation_counter[ifr][T])
-                    for i, j in zip(*pairs):
+    #             H_T_plus[ifr][T_dummy] = np.zeros(
+    #                 (natm * nao, natm * nao), dtype=np.complex128
+    #             )
+    #             H_T_minus[ifr][T_dummy] = np.zeros(
+    #                 (natm * nao, natm * nao), dtype=np.complex128
+    #             )
 
-                        idx_i = slice(nao * i, nao * (i + 1))
-                        idx_j = slice(nao * j, nao * (j + 1))
+    #             for T in self._translation_dict[ifr][T_dummy]:
+    #                 pairs = np.where(self._translation_counter[ifr][T])
+    #                 for i, j in zip(*pairs):
 
-                        H_T_plus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
-                            H_k, kpts, T
-                        )[idx_i, idx_j]
-                        H_T_minus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
-                            H_k, kpts, -np.array(T)
-                        )[idx_i, idx_j]
+    #                     idx_i = slice(nao * i, nao * (i + 1))
+    #                     idx_j = slice(nao * j, nao * (j + 1))
 
-            for mic_T in H_T_plus[ifr]:
-                assert np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
-                H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
-                assert np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
-                H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+    #                     H_T_plus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
+    #                         H_k, kpts, T
+    #                     )[idx_i, idx_j]
+    #                     H_T_minus[ifr][T_dummy][idx_i, idx_j] = fourier_transform(
+    #                         H_k, kpts, -np.array(T)
+    #                     )[idx_i, idx_j]
 
-                # if np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real):
-                #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
-                # else:
-                #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T])
-                # if np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real):
-                #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
-                # else:
-                #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T])
+    #         for mic_T in H_T_plus[ifr]:
+    #             assert np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real), np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real)
+    #             H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
+    #             assert np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real), np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real)
+    #             H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+
+    #             # if np.allclose(H_T_plus[ifr][mic_T], H_T_plus[ifr][mic_T].real):
+    #             #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T].real)
+    #             # else:
+    #             #     H_T_plus[ifr][mic_T] = torch.from_numpy(H_T_plus[ifr][mic_T])
+    #             # if np.allclose(H_T_minus[ifr][mic_T], H_T_minus[ifr][mic_T].real):
+    #             #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T].real)
+    #             # else:
+    #             #     H_T_minus[ifr][mic_T] = torch.from_numpy(H_T_minus[ifr][mic_T])
 
 
 
-        return H_T_plus, H_T_minus
+    #     return H_T_plus, H_T_minus
 
-    def OLD_compute_matrices_kspace(self, matrices_realspace):
-        from mlelec.utils.pbc_utils import inverse_fourier_transform
-
-        matrices_kspace = []
-
-        if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
-            for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(
-                    self.cells[ifr].make_kpts(self.kmesh[ifr])
-                )
-                matrices_kspace.append([])
-                for k in kpts:
-                    matrices_kspace[ifr].append(
-                        inverse_fourier_transform(
-                            np.array(list(H.values())), np.array(list(H.keys())), k
-                        )
-                    )
-                matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
-        elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
-            for ifr, H in enumerate(matrices_realspace):
-                kpts = self.cells[ifr].get_scaled_kpts(
-                    self.cells[ifr].make_kpts(self.kmesh[ifr])
-                )
-                matrices_kspace.append([])
-                for k in kpts:
-                    matrices_kspace[ifr].append(
-                        inverse_fourier_transform(
-                            torch.stack(list(H.values())),
-                            torch.tensor(list(H.keys())),
-                            k
-                        )
-                    )
-                matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
-        return matrices_kspace
-
-    # def compute_matrices_kspace(self, matrices_realspace):
-    #     from mlelec.utils.pbc_utils import inverse_fourier_transform, inverse_fft
+    # def OLD_compute_matrices_kspace(self, matrices_realspace):
+    #     from mlelec.utils.pbc_utils import inverse_fourier_transform
 
     #     matrices_kspace = []
 
     #     if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
     #         for ifr, H in enumerate(matrices_realspace):
-    #             matrices_kspace.append(torch.from_numpy(inverse_fft(np.array(list(H.values())), self.kmesh[ifr])))
-                
+    #             kpts = self.cells[ifr].get_scaled_kpts(
+    #                 self.cells[ifr].make_kpts(self.kmesh[ifr])
+    #             )
+    #             matrices_kspace.append([])
+    #             for k in kpts:
+    #                 matrices_kspace[ifr].append(
+    #                     inverse_fourier_transform(
+    #                         np.array(list(H.values())), np.array(list(H.keys())), k
+    #                     )
+    #                 )
+    #             matrices_kspace[ifr] = torch.from_numpy(np.array(matrices_kspace[ifr]))
     #     elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
     #         for ifr, H in enumerate(matrices_realspace):
-    #             matrices_kspace.append(inverse_fft(torch.stack(list(H.values())), self.kmesh[ifr]))
-
+    #             kpts = self.cells[ifr].get_scaled_kpts(
+    #                 self.cells[ifr].make_kpts(self.kmesh[ifr])
+    #             )
+    #             matrices_kspace.append([])
+    #             for k in kpts:
+    #                 matrices_kspace[ifr].append(
+    #                     inverse_fourier_transform(
+    #                         torch.stack(list(H.values())),
+    #                         torch.tensor(list(H.keys())),
+    #                         k
+    #                     )
+    #                 )
+    #             matrices_kspace[ifr] = torch.stack(matrices_kspace[ifr])
     #     return matrices_kspace
 
-    def compute_matrices_kspace(self, matrices_realspace):
+    def bloch_sum(self, matrices_realspace):
+        # TODO: make sense of the 1/sqrt(N) factor multiplying the sum. Is it really necessary?
+        #       how do calculations with different kmesh compare with one another (same unit cell)
         from mlelec.utils.pbc_utils import inverse_fourier_transform
 
         matrices_kspace = []
@@ -1078,7 +1082,8 @@ class PySCFPeriodicDataset(Dataset):
                 H_T = torch.from_numpy(np.array(list(H.values())))
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
                 k = torch.from_numpy(self.kpts_rel[ifr])
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k))))
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k)))) # TODO: make sense of this norm.
+                                                                                                                         #       Does it have to go away?
                 
         elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
@@ -1092,11 +1097,7 @@ class PySCFPeriodicDataset(Dataset):
     def __len__(self):
         return self.nstructs
 
-
-
 # Tests
-
-
 def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-10):
     from mlelec.utils.pbc_utils import inverse_fourier_transform
 

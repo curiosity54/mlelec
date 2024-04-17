@@ -62,7 +62,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
             pred_H = torch.stack(list(pred_real[ifr].values()))
             T = torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype = np.float64)).to(pred_H)
             if norm is None:
-                norm = 1/np.sqrt(kpts[ifr].shape[0])
+                norm = 1/kpts[ifr].shape[0]
             pred_kspace = inverse_fourier_transform(pred_H, T_list = T, k = kpts[ifr], norm = norm) #1/np.sqrt(T.shape[0]))
 
             # assert pred_kspace.shape == target_kspace[ifr].shape
