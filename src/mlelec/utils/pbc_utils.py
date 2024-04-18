@@ -149,7 +149,8 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
         matrix = torch.from_numpy(matrix)
     else:
         assert isinstance(matrix, torch.Tensor), f"Matrix must be np.ndarray or torch.Tensor, but it's {type(matrix)}"
-    HT = fourier_transform(matrix, T_list = Ts, k = k_list, norm = 1)
+
+    HT = fourier_transform(matrix, T_list = Ts, k = k_list, norm = 1/k_list.shape[0])
 
     T_list = np.int32(np.round(T_list))
     H_T = {}

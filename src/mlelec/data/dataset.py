@@ -1082,15 +1082,14 @@ class PySCFPeriodicDataset(Dataset):
                 H_T = torch.from_numpy(np.array(list(H.values())))
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
                 k = torch.from_numpy(self.kpts_rel[ifr])
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k)))) # TODO: make sense of this norm.
-                                                                                                                         #       Does it have to go away?
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
                 
         elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
                 H_T = torch.stack(list(H.values()))
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
                 k = torch.from_numpy(self.kpts_rel[ifr])
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1/np.sqrt(len(k))))
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
 
         return matrices_kspace
 

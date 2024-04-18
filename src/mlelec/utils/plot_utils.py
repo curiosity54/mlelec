@@ -328,6 +328,7 @@ def plot_bands_frame_(
         vb_k = en[pyscf_cell.nelectron // 2 - 1]
         if vb_k > vbmax:
             vbmax = vb_k
+    print(vbmax)
     e_nk = [en - vbmax for en in e_nk]
     emin = y_min
     emax = y_max
