@@ -6,7 +6,7 @@ import torch
 import ase
 import numpy as np
 from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
-from mlelec.utils.symmetry import ClebschGordanReal
+from mlelec.utils.symmetry import ClebschGordanReal, _reflect_hermitian
 import warnings
 
 SQRT_2 = 2 ** (0.5)
@@ -1207,7 +1207,7 @@ def rotate_matrix(
 
     coupled_blocks = _to_coupled_basis(_to_blocks(matrix, frame, orbitals))
     wd_real = {}
-    for l in set(bc.keys["L"]):
+    for l in set(bc.keys["L"]): # FIXME: what is bc?
         wd_real[l] = (
             _wigner_d_real(l, *rotation_angles)
             .type(torch.float)
