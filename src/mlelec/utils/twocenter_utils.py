@@ -857,7 +857,7 @@ def _fill(
                     matrix[jslice, islice] += values_2norm
 
 
-def _to_coupled_basis(
+def _to_coupled_basis_OLD(
     blocks: Union[torch.tensor, TensorMap],
     orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
@@ -895,6 +895,91 @@ def _to_coupled_basis(
                 "L",
             ],
             ["structure", "center", "neighbor"],
+            [["M"]],
+            ["value"],
+        )
+    for idx, block in blocks.items():
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
+
+        # Moves the components at the end as cg.couple assumes so
+        decoupled = torch.moveaxis(block.values, -1, -2).reshape(
+            (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1)
+        )
+
+        # selects the (only) key in the coupled dictionary (l1 and l2
+        # that contribute to the coupled terms L, with L going from
+        # |l1 - l2| up to |l1 + l2|
+        coupled = cg.couple(decoupled)[(li, lj)]
+        # if ai == aj == 1 and block_type == -1:
+        #     print(idx, coupled)  # decoupled)
+
+        for L in coupled:
+            block_idx = tuple(idx) + (L,)
+            # skip blocks that are zero because of symmetry
+            if ai == aj and ni == nj and li == lj:
+                parity = (-1) ** (li + lj + L)
+                if (
+                    (parity == -1 and block_type in (0, 1))
+                    or (parity == 1 and block_type == -1)
+                ) and not skip_symmetry:
+                    continue
+
+            new_block = block_builder.add_block(
+                key=block_idx,
+                properties=np.asarray([[0]], dtype=np.int32),
+                components=[_components_idx(L).reshape(-1, 1)],
+            )
+
+            new_block.add_samples(
+                labels=np.asarray(block.samples.values).reshape(
+                    block.samples.values.shape[0], -1
+                ),
+                data=torch.moveaxis(coupled[L], -1, -2),
+            )
+
+    return block_builder.build()
+
+def _to_coupled_basis(
+    blocks: Union[torch.tensor, TensorMap],
+    orbitals: Optional[dict] = None,
+    cg: Optional[ClebschGordanReal] = None,
+    device: str = "cpu",
+    skip_symmetry: bool = False,
+    translations: bool = False,
+):
+    if torch.is_tensor(blocks):
+        print("Converting matrix to blocks before coupling")
+        assert orbitals is not None, "Need orbitals to convert matrix to blocks"
+        blocks = _to_blocks(blocks, orbitals)
+    if cg is None:
+        lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
+        cg = ClebschGordanReal(lmax, device=device)
+    if not translations:
+        block_builder = TensorBuilder(
+            ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+            ["structure", "center", "neighbor"],
+            [["M"]],
+            ["value"],
+        )
+    else:
+        block_builder = TensorBuilder(
+            [
+                "block_type",
+                "species_i",
+                "n_i",
+                "l_i",
+                "species_j",
+                "n_j",
+                "l_j",
+                "L",
+            ],
+            ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
             [["M"]],
             ["value"],
         )

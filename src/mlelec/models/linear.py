@@ -484,20 +484,20 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             if True:
-                # if blockval > 1e-10:
+            # if blockval > 1e-10:
                 sample_names = block.samples.names
+                keyf = map_targetkeys_to_featkeys(self.feats, k, return_key=True)
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-
                 featnorm = torch.linalg.norm(feat.values)
                 # nsamples, ncomp, nprops = block.values.shape
                 nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
                 if not self.train_kspace:
                     nsamples, ncomp, nprops = block.values.shape
-                    assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+                    assert np.all(block.samples.values == feat.samples.values[:, :block.samples.values.shape[1]]), (
                     k,
-                    block.samples.values.shape,
-                    feat.samples.values.shape,
+                    block.samples.values,
+                    feat.samples.values,
                 )
                 pred = self.blockmodels[str(tuple(k))](feat.values)
                 # print(pred.shape, nsamples)
@@ -523,7 +523,7 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             if True:
-                # if blockval > 1e-10:
+            # if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
 
@@ -625,7 +625,8 @@ class LinearModelPeriodic(nn.Module):
         for k, block in self.target_blocks.items():
             blockval = torch.linalg.norm(block.values)
             bias = False
-            if True:  # blockval > 1e-10:
+            # if blockval > 1e-10:
+            if True:
                 if k["L"] == 0 and set_bias:
                     bias = True
                 feat = map_targetkeys_to_featkeys(self.feats, k)

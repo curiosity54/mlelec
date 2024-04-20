@@ -373,13 +373,7 @@ def twocenter_features_periodic_NH(
     blocks = []
 
     for k, b in single_center.items():
-        keys.append(
-            tuple(k)
-            + (
-                k["species_center"],
-                0,
-            )
-        )
+        keys.append(tuple(k) + (k["species_center"], 0,))
         # `Try to handle the case of no computed features
         if len(list(b.samples.values)) == 0:
             samples_array = b.samples
@@ -404,16 +398,18 @@ def twocenter_features_periodic_NH(
             )
         )
 
+    # TODO: why two loops?
     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
     for (k, b) in pair.items():
         if k["species_center"] == k["species_neighbor"]:  # self translared pairs
-            # idx = []
+            
             idx = np.where(
                 (b.samples["center"] == b.samples["neighbor"])
                 & (b.samples["cell_shift_a"] != 0)
                 & (b.samples["cell_shift_b"] != 0)
                 & (b.samples["cell_shift_c"] != 0)
             )[0]
+
             if len(idx) != 0:
                 # SHOULD BE ZERO
                 raise ValueError("btype0 should be zero for pair")
@@ -618,13 +614,13 @@ def twocenter_hermitian_features(
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
-    keys = np.pad(keys, ((0, 0), (0, 6)))
+    keys = np.pad(keys, ((0, 0), (0, 3)))
     return TensorMap(
         keys=Labels(
             names=pair.keys.names
             + ["block_type"]
-            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"]
-            + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
+            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+            # + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,

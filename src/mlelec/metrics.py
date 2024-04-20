@@ -87,10 +87,16 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
         losses = []
         for key, block in pred.items():
             targetblock = target.block(key)
-            assert (
-                block.samples == targetblock.samples
-            ), "Prediction and target must have the same samples"
-            losses.append(torch.sum((block.values - targetblock.values) ** 2))
+            blockval = torch.linalg.norm(targetblock.values)
+            # if blockval > 1e-10:
+            if True:
+                assert (
+                    block.samples == targetblock.samples
+                ), "Prediction and target must have the same samples"
+                losses.append(torch.sum((block.values - targetblock.values) ** 2))
+            else:
+                losses.append(torch.tensor(0.0, requires_grad = True).to(block.values))
+
         if loss_per_block:
             return losses, sum(losses)
         else:
