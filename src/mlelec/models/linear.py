@@ -56,22 +56,26 @@ class NormLayer(nn.Module):
 
 
 class EquivariantNonLinearity(nn.Module):
-    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, device=None):
+    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, device=None):
         super().__init__()
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
         if device is None:
-            self.device = 'cpu'
-        else:
-            self.device = device
+            device = 'cpu'
+        self.device = device
+        self.norm = False
+        if norm:
+            self.norm=True
 
     def forward(self, x):
         assert len(x.shape) == 3
-        _norm = nn.LayerNorm(x.shape[-1], device = self.device)
-        # norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
-            # create an invariant
+        # create an invariant
         x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
-        x_inv = _norm(self.nonlinearity(x_inv))
+        x_inv = self.nonlinearity(x_inv)
+        if self.norm:
+            _norm = nn.LayerNorm(x.shape[-1], device = self.device)
+        # norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
+            x_inv = _norm(x_inv)
         # should probably norm x here
         out = torch.einsum("if, imf->imf", x_inv, x)
         # normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
@@ -120,12 +124,23 @@ class MLP(nn.Module):
         norm: bool = False,
         bias: bool = False,
         device=None,
-        apply_layer_norm = False, # FIXME: to be removed when moving to mts modulemaps
+        apply_layer_norm = False, 
         activation_with_linear = False,
     ):
         super().__init__()
         if nlayers <=1:
-            self.mlp = nn.Linear(nin, nout, bias=bias)
+            if activation is not None:
+                # probably a bad idea
+                self.mlp = []
+                self.mlp.append(nn.Linear(nin, nout, bias=bias))
+                if isinstance(activation, str):
+                    activation = getattr(nn, activation)()
+                self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
+                # self.mlp.append(nn.Linear(nin, nout, bias=bias))
+                self.mlp = nn.Sequential(*self.mlp)
+            else:
+                self.mlp = nn.Linear(nin, nout, bias=bias)
+            
             self.mlp.to(device)
             return
 
@@ -148,9 +163,9 @@ class MLP(nn.Module):
                 if isinstance(activation, str):
                     activation = getattr(nn, activation)()
                     if activation_with_linear:
-                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device), nn.Linear(nhidden, nhidden, bias=bias)]
+                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm), nn.Linear(nhidden, nhidden, bias=bias)]
                     else: 
-                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device)]
+                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm)]
                 self.mlp.extend(mid_layer)
                 
             else: 
@@ -158,6 +173,11 @@ class MLP(nn.Module):
             
             # if norm:
             #     self.mlp.append(norm_layer)
+        if activation is not None:
+            if isinstance(activation, str):
+                activation = getattr(nn, activation)()
+                self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
+                
         self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
@@ -445,6 +465,7 @@ class LinearModelPeriodic(nn.Module):
         orbitals,
         device=None,
         train_kspace = False,
+        apply_norm = False,
         **kwargs,
     ):
         super().__init__()
@@ -453,6 +474,7 @@ class LinearModelPeriodic(nn.Module):
         self.frames = frames
         self.orbitals = orbitals
         self.train_kspace = train_kspace
+        self.apply_norm = apply_norm
         # self.cell_shifts = cell_shifts
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -481,7 +503,7 @@ class LinearModelPeriodic(nn.Module):
                     bias=bias,
                     activation=kwargs.get("activation", None),
                     activation_with_linear=kwargs.get("activation_with_linear", False),
-                    apply_layer_norm=True,
+                    apply_layer_norm=self.apply_norm,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
         self.model.to(self.device)
