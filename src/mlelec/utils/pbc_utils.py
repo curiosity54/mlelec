@@ -414,13 +414,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
 
     from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
-    # if target.lower() == "fock":
-    #     matrices = inverse_bloch_sum(dataset.fock_kspace, cutoff)
-    # elif target.lower() == "overlap":
-    #     matrices = inverse_bloch_sum(dataset.overlap_kspace, cutoff)
-    # else:
-    #     raise ValueError("target must be either 'fock' or 'overlap'")
-    # for T in dataset.desired_shifts: # Loop over translations given in input
 
     for A, frame in enumerate(dataset.structures):  # Loop over frames
 
@@ -458,8 +451,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                 # Loop over the all the atoms in the structure, by atomic number
                 for j, aj in enumerate(frame.numbers):
 
-                    # skip_pair = False # uncomment for MIC
-
                     # Handle the case only the upper triangle is learnt
                     if not all_pairs: # not all orbital pairs
                         if i > j and ai == aj: # skip block type 1 if i>j 
@@ -474,28 +465,20 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                     if ij_distance > cutoff:
                         j_start += orbs_tot[aj]
                         continue
-                    # if cutoff is not None: # uncomment for MIC
-                        # for mic_T in dataset._translation_dict[A][T]: # FIXME allow for mic=False # uncomment for MIC
-                        #     if dataset._translation_counter[A][mic_T][i, j]: # uncomment for MIC
-                        #         ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(mic_T) + frame.positions[j] - frame.positions[i]) # uncomment for MIC
-                        #         if ij_distance > cutoff: # uncomment for MIC
-                        #             skip_pair = True # uncomment for MIC
-                        #         break # uncomment for MIC
-                    # if skip_pair: # uncomment for MIC
-                        # j_start += orbs_tot[aj] # uncomment for MIC
-                        # continue # uncomment for MIC
                         
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
-                    if all_pairs:
-                        # n1l1n2l2 = np.concatenate(tuple(tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j))
-                        n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
-                        # print(n1l1n2l2)
-                    else:
-                        sorted_orbs = np.sort([(o1, o2) for o1, o2 in product(list(orbs_i.keys()), list(orbs_j.keys()))], axis=1)
-                        orbs, orbital_idx = np.unique(sorted_orbs, return_index = True, axis = 0)
-                        n1l1n2l2 = [tuple(o1) + tuple(o2) for o1, o2 in orbs]
+                    n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
+
+                    # if all_pairs:
+                    #     # n1l1n2l2 = np.concatenate(tuple(tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j))
+                    #     n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
+                    #     # print(n1l1n2l2)
+                    # else:
+                    #     sorted_orbs = np.sort([(o1, o2) for o1, o2 in product(list(orbs_i.keys()), list(orbs_j.keys()))], axis=1)
+                    #     orbs, orbital_idx = np.unique(sorted_orbs, return_index = True, axis = 0)
+                    #     n1l1n2l2 = [tuple(o1) + tuple(o2) for o1, o2 in orbs]
                         # print(n1l1n2l2)
 
                     # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
@@ -505,8 +488,8 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                     block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
-                        if not all_pairs:
-                            iorbital = orbital_idx[iorbital]
+                        # if not all_pairs:
+                        #     iorbital = orbital_idx[iorbital]
                         value = block_split[iorbital]
 
                         if i == j and np.linalg.norm(T) == 0:
@@ -551,7 +534,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                             # bminus = value_ji
                             bminus = (value - value_ji) * ISQRT_2
                             # print(i,j)
-                            print(iii,T,i,j)
                             block.add_samples(
                                 labels = [(A, i, j, *T)],
                                 data = bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
@@ -563,7 +545,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                             )
 
                         elif block_type == 0 or block_type == 2:
-                            print(iii,T,i,j)
                             block.add_samples(
                                 labels = [(A, i, j, *T)],
                                 data = value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
@@ -902,6 +883,20 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = N
                     #         i_start + joffset : i_start + joffset + j_end,
                     #         j_start + ioffset : j_start + ioffset + i_end,
                     #     ] -= values.T
+
+    # Fill what's left from symmetries
+    for A, matrix in enumerate(reconstructed_matrices_plus):
+        Ts = list(matrix.keys())
+        for T in Ts:
+            mT = tuple(-t for t in T)
+            if mT not in matrix:
+                reconstructed_matrices_plus[A][mT] = torch.clone(matrix[T].T)
+            else:
+                upper = torch.triu(matrix[T])
+                lower = torch.triu(reconstructed_matrices_plus[A][mT], diagonal = 1).T
+                matrix[T] = upper + lower
+                reconstructed_matrices_plus[A][mT] = (upper + lower).T
+            assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices_plus[A][mT].T, torch.zeros_like(matrix[T])))
 
     if return_negative:
         return reconstructed_matrices_plus, reconstructed_matrices_minus
