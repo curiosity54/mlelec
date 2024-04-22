@@ -23,8 +23,8 @@ def norm_over_components(x):
 def clamped_norm(x, clamp: float):
     # this potentially causes instability/nan's
     # return x.norm(p=2, dim=-1, keepdim=True).clamp(min=clamp)
-    x = x.swapaxes(1, 2)
-    return torch.einsum("ifm, mfi-> if", x, x.T) + 1e-7
+    # x = x.swapaxes(1, 2)
+    return torch.einsum("imf, imf-> if", x, x) + 1e-7
     # return torch.sum(x @ x.T + 1e-7)
 
 
@@ -60,44 +60,43 @@ class EquivariantNonLinearity(nn.Module):
         super().__init__()
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
+        if device is None:
+            self.device = 'cpu'
+        else:
+            self.device = device
 
     def forward(self, x):
         assert len(x.shape) == 3
-        x_inv = x.clone()
-        norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
-        if x.shape[1] > 1:
-            # create an inv
-            x_inv = torch.einsum("imf,imf->if", x_inv, x_inv)
-        silu = torch.nn.SiLU()
-        x_inv = silu(x_inv)
-        x_inv = x_inv.reshape(x.shape[0], x.shape[2])
+        _norm = nn.LayerNorm(x.shape[-1], device = self.device)
+        # norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
+            # create an invariant
+        x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
+        x_inv = _norm(self.nonlinearity(x_inv))
         # should probably norm x here
         out = torch.einsum("if, imf->imf", x_inv, x)
-        normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
-        out = out * norm / normout
+        # normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
+        # out = out * norm / normout
         return out
-        # return torch.einsum("if, imf->imf", x_inv, x)
 
 
-# def _norm_layer(x, nonlinearity: callable = None):
-#     """
-#     x: torch.tensor of shape (nstr, ncomponents, nfeatures)
+def _norm_layer(x, norm_clamp=2e-12,  nonlinearity: callable = None):
+    """
+    x: torch.tensor of shape (nstr, ncomponents, nfeatures)
 
-#     returns: torch.tensor of shape (nstr, nfeatures) i.e. compute norm of features
-#     """
-#     NORM_CLAMP = 2**-12
-#     norm = clamped_norm(x, NORM_CLAMP)
-#     group_norm = nn.GroupNorm(num_groups=1, num_channels=x.shape[-1])
-#     if nonlinearity is not None:
-#         # Transform the norms only
-#         norm = nonlinearity(group_norm(norm.squeeze(-1))).unsqueeze(-1)
+    returns: torch.tensor of shape (nstr, nfeatures) i.e. compute norm of features
+    """
+    norm = clamped_norm(x, norm_clamp)
+    group_norm = nn.GroupNorm(num_groups=1, num_channels=x.shape[-1])
+    if nonlinearity is not None:
+        # Transform the norms only
+        norm = nonlinearity(group_norm(norm.squeeze(-1))).unsqueeze(-1)
 
-#     # assert (
-#     #         len(x.shape) == 3
-#     #     ), "Input tensor must be of shape (nstr, ncomponents, nfeatures)"
-#     #     norm = torch.einsum("imq,imq->iq", x, x)
-#     # norm = torch.linalg.norm(_symm)
-#     return norm
+    # assert (
+    #         len(x.shape) == 3
+    #     ), "Input tensor must be of shape (nstr, ncomponents, nfeatures)"
+    #     norm = torch.einsum("imq,imq->iq", x, x)
+    # norm = torch.linalg.norm(_symm)
+    return norm
 
 
 class BlockModel(nn.Module):
@@ -122,9 +121,10 @@ class MLP(nn.Module):
         bias: bool = False,
         device=None,
         apply_layer_norm = False, # FIXME: to be removed when moving to mts modulemaps
+        activation_with_linear = False,
     ):
         super().__init__()
-        if nlayers <= 1:
+        if nlayers <=1:
             self.mlp = nn.Linear(nin, nout, bias=bias)
             self.mlp.to(device)
             return
@@ -144,11 +144,20 @@ class MLP(nn.Module):
             # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
             pass
         for _ in range(nlayers - 2):
-            self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
             if activation is not None:
-                self.mlp.append(activation)
-            if norm:
-                self.mlp.append(norm_layer)
+                if isinstance(activation, str):
+                    activation = getattr(nn, activation)()
+                    if activation_with_linear:
+                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device), nn.Linear(nhidden, nhidden, bias=bias)]
+                    else: 
+                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device)]
+                self.mlp.extend(mid_layer)
+                
+            else: 
+                self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
+            
+            # if norm:
+            #     self.mlp.append(norm_layer)
         self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
@@ -467,9 +476,11 @@ class LinearModelPeriodic(nn.Module):
                 self.blockmodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
                     nout=1,
-                    nhidden=kwargs.get("nhidden", 10),
+                    nhidden=kwargs.get("nhidden", 16),
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
+                    activation=kwargs.get("activation", None),
+                    activation_with_linear=kwargs.get("activation_with_linear", False),
                     apply_layer_norm=True,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
@@ -484,20 +495,20 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             if True:
-            # if blockval > 1e-10:
+                # if blockval > 1e-10:
                 sample_names = block.samples.names
-                keyf = map_targetkeys_to_featkeys(self.feats, k, return_key=True)
                 feat = map_targetkeys_to_featkeys(self.feats, k)
+
                 featnorm = torch.linalg.norm(feat.values)
                 # nsamples, ncomp, nprops = block.values.shape
                 nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
                 if not self.train_kspace:
                     nsamples, ncomp, nprops = block.values.shape
-                    assert np.all(block.samples.values == feat.samples.values[:, :block.samples.values.shape[1]]), (
+                    assert np.all(block.samples.values == feat.samples.values[:, :6]), (
                     k,
-                    block.samples.values,
-                    feat.samples.values,
+                    block.samples.values.shape,
+                    feat.samples.values.shape,
                 )
                 pred = self.blockmodels[str(tuple(k))](feat.values)
                 # print(pred.shape, nsamples)
@@ -523,7 +534,7 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             blockval = torch.linalg.norm(block.values)
             if True:
-            # if blockval > 1e-10:
+                # if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
 
@@ -625,8 +636,7 @@ class LinearModelPeriodic(nn.Module):
         for k, block in self.target_blocks.items():
             blockval = torch.linalg.norm(block.values)
             bias = False
-            # if blockval > 1e-10:
-            if True:
+            if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
                 feat = map_targetkeys_to_featkeys(self.feats, k)

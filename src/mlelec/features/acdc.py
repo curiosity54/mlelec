@@ -248,9 +248,8 @@ def pair_features(
                 y = sample['cell_shift_b']
                 z = sample['cell_shift_c']
 
-                if False: #[i, j, x, y, z] in negative_list: <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
+                if False: #[i, j, x, y, z] in negative_list: # <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
                     continue
-
                 else:
                     value_indices.append(isample)
                     sample_labels.append([ifr, i, j, x, y, z, 1])
