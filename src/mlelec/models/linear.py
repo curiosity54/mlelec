@@ -56,7 +56,7 @@ class NormLayer(nn.Module):
 
 
 class EquivariantNonLinearity(nn.Module):
-    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, device=None):
+    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, layersize = None, device=None):
         super().__init__()
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
@@ -66,18 +66,20 @@ class EquivariantNonLinearity(nn.Module):
         self.norm = False
         if norm:
             self.norm=True
-
+             
+        self.nn = [
+            nn.LayerNorm(layersize, device = self.device),
+            self.nonlinearity,
+            nn.LayerNorm(layersize, device = self.device)
+        ]
+        self.nn = nn.Sequential(*self.nn)
+        
     def forward(self, x):
         assert len(x.shape) == 3
         # create an invariant
         x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
-        x_inv = self.nonlinearity(x_inv)
-        if self.norm:
-            _norm = nn.LayerNorm(x.shape[-1], device = self.device)
-        # norm = torch.sqrt(torch.sum(x_inv**2) + self.epsilon)
-            x_inv = _norm(x_inv)
-        # should probably norm x here
-        out = torch.einsum("if, imf->imf", x_inv, x)
+        x_inv = self.nn(x_inv)
+        out = torch.einsum("if, imf->imf", x_inv, x) #/norm
         # normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
         # out = out * norm / normout
         return out
@@ -134,7 +136,10 @@ class MLP(nn.Module):
                 self.mlp = []
                 self.mlp.append(nn.Linear(nin, nout, bias=bias))
                 if isinstance(activation, str):
-                    activation = getattr(nn, activation)()
+                    if activation.lower() == 'linear':
+                        activation = lambda x: x
+                    else:
+                        activation = getattr(nn, activation)()
                 self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
                 # self.mlp.append(nn.Linear(nin, nout, bias=bias))
                 self.mlp = nn.Sequential(*self.mlp)
@@ -144,28 +149,35 @@ class MLP(nn.Module):
             self.mlp.to(device)
             return
 
-        if apply_layer_norm:
-            self.mlp = [
-                # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
-                # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
-                nn.Linear(nin, nhidden, bias=bias),
-            ]
-        else:
-            self.mlp = [
+        # if apply_layer_norm:
+        #     self.mlp = [
+        #         # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
+        #         # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
+        #         nn.Linear(nin, nhidden, bias=bias),
+        #     ]
+        # else:
+        self.mlp = [
                 nn.Linear(nin, nhidden, bias=bias),
             ]
         if norm:
             # norm_layer = NormLayer(nonlinearity=activation, device=device)
             # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
             pass
-        for _ in range(nlayers - 2):
+        for _ in range(nlayers - 1):
             if activation is not None:
                 if isinstance(activation, str):
-                    activation = getattr(nn, activation)()
-                    if activation_with_linear:
-                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm), nn.Linear(nhidden, nhidden, bias=bias)]
-                    else: 
-                        mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm)]
+                    if activation.lower() == 'linear':
+                        activation = lambda x: x
+                    else:
+                        activation = getattr(nn, activation)()
+                elif issubclass(torch.nn.SiLU, torch.nn.Module): # FIXME must be a better way to check if isinstance(activation, nn.activation callable)
+                    activation = activation
+                else:
+                    raise ValueError('activation MUST be a string')
+                if activation_with_linear:
+                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize=nhidden), nn.Linear(nhidden, nhidden, bias=bias)]
+                else: 
+                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize =nhidden)]
                 self.mlp.extend(mid_layer)
                 
             else: 
@@ -173,10 +185,10 @@ class MLP(nn.Module):
             
             # if norm:
             #     self.mlp.append(norm_layer)
-        if activation is not None:
-            if isinstance(activation, str):
-                activation = getattr(nn, activation)()
-                self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
+        # if activation is not None:
+        #     if isinstance(activation, str):
+        #         activation = getattr(nn, activation)()
+        #         self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
                 
         self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
         self.mlp = nn.Sequential(*self.mlp)
