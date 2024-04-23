@@ -96,8 +96,8 @@ def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
     lowdin orthogonalization of a fock matrix computing the square root of the overlap matrix
     """
     eva, eve = torch.linalg.eigh(overlap)
-    sm12 = eve @ torch.diag(1.0 / torch.sqrt(eva)) @ eve.T
-    return sm12 @ fock @ sm12
+    sm12 = eve @ torch.diag(1.0 / torch.sqrt(eva)).to(eve) @ eve.T
+    return sm12.conj() @ fock @ sm12
 
 
 def _components_idx(l):

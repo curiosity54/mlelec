@@ -800,6 +800,7 @@ class PySCFPeriodicDataset(Dataset):
         # Assign/compute Hamiltonian
         if (fock_kspace is not None) and (fock_realspace is None):
             self.set_fock_kspace(fock_kspace)
+            self.fock_realspace = None
             # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
         elif (fock_kspace is None) and (fock_realspace is not None):
             self.fock_realspace = self._set_matrices_realspace(fock_realspace)
@@ -814,7 +815,8 @@ class PySCFPeriodicDataset(Dataset):
         # Assign/compute Overlap
         if (overlap_kspace is not None) and (overlap_realspace is None):
             self.set_overlap_kspace(overlap_kspace)
-            # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
+            self.overlap_realspace = None
+         # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
         elif (overlap_kspace is None) and (overlap_realspace is not None):
             self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
             self.overlap_kspace = self.bloch_sum(overlap_realspace)
@@ -928,7 +930,7 @@ class PySCFPeriodicDataset(Dataset):
                         "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
                     )
     
-        return _matrices_realspace, _matrices_realspace_neg
+        return _matrices_realspace #, _matrices_realspace_neg
 
     def _set_matrices_kspace(self, matrices_kspace):
         '''Returns a list of torch.Tensors from a list of np.ndarrays or torch.Tensors'''

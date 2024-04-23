@@ -155,7 +155,9 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
     T_list = np.int32(np.round(T_list))
     H_T = {}
     for T, H in zip(T_list, HT):
-        assert torch.norm(H - H.real) < 1e-10
+        print(torch.norm(H))
+        assert torch.norm(H - H.real) < 1e-10, torch.norm(H - H.real).item()
+        # print(torch.norm(H - H.real))
         H_T[tuple(T)] = H.real
     return H_T
 
@@ -422,9 +424,15 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
             warnings.warn('Automatic choice of the cutoff for structure {A}. rcut = {rcut:.2f} Angstrom')
 
         if target.lower() == "fock":
-            matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+            if dataset.fock_realspace is None:
+                matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+            else:
+                matrices = dataset.fock_realspace[A]
         elif target.lower() == "overlap":
-            matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+            if dataset.overlap_realspace is None:
+                matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+            else:
+                matrices = dataset.overlap_realspace[A]
         else:
             raise ValueError("target must be either 'fock' or 'overlap'")
 
