@@ -421,7 +421,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
 
         if cutoff_was_none:
             cutoff = dataset.cells[A].rcut * Bohr
-            warnings.warn('Automatic choice of the cutoff for structure {A}. rcut = {rcut:.2f} Angstrom')
+            warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')
 
         if target.lower() == "fock":
             if dataset.fock_realspace is None:
