@@ -9,6 +9,36 @@ import scipy
 def plot_atoms(structure, ax=None):
     pass
 
+def print_matrix(matrix, fmt='{:15.10f}'):
+    for row in matrix:
+        print(" ".join(fmt.format(num) for num in row))
+
+def block_matrix_norm(block, dataset):
+    rij = {}
+    Hij = {}
+    for k, b in block.items():
+        rij[*k.values.tolist()] = []
+        Hij[*k.values.tolist()] = []
+        frame_idx, I, J = b.samples.values[:, :3].T
+        Ts = b.samples.values[:, -3:]
+        for ifr, i, j, T, h in zip(frame_idx, I, J, Ts, b.values):
+            rij[*k.values.tolist()].append(np.linalg.norm(dataset.structures[ifr].cell.array.T.dot(T) + dataset.structures[ifr].get_distance(i, j, mic = False, vector = True)))
+            Hij[*k.values.tolist()].append(torch.norm(h))
+    return rij, Hij
+
+def matrix_norm(T, matrix, frame, nao):
+    from skimage.util import view_as_blocks
+    blocks = view_as_blocks(matrix.numpy(), (nao, nao))
+    dist = []
+    norms = []
+    natm = frame.get_global_number_of_atoms()
+    for i in range(natm):
+        for j in range(natm):
+            rij = np.linalg.norm(frame.cell.array.T.dot(T) + frame.get_distance(i, j, mic = False, vector = True)) #np.linalg.norm(frame.cell.T.dot(T) + frame.positions[j] - frame.positions[i])
+            Hij = np.linalg.norm(blocks[i, j])
+            dist.append(rij)
+            norms.append(Hij)
+    return np.array(dist).reshape(natm, natm), np.array(norms).reshape(natm, natm)
 
 def plot_hamiltonian(
     matrix,

@@ -155,7 +155,6 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
     T_list = np.int32(np.round(T_list))
     H_T = {}
     for T, H in zip(T_list, HT):
-        print(torch.norm(H))
         assert torch.norm(H - H.real) < 1e-10, torch.norm(H - H.real).item()
         # print(torch.norm(H - H.real))
         H_T[tuple(T)] = H.real
@@ -421,7 +420,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
 
         if cutoff_was_none:
             cutoff = dataset.cells[A].rcut * Bohr
-            warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')
+            warnings.warn('Automatic choice of the cutoff for structure {A}. rcut = {rcut:.2f} Angstrom')
 
         if target.lower() == "fock":
             if dataset.fock_realspace is None:
@@ -892,7 +891,7 @@ def blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = N
                     #         j_start + ioffset : j_start + ioffset + i_end,
                     #     ] -= values.T
 
-    # Fill what's left from symmetries
+    # Fill what's left from symmetries [impose H(T) = H(-T)^\dagger]
     for A, matrix in enumerate(reconstructed_matrices_plus):
         Ts = list(matrix.keys())
         for T in Ts:
