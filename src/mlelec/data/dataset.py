@@ -752,7 +752,8 @@ class PySCFPeriodicDataset(Dataset):
         device="cuda",
         orbs_name: str = "sto-3g",
         orbs: List = None,
-        dimension: int = 3
+        dimension: int = 3,
+        fix_p_orbital_order = False,
     ):
     
         self.structures = frames
@@ -777,6 +778,26 @@ class PySCFPeriodicDataset(Dataset):
         self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
+        
+        # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
+        if fix_p_orbital_order:
+            from mlelec.utils.twocenter_utils import fix_orbital_order
+            if fock_kspace is not None:
+                for ifr in range(len(fock_kspace)):
+                    for ik, k in enumerate(fock_kspace[ifr]):
+                        fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+            if overlap_kspace is not None:
+                for ifr in range(len(overlap_kspace)):
+                    for ik, k in enumerate(overlap_kspace[ifr]):
+                        overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+            if fock_realspace is not None:
+                for ifr in range(len(fock_realspace)):
+                    for T in fock_realspace[ifr]:
+                        fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
+            if overlap_realspace is not None:
+                for ifr in range(len(overlap_realspace)):
+                    for T in overlap_realspace[ifr]:
+                        overlap_realspace[ifr][ik] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
 
         # self.target_names = target
         # self.aux_names = aux
@@ -791,11 +812,6 @@ class PySCFPeriodicDataset(Dataset):
             )
             self.cells.append(cell)
         self.set_kpts()
-
-        # Input matrices. 
-        # If the input is in k-space, no real space counterpart is computed.
-        # If the input is in real space, the k-space counterpart is computed via Bloch sums.
-        # If both real space and k-space inputs are provided, their consistency is checked.
 
         # Assign/compute Hamiltonian
         if (fock_kspace is not None) and (fock_realspace is None):
