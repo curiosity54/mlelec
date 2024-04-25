@@ -130,40 +130,16 @@ class MLP(nn.Module):
         activation_with_linear = False,
     ):
         super().__init__()
-        if nlayers <=1:
-            if activation is not None:
-                # probably a bad idea
-                self.mlp = []
-                self.mlp.append(nn.Linear(nin, nout, bias=bias))
-                if isinstance(activation, str):
-                    if activation.lower() == 'linear':
-                        activation = lambda x: x
-                    else:
-                        activation = getattr(nn, activation)()
-                self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
-                # self.mlp.append(nn.Linear(nin, nout, bias=bias))
-                self.mlp = nn.Sequential(*self.mlp)
-            else:
-                self.mlp = nn.Linear(nin, nout, bias=bias)
-            
-            self.mlp.to(device)
-            return
 
-        # if apply_layer_norm:
-        #     self.mlp = [
-        #         # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
-        #         # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
-        #         nn.Linear(nin, nhidden, bias=bias),
-        #     ]
-        # else:
-        self.mlp = [
-                nn.Linear(nin, nhidden, bias=bias),
-            ]
-        if norm:
-            # norm_layer = NormLayer(nonlinearity=activation, device=device)
-            # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
-            pass
-        for _ in range(nlayers - 1):
+        if nlayers == 0:
+            # Purely linear model
+            self.mlp = [nn.Linear(nin, nout, bias=bias)]
+
+        else:
+            # From features to first hidden layer
+            self.mlp = [nn.Linear(nin, nhidden, bias = bias)]
+
+            # Define the hidden-layer architecture
             if activation is not None:
                 if isinstance(activation, str):
                     if activation.lower() == 'linear':
@@ -175,13 +151,71 @@ class MLP(nn.Module):
                 else:
                     raise ValueError('activation MUST be a string')
                 if activation_with_linear:
-                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize=nhidden), nn.Linear(nhidden, nhidden, bias=bias)]
+                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize = nhidden), 
+                                nn.Linear(nhidden, nhidden, bias=bias)]
                 else: 
-                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize =nhidden)]
-                self.mlp.extend(mid_layer)
-                
+                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize = nhidden)]
             else: 
-                self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
+                mid_layer = [nn.Linear(nhidden, nhidden, bias=bias)]
+
+            # Add hidder layers
+            for _ in range(nlayers):
+                self.mlp.extend(mid_layer)
+            
+            # final linear layer
+            self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
+            
+        # if nlayers <=1: # FIXME: what's the point of this?
+        #     if activation is not None:
+        #         self.mlp = []
+        #         self.mlp.append(nn.Linear(nin, nout, bias=bias))
+        #         if isinstance(activation, str):
+        #             if activation.lower() == 'linear':
+        #                 activation = lambda x: x
+        #             else:
+        #                 activation = getattr(nn, activation)()
+        #         self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
+        #         self.mlp = nn.Sequential(*self.mlp)
+        #     else:
+        #         self.mlp = nn.Linear(nin, nout, bias=bias)
+            
+        #     self.mlp.to(device)
+        #     return
+
+        # if apply_layer_norm:
+        #     self.mlp = [
+        #         # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
+        #         # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
+        #         nn.Linear(nin, nhidden, bias=bias),
+        #     ]
+        # else:
+        # self.mlp = [
+        #         nn.Linear(nin, nhidden, bias=bias),
+        #     ]
+        # if norm:
+        #     # norm_layer = NormLayer(nonlinearity=activation, device=device)
+        #     # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
+        #     pass
+        # # Loop through the hidden layers
+        # for _ in range(nlayers):
+        #     if activation is not None:
+        #         if isinstance(activation, str):
+        #             if activation.lower() == 'linear':
+        #                 activation = lambda x: x
+        #             else:
+        #                 activation = getattr(nn, activation)()
+        #         elif issubclass(torch.nn.SiLU, torch.nn.Module): # FIXME must be a better way to check if isinstance(activation, nn.activation callable)
+        #             activation = activation
+        #         else:
+        #             raise ValueError('activation MUST be a string')
+        #         if activation_with_linear:
+        #             mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize=nhidden), nn.Linear(nhidden, nhidden, bias=bias)]
+        #         else: 
+        #             mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize =nhidden)]
+        #         self.mlp.extend(mid_layer)
+                
+        #     else: 
+        #         self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
             
             # if norm:
             #     self.mlp.append(norm_layer)
@@ -190,7 +224,7 @@ class MLP(nn.Module):
         #         activation = getattr(nn, activation)()
         #         self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
                 
-        self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
+        # self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
 
@@ -467,7 +501,6 @@ class LinearTargetModel(nn.Module):
         self.recon_blocks_val = pred_tmap_val
         return self.recon_blocks_val
 
-
 class LinearModelPeriodic(nn.Module):
     def __init__(
         self,
@@ -487,14 +520,12 @@ class LinearModelPeriodic(nn.Module):
         self.orbitals = orbitals
         self.train_kspace = train_kspace
         self.apply_norm = apply_norm
-        # self.cell_shifts = cell_shifts
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
             self.device = device
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
-        # print(self.cell_shifts, len(self.cell_shifts))
 
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
@@ -676,7 +707,9 @@ class LinearModelPeriodic(nn.Module):
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 nsamples, ncomp, _ = block.values.shape
 
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (k, block.samples.values.shape, feat.samples.values.shape)
+                # print(_match_feature_and_target_samples(block, feat))
+                feat = _match_feature_and_target_samples(block, feat, return_idx=True)
+                assert np.all(block.samples.values == feat.samples.values[:, :6]), (_match_feature_and_target_samples(block, feat))
 
                 x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))).cpu().numpy())
                 y = ((block.values.reshape(block.values.shape[0] * block.values.shape[1], -1)).cpu().numpy())
@@ -732,3 +765,25 @@ class LinearModelPeriodic(nn.Module):
             * torch.sum(self.layer.weight.T @ self.layer.weight)
             / 1  # len(self.feats.samples) # normalize by number of samples
         )
+
+
+def _match_feature_and_target_samples(target_block, feat_block, return_idx = False):
+    intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
+    if not return_idx:
+        idx1 = np.where(idx1 == -1)
+        idx2 = np.where(idx2 == -1)
+        if np.prod(np.shape(idx1)) > 0 and np.prod(np.shape(idx2)) == 0:
+            return feat_block.samples.values[idx1]
+        elif np.prod(np.shape(idx2)) > 0 and np.prod(np.shape(idx1)) == 0:
+            return target_block.samples.values[idx2]
+        else:
+            return feat_block.samples.values[idx1], target_block.samples.values[idx2]
+    else:
+        idx1 = np.where(idx1 != -1)
+        idx2 = np.where(idx2 != -1)
+        assert len(idx1) == len(idx2)
+        return TensorBlock(values = feat_block.values[idx1],
+                           samples = intersection,
+                           properties = feat_block.properties,
+                           components = feat_block.components)
+        
