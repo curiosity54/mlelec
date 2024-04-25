@@ -137,7 +137,7 @@ def pair_features(
         return rho0_ij
 
 
-    print(hypers_pair)
+    # print(hypers_pair)
     # ----- MIC mapping ------
     if mic:
         from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
@@ -232,7 +232,7 @@ def pair_features(
 
         blocks = []
         for key, block in rho0_ij.items():
-            print(block.values.shape,'1')
+            # print(block.values.shape,'1')
             block_species_i = key['species_center']
             block_species_j = key['species_neighbor']
             all_frames = np.unique(block.samples.values[:, 0])
@@ -277,7 +277,7 @@ def pair_features(
                     properties = block.properties,
                 ), axes = 'samples')
             )
-            print(blocks[-1].values.shape, '2')
+            # print(blocks[-1].values.shape, '2')
         rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
     
     if mic and return_rho0ij:
