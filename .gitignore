@@ -6,6 +6,7 @@ src/mlelec.egg-info/
 *.pt
 tmp* 
 **/*.pyc
+*.pyc
 *.code-workspace
 *feat*.npz
 *.npy
