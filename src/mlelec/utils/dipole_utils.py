@@ -108,15 +108,17 @@ def instantiate_mf(ml_data: MLDataset, fock_predictions=None, batch_indices=None
 def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps):
     # compute dipole moment for each molecule in batch
     dipoles = []
+
     for i in range(len(mfs)):
         mf = mfs[i]
         fock = fock_vars[i]
-        overlaps[i] = overlaps[i]  # .to(fock)
-        mo_energy, mo_coeff = mf.eig(fock, overlaps[i])
+        ovlp = overlaps[i]  # .to(fock)
+        mo_energy, mo_coeff = mf.eig(fock, ovlp)
         mo_occ = mf.get_occ(mo_energy)  # get_occ returns a numpy array
         mo_occ = ops.convert_to_tensor(mo_occ)
         dm1 = mf.make_rdm1(mo_coeff, mo_occ)
         dip = mf.dip_moment(dm=dm1, unit="A.U.")
+        
         dipoles.append(dip)
     return torch.stack(dipoles)
 
@@ -128,12 +130,31 @@ def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indice
     batch_fock = unfix_orbital_order(
         batch_fockvars, batch_frames, ml_data.molecule_data.aux_data["orbitals"]
     )
-    batch_overlap = ml_data.molecule_data.aux_data["overlap"][batch_indices]
+    batch_overlap = [torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i]) for i in batch_indices]
     batch_mfs = [mfs[i] for i in batch_indices]
     dipoles = compute_dipole_moment_from_mf(batch_mfs, batch_fock, batch_overlap)
     return dipoles
 
+def compute_eva_from_mf(mfs, fock_vars, overlaps):
+    eigenvalues = []
+    for i in range(len(mfs)):
+        mf = mfs[i]
+        fock = fock_vars[i]
+        ovlp = overlaps[i]  # .to(fock)
+        mo_energy, mo_coeff = mf.eig(fock, ovlp)
+        eigenvalues.append(mo_energy)
+    return eigenvalues
 
+def compute_batch_eva(ml_data: MLDataset, batch_fockvars, batch_indices, mfs):
+    batch_frames = [ml_data.structures[i] for i in batch_indices]
+    batch_fock = unfix_orbital_order(
+        batch_fockvars, batch_frames, ml_data.molecule_data.aux_data["orbitals"]
+    )
+    batch_overlap = [torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i]) for i in batch_indices]
+    batch_mfs = [mfs[i] for i in batch_indices]
+    eva = compute_eva_from_mf(batch_mfs, batch_fock, batch_overlap)
+    return eva
+    
 # def compute_polarisability(frames, E0):
 #     polarisabilities = []
 #     for i in range(len(frames)):

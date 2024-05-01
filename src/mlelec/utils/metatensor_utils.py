@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from metatensor import Labels, TensorBlock, TensorMap
 
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
+# from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
 
 
 class TensorBuilder:
@@ -228,70 +228,70 @@ def labels_where(labels, selection, return_idx=False):
     return labels
 
 
-def drop_target_samples(
-    feats: TensorMap, targ_coupled: TensorMap, verbose: bool = False
-) -> TensorMap:
-    """
-    Drop samples from the target TensorMap (the coupled TensorMap of the
-    Hamiltonian elements) that are not present in the feature TensorMap.
-    When using a cutoff that is smaller than the maximum distance between
-    two atoms in a molecule, we skip calculating the features for the atom
-    pairs that are not present within the cutoff. This function drops those
-    samples in the target TensorMap as well.
+# def drop_target_samples(
+#     feats: TensorMap, targ_coupled: TensorMap, verbose: bool = False
+# ) -> TensorMap:
+#     """
+#     Drop samples from the target TensorMap (the coupled TensorMap of the
+#     Hamiltonian elements) that are not present in the feature TensorMap.
+#     When using a cutoff that is smaller than the maximum distance between
+#     two atoms in a molecule, we skip calculating the features for the atom
+#     pairs that are not present within the cutoff. This function drops those
+#     samples in the target TensorMap as well.
 
-    Args:
-        feats (TensorMap): the feature TensorMap
-        targ_coupled (TensorMap): the target TensorMap
-        verbose (bool): whether to print the keys that did not match
+#     Args:
+#         feats (TensorMap): the feature TensorMap
+#         targ_coupled (TensorMap): the target TensorMap
+#         verbose (bool): whether to print the keys that did not match
 
-    Returns:
-        TensorMap: the target TensorMap with only the samples that are present
-            in the feature TensorMap.
-    """
+#     Returns:
+#         TensorMap: the target TensorMap with only the samples that are present
+#             in the feature TensorMap.
+#     """
 
-    blocks = []
-    all_keys_matched = True
+#     blocks = []
+#     all_keys_matched = True
 
-    for key, block in targ_coupled.items():
-        feat_samples = map_targetkeys_to_featkeys(feats, key).samples.values.copy()
-        targ_samples = block.samples.values.copy()
-        # find samples in common between the two TensorMaps
-        idx_common = (targ_samples[:, None] == feat_samples).all(-1).any(-1)
+#     for key, block in targ_coupled.items():
+#         feat_samples = map_targetkeys_to_featkeys(feats, key).samples.values.copy()
+#         targ_samples = block.samples.values.copy()
+#         # find samples in common between the two TensorMaps
+#         idx_common = (targ_samples[:, None] == feat_samples).all(-1).any(-1)
 
-        if not np.all(idx_common):
-            all_keys_matched = False
-            if verbose:
-                keystr = (
-                    "("
-                    + "".join(
-                        ["{:s}={}, ".format(n, v) for v, n in zip(key, key.dtype.names)]
-                    )[:-1]
-                    + ")"
-                )
-                print("mismatch for key:", keystr)
+#         if not np.all(idx_common):
+#             all_keys_matched = False
+#             if verbose:
+#                 keystr = (
+#                     "("
+#                     + "".join(
+#                         ["{:s}={}, ".format(n, v) for v, n in zip(key, key.dtype.names)]
+#                     )[:-1]
+#                     + ")"
+#                 )
+#                 print("mismatch for key:", keystr)
 
-        targ_samples = targ_samples[idx_common]
-        targ_samples = Labels(block.samples.names, values=targ_samples)
+#         targ_samples = targ_samples[idx_common]
+#         targ_samples = Labels(block.samples.names, values=targ_samples)
 
-        if isinstance(block.values, np.ndarray):
-            targ_values = block.values.copy()
-        elif isinstance(block.values, torch.Tensor):
-            targ_values = block.values.clone()
-        else:
-            raise ValueError("TensorMap values neither np.ndarray nor torch.Tensor")
+#         if isinstance(block.values, np.ndarray):
+#             targ_values = block.values.copy()
+#         elif isinstance(block.values, torch.Tensor):
+#             targ_values = block.values.clone()
+#         else:
+#             raise ValueError("TensorMap values neither np.ndarray nor torch.Tensor")
 
-        targ_values = targ_values[idx_common]
+#         targ_values = targ_values[idx_common]
 
-        block = TensorBlock(
-            values=targ_values,
-            samples=targ_samples,
-            components=block.components,
-            properties=block.properties,
-        )
+#         block = TensorBlock(
+#             values=targ_values,
+#             samples=targ_samples,
+#             components=block.components,
+#             properties=block.properties,
+#         )
 
-        blocks.append(block)
+#         blocks.append(block)
 
-    if all_keys_matched and verbose:
-        print("all keys matched successfully")
+#     if all_keys_matched and verbose:
+#         print("all keys matched successfully")
 
-    return TensorMap(targ_coupled.keys, blocks)
+#     return TensorMap(targ_coupled.keys, blocks)

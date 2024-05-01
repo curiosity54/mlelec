@@ -13,9 +13,9 @@ import numpy as np
 import torch
 import torch.utils.data as data
 from ase.io import read
-from metatensor import Labels, TensorMap, load
+from metatensor import Labels, TensorMap, TensorBlock, load
 from torch.utils.data import Dataset
-
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
 from mlelec.targets import ModelTargets
 
 
@@ -38,6 +38,7 @@ class precomputed_molecules(Enum):
     water_rotated = "examples/data/water_rotated"
     ethane = "examples/data/ethane"
     qm7 = "examples/data/qm7"
+    qm9 = "examples/data/qm9"
 
 
 class MoleculeDataset(Dataset):
@@ -286,6 +287,7 @@ class MLDataset(Dataset):
             **kwargs,
         )
 
+        self.molecule_data.target_blocks = copy.deepcopy(self.target.blocks)
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
 
@@ -377,6 +379,7 @@ class MLDataset(Dataset):
         self.feat_train = self._get_subset(self.features, self.train_idx)
         self.feat_val = self._get_subset(self.features, self.val_idx)
         self.feat_test = self._get_subset(self.features, self.test_idx)
+        self._match_feature_and_target_samples()
         
     def _load_features(self, filename: str):
         self.features = load(filename)
@@ -385,6 +388,24 @@ class MLDataset(Dataset):
         self.feat_val = self._get_subset(self.features, self.val_idx)
         self.feat_test = self._get_subset(self.features, self.test_idx)
 
+    def _match_feature_and_target_samples(self):
+        new_blocks = []
+        for k, target_block in self.molecule_data.target_blocks.items():
+            feat_block = map_targetkeys_to_featkeys(self.features, k)
+            intersection, _, idx = feat_block.samples.intersection_and_mapping(target_block.samples)
+            idx = np.where(idx != -1)
+
+            new_blocks.append(
+                TensorBlock(values = target_block.values[idx],
+                            samples = intersection,
+                            properties = target_block.properties,
+                            components = target_block.components)
+            )
+        
+        self.target._set_blocks(TensorMap(self.molecule_data.target_blocks.keys, new_blocks))
+        self.target_train = self._get_subset(self.target.blocks, self.train_idx)
+        self.target_val = self._get_subset(self.target.blocks, self.val_idx)
+        self.target_test = self._get_subset(self.target.blocks, self.test_idx)
 
     def _set_model_return(self, model_return: str = "blocks"):
         # Helper function to set output in __get_item__ for model training

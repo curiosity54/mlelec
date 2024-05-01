@@ -5,13 +5,23 @@ from metatensor import TensorMap, TensorBlock
 import torch
 import ase
 import numpy as np
-from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
+from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.symmetry import ClebschGordanReal
 import warnings
 
 SQRT_2 = 2 ** (0.5)
 ISQRT_2 = 1 / SQRT_2
 
+def isqrtm(A: torch.Tensor) -> torch.Tensor:
+    eva, eve = torch.linalg.eigh(A)
+    idx = eva > 1e-15
+    return eve[:, idx] @ torch.diag(eva[idx] ** (-0.5)) @ eve[:, idx].T
+
+def _lowdin_orthogonalize(
+    fock: torch.Tensor, ovlp: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    ovlp_i12 = isqrtm(ovlp)
+    return torch.einsum("ij,jk,kl->il", ovlp_i12, fock, ovlp_i12)
 
 def fix_orbital_order(
     matrix: Union[torch.tensor, np.ndarray],

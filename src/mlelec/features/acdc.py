@@ -880,11 +880,15 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     if isinstance(dataset.target, SingleCenter):
         features = single
     elif isinstance(dataset.target, TwoCenter) or issubclass(dataset.target, TwoCenter):
+        hypers_pair = kwargs.get("hypers_pair", None)
+        if hypers_pair is None:
+            hypers_pair = hypers
         pairs = pair_features(
             dataset.structures,
             hypers,
+            hypers_pair = hypers_pair,
             order_nu=kwargs.get("order_nu_pair", 1),
-            lcut=hypers["max_angular"],
+            lcut=hypers_pair["max_angular"],
             feature_names=single[0].properties.names,
             device=device,
             both_centers=kwargs.get("both_centers", False),

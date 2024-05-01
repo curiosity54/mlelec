@@ -1,4 +1,5 @@
 # Evaluation metrics
+import numpy as np
 import torch
 from typing import List, Optional, Union
 from metatensor import TensorMap
@@ -27,6 +28,15 @@ def L2_loss(
             ), "Prediction and target must have the same samples"
             loss += torch.sum((block.values - targetblock.values) ** 2)
         return loss
+    elif isinstance(pred, list):
+        if any(isinstance(t, np.ndarray) for t in target):
+            target = [torch.from_numpy(t) for t in target]
+        if not all(isinstance(t, torch.Tensor) for t in target + pred):
+            raise ValueError("All targets and predictions must be tensors.")
+        loss_fn = torch.nn.functional.mse_loss
+        loss = [loss_fn(targ, predic) for targ, predic in zip(target, pred)]
+        return torch.mean(torch.stack(loss))
+            
 
 
 def Eigval_loss(
