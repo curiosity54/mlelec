@@ -132,21 +132,21 @@ class MoleculeDataset(Dataset):
                         self.data_path + "/{}.hickle".format(t)
                     )[self.frame_slice].to(device=self.device)
                     # os.join(self.aux_path, "{}.hickle".format(t))
-            except Exception as e:
-                print(e)
-                print("Generating data")
-                from mlelec.data.pyscf_calculator import calculator
+            # except Exception as e:
+            #     print(e)
+            #     print("Generating data")
+            #     from mlelec.data.pyscf_calculator import calculator
 
-                calc = calculator(
-                    path=self.path,
-                    mol_name=self.mol_name,
-                    frame_slice=":",
-                    target=self.target_names,
-                )
-                calc.calculate(basis_set=self.basis, verbose=1)
-                calc.save_results()
-                # raise FileNotFoundError("Required target not found at the given path")
-                # TODO: generate data instead?
+            #     calc = calculator(
+            #         path=self.path,
+            #         mol_name=self.mol_name,
+            #         frame_slice=":",
+            #         target=self.target_names,
+            #     )
+            #     calc.calculate(basis_set=self.basis, verbose=1)
+            #     calc.save_results()
+            #     # raise FileNotFoundError("Required target not found at the given path")
+            #     # TODO: generate data instead?
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
