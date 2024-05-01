@@ -71,7 +71,7 @@ def L2_kspace_loss(pred: Union[TensorMap],
     assert torch.norm(loss-loss.real) < 1e-10
     return loss.real
 
-def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False):
+def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1):
     """L2 loss function"""
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)
@@ -93,7 +93,9 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
                 assert (
                     block.samples == targetblock.samples
                 ), "Prediction and target must have the same samples"
-                losses.append(torch.sum((block.values - targetblock.values) ** 2))
+                losses.append(torch.norm(block.values - targetblock.values)**2)
+                # losses.append(torch.sum((block.values - targetblock.values)*(block.values - targetblock.values).conj()))
+                # losses.append(torch.sum((block.values - targetblock.values) ** 2))
             else:
                 losses.append(torch.tensor(0.0, requires_grad = True).to(block.values))
 
