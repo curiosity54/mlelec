@@ -561,10 +561,11 @@ class LinearModelPeriodic(nn.Module):
             blockval = torch.linalg.norm(block.values)
             if True:
                 # if blockval > 1e-10:
-                sample_names = block.samples.names
+                # sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
+                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True)
 
-                featnorm = torch.linalg.norm(feat.values)
+                # featnorm = torch.linalg.norm(feat.values)
                 # nsamples, ncomp, nprops = block.values.shape
                 nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
@@ -602,6 +603,7 @@ class LinearModelPeriodic(nn.Module):
                 # if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
+                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
 
                 featnorm = torch.linalg.norm(feat.values)
                 nsamples, ncomp, nprops = block.values.shape
@@ -769,6 +771,7 @@ class LinearModelPeriodic(nn.Module):
 
 def _match_feature_and_target_samples(target_block, feat_block, return_idx = False):
     intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
+    
     if not return_idx:
         idx1 = np.where(idx1 == -1)
         idx2 = np.where(idx2 == -1)

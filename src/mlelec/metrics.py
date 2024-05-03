@@ -93,7 +93,7 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
                 assert (
                     block.samples == targetblock.samples
                 ), "Prediction and target must have the same samples"
-                losses.append(torch.norm(block.values - targetblock.values)**2)
+                losses.append(torch.norm(block.values - targetblock.values)**2 / norm)
                 # losses.append(torch.sum((block.values - targetblock.values)*(block.values - targetblock.values).conj()))
                 # losses.append(torch.sum((block.values - targetblock.values) ** 2))
             else:

@@ -1077,6 +1077,12 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
 
                 for j, aj in enumerate(frame.numbers):
 
+                    # Skip the pair if their distance exceeds the cutoff
+                    ij_distance = frame.get_distance(i, j, mic = False)
+                    if ij_distance > cutoff:
+                        j_start += orbs_tot[aj]
+                        continue
+
                     if not all_pairs: # not all orbital pairs
                         if i > j and ai == aj: # skip block type 1 if i>j 
                             j_start += orbs_tot[aj]
@@ -1157,23 +1163,27 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
     tmap = sort(tmap.to(arrays='numpy')).to(arrays='torch')
     return tmap
 
-def precompute_phase(target_blocks, dataset):
+def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     phase = {}
+    indices = {}
     where_inv = {}
     for k, b in target_blocks.items():
         kl = tuple(k.values.tolist())
         phase[kl] = {}
-        
+        indices[kl] = {}        
         ifrij, inv = np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
         where_inv[kl] = inv
         for I, (ifr, i, j) in enumerate(ifrij):
+            if dataset.structures[ifr].get_distance(i, j, mic = False) > cutoff:
+                continue
             idx = np.where(where_inv[kl] == I)[0]
+            indices[kl][ifr,i,j] = idx
             kpts = torch.from_numpy(dataset.kpts_rel[ifr])
             Ts = torch.from_numpy(b.samples.values[idx, 3:6]).to(kpts)
             phase[kl][ifr,i,j] = torch.exp(2j*np.pi*torch.einsum('ka,Ta->kT', kpts, Ts))
-    return phase, where_inv
+    return phase, indices
 
-def TMap_bloch_sums(target_blocks, phase, where_inv):
+def TMap_bloch_sums(target_blocks, phase, indices):
     from metatensor import Labels, TensorBlock, TensorMap
 
     _Hk = {}
@@ -1199,7 +1209,8 @@ def TMap_bloch_sums(target_blocks, phase, where_inv):
 
         # Loop through the unique (ifr, i, j) triplets
         for I, (ifr, i, j) in enumerate(phase[kl]):
-            idx = np.where(where_inv[kl] == I)[0]
+            # idx = np.where(where_inv[kl] == I)[0]
+            idx = indices[kl][ifr,i,j]
         
             if bt != 0:
                 _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
@@ -1246,63 +1257,80 @@ def TMap_bloch_sums(target_blocks, phase, where_inv):
 
     return _k_target_blocks
 
-    # from metatensor import Labels, TensorBlock, TensorMap, sort
-    
-    # device = target_blocks.device
-    # _Hk = {}
-    
-    # for k, b in target_blocks.items():
 
-    #     # LabelValues to tuple
-    #     kl = tuple(k.values.tolist())
+def kblocks_to_matrix(k_target_blocks, dataset):
+    from mlelec.utils.pbc_utils import _orbs_offsets, _atom_blocks_idx
+    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
+    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_mult = {
+        species: 
+                {tuple(k): v
+            for k, v in zip(
+                *np.unique(
+                    np.asarray(dataset.basis[species])[:, :2],
+                    axis=0,
+                    return_counts=True,
+                )
+            )
+        }
+        for species in dataset.basis
+    }
 
-    #     # Block type
-    #     bt = kl[0]
+    recon_Hk = {}
+    for k, block in k_target_blocks.items():
+        bt, ai, ni, li, aj, nj, lj = k.values
 
-    #     # define dummy key pointing to block type 1 when block type is zero
-    #     if bt == 0:
-    #         fact = np.sqrt(2)
-    #         _kl = (1, *kl[1:])
-    #     else:
-    #         fact = 1
-    #         _kl = kl
-
-    #     if _kl not in _Hk:
-    #         _Hk[_kl] = {}
-
-    #     # Loop through the unique (ifr, i, j) triplets
-    #     for I, (ifr, i, j) in enumerate(phase[kl]):
-    #         idx = np.where(where_inv[kl] == I)[0]
+        #####################################################################################
+        # From blocks_to_matrix
+        #####################################################################################
+        orbs_i = orbs_mult[ai]
+        orbs_j = orbs_mult[aj]
         
-    #         if (ifr, i, j) not in _Hk[_kl]:
-    #             _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*fact
-    #         else:
-    #             _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*fact
+        # The shape of the block corresponding to the orbital pair
+        shapes = {
+            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
+            for k1 in orbs_i
+            for k2 in orbs_j
+        }
+        ioffset = orbs_offset[(ai, ni, li)] 
+        joffset = orbs_offset[(aj, nj, lj)]
+        #####################################################################################
 
-    # # Now store in a tensormap
-    # _k_target_blocks = []
-    # keys = []
-    # properties = Labels(['dummy'], np.array([[0]]))
-    # for kl in _Hk:
-    #     values = []
-    #     samples = []
-    #     for I in _Hk[kl]:
-    #         values.append(_Hk[kl][I])
-    #         samples.extend([list(I) + [ik] for ik in range(_Hk[kl][I].shape[0])])
-    #     values = torch.concatenate(values)
-    #     _, n_mi, n_mj, _ = values.shape
-    #     samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
-    #     components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
-    #     _k_target_blocks.append(
-    #         TensorBlock(
-    #             samples = samples,
-    #             components = components,
-    #             properties = properties,
-    #             values = values
-    #         )
-    #     )
-    #     keys.append(list(kl))
+        for sample, blockval_ in zip(block.samples, block.values):
 
-    # _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
-    # _k_target_blocks = sort(_k_target_blocks.to(device='cpu').to(arrays='numpy')).to(arrays='torch', device=device) # FIXME avoid numpy->torch using metatensor.torch
-    # return _k_target_blocks
+            blockval = blockval_.clone()
+
+            A = sample["structure"]
+            i = sample["center"]
+            j = sample["neighbor"]
+            ik = sample['kpoint']
+           
+            norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+            if A not in recon_Hk:
+                recon_Hk[A] = torch.zeros(dataset.kpts_rel[A].shape[0], norbs, norbs, dtype = torch.complex128)
+            
+            i_start, j_start = atom_blocks_idx[(A, i, j)]   
+            i_end, j_end = shapes[(ni, li, nj, lj)]
+
+            
+            islice = slice(i_start + ioffset, i_start + ioffset + i_end)
+            jslice = slice(j_start + joffset, j_start + joffset + j_end)
+            ijslice = slice(i_start + joffset, i_start + joffset + j_end)
+            jislice = slice(j_start + ioffset, j_start + ioffset + i_end)
+
+            if bt == 0 or bt == 2:
+                recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
+                
+            if abs(bt) == 1:
+                blockval /= np.sqrt(2)
+                if bt == 1:
+                    recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
+                    if i != j:
+                        recon_Hk[A][ik, jislice, ijslice] += blockval[..., 0].conj()
+                else:
+                    recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
+                    if i != j:
+                        recon_Hk[A][ik, jislice, ijslice] -= blockval[..., 0].conj()
+
+    recon_Hk = list(recon_Hk.values())
+    return recon_Hk
