@@ -754,6 +754,7 @@ class PySCFPeriodicDataset(Dataset):
         orbs: List = None,
         dimension: int = 3,
         fix_p_orbital_order = False,
+        apply_condon_shortley = False,
     ):
     
         self.structures = frames
@@ -798,6 +799,37 @@ class PySCFPeriodicDataset(Dataset):
                 for ifr in range(len(overlap_realspace)):
                     for T in overlap_realspace[ifr]:
                         overlap_realspace[ifr][ik] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
+
+        # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
+        if apply_condon_shortley:
+            if fock_kspace is not None:
+                for ifr in range(len(fock_kspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for ik, k in enumerate(fock_kspace[ifr]):
+                        fock_kspace[ifr][ik] = k*cs
+            if overlap_kspace is not None:
+                for ifr in range(len(overlap_kspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for ik, k in enumerate(overlap_kspace[ifr]):
+                        overlap_kspace[ifr][ik] = k*cs
+            if fock_realspace is not None:
+                for ifr in range(len(fock_realspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for T in fock_realspace[ifr]:
+                        fock_realspace[ifr][T] = fock_realspace[ifr][T]*cs
+            if overlap_realspace is not None:
+                for ifr in range(len(overlap_realspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for T in overlap_realspace[ifr]:
+                        overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
 
         # self.target_names = target
         # self.aux_names = aux
