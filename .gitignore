@@ -10,3 +10,5 @@ tmp*
 *.code-workspace
 *feat*.npz
 *.npy
+build
+*pyc*

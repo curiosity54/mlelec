@@ -1062,6 +1062,12 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
 
         frame = dataset.structures[A]
         for ik, matrixT in enumerate(matrices[A]):  # Loop over the dataset.fock_kspace
+
+
+            # Not 100% this is correct: FIXME
+            # When the calculation is at Gamma you want to skip i==j samples
+            is_gamma_point = dataset.kmesh[A] == [1,1,1] and ik == 0
+
             matrixmT = matrixT.conj()
             if isinstance(matrixT, np.ndarray):
                 matrixT = torch.from_numpy(matrixT).to(device)
@@ -1103,7 +1109,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
                         value = block_split[iorbital]
 
-
+                        same_orbitals = ni == nj and li == lj
+                        
                         if (ai == aj):
                             # Same species interaction
                             block_type = 1
@@ -1130,8 +1137,9 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
 
                         # add samples to the blocks when present
                         block = block_builder.blocks[key]
-                        if block_type == 1:
-                            block_asym = block_builder.blocks[(-1,) + key[1:]]
+
+                        # if block_type == 1:
+                        #     block_asym = block_builder.blocks[(-1,) + key[1:]]
 
                         if block_type == 1:
                             bplus = (value + value_ji) * ISQRT_2
@@ -1142,11 +1150,13 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            # The i == j element is exactly zero, so we skip it
-                            if i != j:
+                            # The same-oribtal and i == j element is exactly zero, so we skip it. 
+                            # Skip also the Gamma point sample when the calculation is only done at Gamma 
+                            if (not (same_orbitals and i == j)) and (not (is_gamma_point and i == j)):
+                                block_asym = block_builder.blocks[(-1,) + key[1:]]
                                 block_asym.add_samples(
                                     labels=[(A, i, j, ik)],
-                                    data=bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                                    data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                                 )
 
                         elif block_type == 2:
@@ -1160,6 +1170,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                     j_start += orbs_tot[aj]
 
                 i_start += orbs_tot[ai]
+
     tmap = block_builder.build()
     from metatensor import sort
     tmap = sort(tmap.to(arrays='numpy')).to(arrays='torch')
@@ -1176,7 +1187,8 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
         ifrij, inv = np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
         where_inv[kl] = inv
         for I, (ifr, i, j) in enumerate(ifrij):
-            if dataset.structures[ifr].get_distance(i, j, mic = False) > cutoff:
+            dist = dataset.structures[ifr].get_distance(i, j, mic = False)
+            if dist > cutoff:
                 continue
             idx = np.where(where_inv[kl] == I)[0]
             indices[kl][ifr,i,j] = idx
@@ -1201,8 +1213,6 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         # define dummy key pointing to block type 1 when block type is zero
         if bt == 0:
             _kl = (1, *kl[1:])
-            # if _kl not in _Hk0: # TODO
-            #     _Hk0[_kl] = {}  # TODO
         else:
             _kl = kl
 
@@ -1211,40 +1221,38 @@ def TMap_bloch_sums(target_blocks, phase, indices):
 
         # Loop through the unique (ifr, i, j) triplets
         for I, (ifr, i, j) in enumerate(phase[kl]):
-            # idx = np.where(where_inv[kl] == I)[0]
             idx = indices[kl][ifr,i,j]
-
             if bt != 0:
                 _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
             else:
-                # If block_type==0, add the onsite terms
-                # _Hk0[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
                 if (ifr, i, j) in _Hk[_kl]:
                     _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
                 else:
                     _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                    
 
-    # return _Hk
-                
     # Now store in a tensormap
     _k_target_blocks = []
     keys = []
     properties = Labels(['dummy'], np.array([[0]]))
     for kl in _Hk:
-        
+
+        same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+
         values = []
         samples = []
         
-        for I in sorted(_Hk[kl]):
- 
-            # # Add bt=0 contributions # TODO all if block
-            # if kl in _Hk0:
-            #     if I in _Hk0[kl]:
-            #         _Hk[kl][I] += _Hk0[kl][I]
-
-            # Fill values and samples
-            values.append(_Hk[kl][I])
-            samples.extend([list(I) + [ik] for ik in range(_Hk[kl][I].shape[0])])
+        for ifr, i, j in sorted(_Hk[kl]):
+            # skip when same orbitals, atoms, and block type == -1
+            # print(kl[0], '|', kl[2], kl[3], kl[5], kl[6],'|',ifr,i,j)
+            if not (same_orbitals and (i == j) and (kl[0] == -1)):
+                # if kl[0] == -1:
+                #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
+                # Fill values and samples
+                values.append(_Hk[kl][ifr, i, j])
+                samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+            else:
+                print('else',kl[2], kl[5], kl[3], kl[6],ifr,i,j)
             
         values = torch.concatenate(values)
         _, n_mi, n_mj, _ = values.shape
