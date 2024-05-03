@@ -1142,10 +1142,12 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            block_asym.add_samples(
-                                labels=[(A, i, j, ik)],
-                                data=bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
-                            )
+                            # The i == j element is exactly zero, so we skip it
+                            if i != j:
+                                block_asym.add_samples(
+                                    labels=[(A, i, j, ik)],
+                                    data=bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                                )
 
                         elif block_type == 2:
                             block.add_samples(
@@ -1199,8 +1201,8 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         # define dummy key pointing to block type 1 when block type is zero
         if bt == 0:
             _kl = (1, *kl[1:])
-            if _kl not in _Hk0:
-                _Hk0[_kl] = {}
+            # if _kl not in _Hk0: # TODO
+            #     _Hk0[_kl] = {}  # TODO
         else:
             _kl = kl
 
@@ -1211,11 +1213,18 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         for I, (ifr, i, j) in enumerate(phase[kl]):
             # idx = np.where(where_inv[kl] == I)[0]
             idx = indices[kl][ifr,i,j]
-        
+
             if bt != 0:
                 _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
             else:
-                _Hk0[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2)
+                # If block_type==0, add the onsite terms
+                # _Hk0[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                if (ifr, i, j) in _Hk[_kl]:
+                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                else:
+                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+
+    # return _Hk
                 
     # Now store in a tensormap
     _k_target_blocks = []
@@ -1226,12 +1235,12 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         values = []
         samples = []
         
-        for I in _Hk[kl]:
-
-            # Add bt=0 contributions
-            if kl in _Hk0:
-                if I in _Hk0[kl]:
-                    _Hk[kl][I] += _Hk0[kl][I]
+        for I in sorted(_Hk[kl]):
+ 
+            # # Add bt=0 contributions # TODO all if block
+            # if kl in _Hk0:
+            #     if I in _Hk0[kl]:
+            #         _Hk[kl][I] += _Hk0[kl][I]
 
             # Fill values and samples
             values.append(_Hk[kl][I])
