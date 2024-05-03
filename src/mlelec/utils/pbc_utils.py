@@ -1150,9 +1150,10 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            # The same-oribtal and i == j element is exactly zero, so we skip it. 
+                            # The same-orbital and i == j element is exactly zero, so we skip it. 
                             # Skip also the Gamma point sample when the calculation is only done at Gamma 
-                            if (not (same_orbitals and i == j)) and (not (is_gamma_point and i == j)):
+                            # if (not (same_orbitals and i == j)):
+                            if (not (is_gamma_point and i == j)):
                                 block_asym = block_builder.blocks[(-1,) + key[1:]]
                                 block_asym.add_samples(
                                     labels=[(A, i, j, ik)],
@@ -1197,6 +1198,80 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
             phase[kl][ifr,i,j] = torch.exp(2j*np.pi*torch.einsum('ka,Ta->kT', kpts, Ts))
     return phase, indices
 
+def TMap_bloch_sums_OLD(target_blocks, phase, indices):
+    from metatensor import Labels, TensorBlock, TensorMap
+
+    _Hk = {}
+    _Hk0 = {}
+    for k, b in target_blocks.items():
+
+        # LabelValues to tuple
+        kl = tuple(k.values.tolist())
+
+        # Block type
+        bt = kl[0]
+
+        # define dummy key pointing to block type 1 when block type is zero
+        if bt == 0:
+            _kl = (1, *kl[1:])
+            if _kl not in _Hk0:
+                _Hk0[_kl] = {}
+        else:
+            _kl = kl
+
+        if _kl not in _Hk:
+            _Hk[_kl] = {}
+
+        # Loop through the unique (ifr, i, j) triplets
+        for I, (ifr, i, j) in enumerate(phase[kl]):
+            # idx = np.where(where_inv[kl] == I)[0]
+            idx = indices[kl][ifr,i,j]
+        
+            if bt != 0:
+                _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
+            else:
+                _Hk0[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2)
+                
+    # Now store in a tensormap
+    _k_target_blocks = []
+    keys = []
+    properties = Labels(['dummy'], np.array([[0]]))
+    for kl in _Hk:
+        
+        values = []
+        samples = []
+        
+        for I in _Hk[kl]:
+
+            # Add bt=0 contributions
+            if kl in _Hk0:
+                if I in _Hk0[kl]:
+                    _Hk[kl][I] += _Hk0[kl][I]
+
+            # Fill values and samples
+            values.append(_Hk[kl][I])
+            samples.extend([list(I) + [ik] for ik in range(_Hk[kl][I].shape[0])])
+            
+        values = torch.concatenate(values)
+        _, n_mi, n_mj, _ = values.shape
+        samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
+        components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
+        
+        _k_target_blocks.append(
+            TensorBlock(
+                samples = samples,
+                components = components,
+                properties = properties,
+                values = values
+            )
+        )
+        
+        keys.append(list(kl))
+
+    _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
+
+    return _k_target_blocks
+
 def TMap_bloch_sums(target_blocks, phase, indices):
     from metatensor import Labels, TensorBlock, TensorMap
 
@@ -1222,15 +1297,23 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         # Loop through the unique (ifr, i, j) triplets
         for I, (ifr, i, j) in enumerate(phase[kl]):
             idx = indices[kl][ifr,i,j]
-            if bt != 0:
-                _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
-            else:
-                if (ifr, i, j) in _Hk[_kl]:
-                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
-                else:
-                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2) # TODO
-                    
+            values = b.values[idx].to(phase[kl][ifr, i, j])
 
+            if bt != 0:
+                # block type not zero: create dictionary element
+                if (ifr, i, j) in _Hk[_kl]:
+                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])
+                else:
+                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])
+            else:
+                # block type zero
+                if (ifr, i, j) in _Hk[_kl]:
+                    # if the corresponding bt = +1 element exists, sum to it the bt=0 contribution
+                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                else:
+                    # The corresponding bt = +1 element does not exist. Create the dictionary element
+                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                    
     # Now store in a tensormap
     _k_target_blocks = []
     keys = []
@@ -1243,9 +1326,10 @@ def TMap_bloch_sums(target_blocks, phase, indices):
         samples = []
         
         for ifr, i, j in sorted(_Hk[kl]):
+            
             # skip when same orbitals, atoms, and block type == -1
             # print(kl[0], '|', kl[2], kl[3], kl[5], kl[6],'|',ifr,i,j)
-            if not (same_orbitals and (i == j) and (kl[0] == -1)):
+            # if not (same_orbitals and (i == j) and (kl[0] == -1)):
                 # if kl[0] == -1:
                 #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
                 # Fill values and samples
