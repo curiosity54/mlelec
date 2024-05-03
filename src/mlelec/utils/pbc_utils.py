@@ -1251,8 +1251,6 @@ def TMap_bloch_sums(target_blocks, phase, indices):
                 # Fill values and samples
                 values.append(_Hk[kl][ifr, i, j])
                 samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
-            else:
-                print('else',kl[2], kl[5], kl[3], kl[6],ifr,i,j)
             
         values = torch.concatenate(values)
         _, n_mi, n_mj, _ = values.shape
