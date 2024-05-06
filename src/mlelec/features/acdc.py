@@ -35,9 +35,10 @@ def single_center_features(
 ):
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
-    rhoi = rhoi.keys_to_properties(["species_neighbor"])
-    # print(rhoi[0].samples)
     rho1i = acdc_standardize_keys(rhoi)
+    rho1i = rho1i.keys_to_properties(["species_neighbor"])
+    # print(rhoi[0].samples)
+    
     # rho1i = _standardize(rho1i)
     if order_nu == 1:
         # return upto lcut? # TODO: change this maybe
