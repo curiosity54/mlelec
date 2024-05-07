@@ -1,114 +1,15 @@
 import numpy as np
 from metatensor import Labels, TensorBlock, TensorMap
-from rascaline import SphericalExpansion, SphericalExpansionByPair
 from itertools import product
 import re
 import torch
-import scipy
+from metatensor import sort_block
 from typing import List, Optional, Union
 import metatensor
 import metatensor.operations as operations
 
 from mlelec.utils.symmetry import ClebschGordanReal
-from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
-from mlelec.utils.metatensor_utils import labels_where
 from tqdm.notebook import tqdm  # <<< change this
-
-
-def block_to_mic_translation(frame, block, kmesh):
-    # TODO: frame is a list corresponding to diff samples int he block
-    sample = np.asarray(
-        [
-            list(block.samples["center"]),
-            list(block.samples["neighbor"]),
-            list(block.samples["cell_shift_a"]),
-            list(block.samples["cell_shift_b"]),
-            list(block.samples["cell_shift_c"]),
-        ]
-    ).T
-    fixed_sample = []  # block.samples.values.copy()
-    # fixed_sample = np.pad(fixed_sample, ((0, 0), (0, 3)))
-
-    assert not np.any(
-        np.where(sample - block.samples.values[:, 1:])
-    ), "Sample and block samples are not the same"
-    retained_idx = []
-    val_idx = []  # track indx of [i,j,mic_x, mic_y, mic_z]
-    with tqdm(
-        total=len(sample),
-        bar_format="{bar}{r_bar} [ time left: {remaining}, time spent: {elapsed}]",
-    ) as pbar:
-        for smpidx, (i, j, x, y, z) in enumerate(sample):
-            # i is always in cell 0
-            pbar.update(1)
-            if x >= 0 and y >= 0 and z >= 0:
-                if [x, y, z] == [0, 0, 0]:
-                    continue
-                retained_idx.append(smpidx)
-                # print('------')
-                # J = scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh)
-                # print(i, j, J,[x,y,z])
-                mic_x, mic_y, mic_z = scidx_to_mic_translation(
-                    frame,
-                    I=i,
-                    J=scidx_from_unitcell(frame, j=j, T=[x, y, z], kmesh=kmesh),
-                    j=j,
-                    kmesh=kmesh,
-                )
-
-                if [mic_x, mic_y, mic_z] != [x, y, z]:
-
-                    _, mappedidx = labels_where(
-                        block.samples,
-                        Labels(
-                            [
-                                "structure",
-                                "center",
-                                "neighbor",
-                                "cell_shift_a",
-                                "cell_shift_b",
-                                "cell_shift_c",
-                            ],
-                            values=np.asarray(
-                                [
-                                    block.samples["structure"][smpidx],
-                                    i,
-                                    j,
-                                    mic_x,
-                                    mic_y,
-                                    mic_z,
-                                ]
-                            ).reshape(1, -1),
-                        ),
-                        return_idx=True,
-                    )
-                    assert len(mappedidx) == 1
-                    val_idx.append(mappedidx[0])
-                else:
-                    val_idx.append(smpidx)
-                # print(mic_x, mic_y, mic_z)
-                # fixed_sample[smpidx, -3:] = [mic_x, mic_y, mic_z]
-                fixed_sample.append(
-                    [
-                        block.samples["structure"][smpidx],
-                        i,
-                        j,
-                        x,
-                        y,
-                        z,
-                        mic_x,
-                        mic_y,
-                        mic_z,
-                    ]
-                )
-                # print()
-    fixed_samples = Labels(
-        block.samples.names
-        + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
-        values=np.array(fixed_sample),
-    )
-    return fixed_samples, retained_idx, val_idx
-
 
 def fix_gij(rho0_ij):
     """
@@ -173,7 +74,6 @@ def fix_gij(rho0_ij):
         blocks.append(block)
     return TensorMap(rho0_ij.keys, blocks)
 
-
 def _remove_suffix(names, new_suffix=""):
     suffix = re.compile("_[0-9]?$")
     rname = []
@@ -184,7 +84,6 @@ def _remove_suffix(names, new_suffix=""):
         else:
             rname.append(name[: match.start()] + new_suffix)
     return rname
-
 
 def acdc_standardize_keys(descriptor, drop_pair_id=True):
     """Standardize the naming scheme of density expansion coefficient blocks (nu=1)"""
@@ -307,10 +206,6 @@ def flatten(x):
         for aa in x:
             flat_list_tuples.append(flatten(aa))
         return flat_list_tuples
-
-
-from metatensor import equal, equal_metadata, allclose, allclose_block, sort, sort_block
-
 
 # Serious TODO: Cleanup please FIXME
 def cg_combine(
@@ -779,7 +674,6 @@ def cg_combine(
     )
     return X
 
-
 def cg_increment(
     x_nu,
     x_1,
@@ -822,7 +716,6 @@ def cg_increment(
         mp=mp,
     )
 
-
 def relabel_keys(tensormap, key_name: str = None):
     # TODO: support key_name to be a dictionary of {key_name: new_name}
     """Relabel the key to contract with other_keys_match, for ACDC - 'species_center' gets renamed to 'key_name'
@@ -862,7 +755,6 @@ def relabel_keys(tensormap, key_name: str = None):
 
     new_tensormap = TensorMap(new_tensor_keys, new_tensor_blocks)
     return new_tensormap
-
 
 def contract_rho_ij(rhoijp, elements, property_names=None):
     """contract the doubly decorated pair feature rhoijp = |rho_{ij}^{[nu, nu']}> to return  |rho_{i}^{[nu <- nu']}>"""
@@ -964,28 +856,6 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
     )
 
     return rhoMPi
-
-
-def _standardize(feat: TensorMap):
-    blocks = []
-    for k, b in feat.items():
-        x = b.values.clone()
-        vshape = x.shape
-        x = x.reshape(x.shape[0] * x.shape[1], x.shape[2])
-        std = torch.std(x, axis=0)
-        std[np.isclose(std, 0)] = 1
-        print(std.shape, x.shape)
-        x = x / std[None, :]
-        blocks.append(
-            TensorBlock(
-                components=b.components,
-                properties=b.properties,
-                values=x.reshape(vshape),
-                samples=b.samples,
-            )
-        )
-    return TensorMap(feat.keys, blocks)
-
 
 def compute_rhoi_pca(
     rhoi,

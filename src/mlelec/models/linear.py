@@ -123,7 +123,6 @@ class MLP(nn.Module):
         nhidden: int,
         nout: int = 1,
         activation: Union[str, callable] = None,
-        norm: bool = False,
         bias: bool = False,
         device=None,
         apply_layer_norm = False, 
@@ -165,72 +164,11 @@ class MLP(nn.Module):
             # final linear layer
             self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
             
-        # if nlayers <=1: # FIXME: what's the point of this?
-        #     if activation is not None:
-        #         self.mlp = []
-        #         self.mlp.append(nn.Linear(nin, nout, bias=bias))
-        #         if isinstance(activation, str):
-        #             if activation.lower() == 'linear':
-        #                 activation = lambda x: x
-        #             else:
-        #                 activation = getattr(nn, activation)()
-        #         self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
-        #         self.mlp = nn.Sequential(*self.mlp)
-        #     else:
-        #         self.mlp = nn.Linear(nin, nout, bias=bias)
-            
-        #     self.mlp.to(device)
-        #     return
-
-        # if apply_layer_norm:
-        #     self.mlp = [
-        #         # nn.LayerNorm(nin, bias=False, elementwise_affine=False), # DONT DO THIS
-        #         # EquiLayerNorm(np.arange(nin), bias=False, elementwise_affine=False),
-        #         nn.Linear(nin, nhidden, bias=bias),
-        #     ]
-        # else:
-        # self.mlp = [
-        #         nn.Linear(nin, nhidden, bias=bias),
-        #     ]
-        # if norm:
-        #     # norm_layer = NormLayer(nonlinearity=activation, device=device)
-        #     # norm_layer = EquiLayerNorm(nhidden, bias=False, elementwise_affine=False)
-        #     pass
-        # # Loop through the hidden layers
-        # for _ in range(nlayers):
-        #     if activation is not None:
-        #         if isinstance(activation, str):
-        #             if activation.lower() == 'linear':
-        #                 activation = lambda x: x
-        #             else:
-        #                 activation = getattr(nn, activation)()
-        #         elif issubclass(torch.nn.SiLU, torch.nn.Module): # FIXME must be a better way to check if isinstance(activation, nn.activation callable)
-        #             activation = activation
-        #         else:
-        #             raise ValueError('activation MUST be a string')
-        #         if activation_with_linear:
-        #             mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize=nhidden), nn.Linear(nhidden, nhidden, bias=bias)]
-        #         else: 
-        #             mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize =nhidden)]
-        #         self.mlp.extend(mid_layer)
-                
-        #     else: 
-        #         self.mlp.append(nn.Linear(nhidden, nhidden, bias=bias))
-            
-            # if norm:
-            #     self.mlp.append(norm_layer)
-        # if activation is not None:
-        #     if isinstance(activation, str):
-        #         activation = getattr(nn, activation)()
-        #         self.mlp.append(EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm))
-                
-        # self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
 
     def forward(self, x):
         return self.mlp(x)
-
 
 class LinearTargetModel(nn.Module):
     def __init__(

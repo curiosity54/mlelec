@@ -3,133 +3,7 @@ import warnings
 from scipy.fft import fftn, ifftn
 from torch.fft import fftn as torch_fftn, ifftn as torch_ifftn
 from ase.units import Bohr
-
-
-def scidx_from_unitcell(frame, j=0, T=[0, 0, 0], kmesh=None):
-    """Find index of atom j belonging to cell with translation vector T to its index in the supercell consistent with an SCF calc with kgrid =kmesh"""
-    assert j < len(frame), "j must be less than the number of atoms in the unit cell"
-    assert len(T) == 3, "T must be a 3-tuple"
-    assert all(
-        [t >= 0 for t in T]
-    ), "T must be non-negative"  # T must be positive for the logic
-    if kmesh is None:
-        kmesh = np.asarray([1, 1, 1])
-        warnings.warn("kmesh not specified, assuming 1x1x1")
-    if isinstance(kmesh, int):
-        kmesh = np.asarray([kmesh, kmesh, kmesh])
-    else:
-        assert len(kmesh) == 3, "kmesh must be a 3-tuple"
-
-    N1, N2, N3 = kmesh
-    natoms = len(frame)
-    J = j + natoms * ((N3 * N2) * T[0] + (N3 * T[1]) + T[2])
-    return J
-
-
-def _position_in_translation(frame, j, T):
-    """Return the position of atom j in unit cell translated by vector T"""
-    return frame.positions[j] + np.dot((T[0], T[1], T[2]), frame.cell)
-
-
-def scidx_to_mic_translation(
-    frame,
-    I=0,
-    J=0,
-    j=0,
-    kmesh=[1, 1, 1],
-    epsilon=0,
-    ifprint=False,
-    return_distance=False,
-):
-    def fix_translation_sign(frame, mic_T, i, j):
-        """Return the "correct mic_T"""
-        cell = frame.cell.array.T
-
-        # Vector joining atoms i and j in the unit cell
-        rij_in_cell = frame.positions[j] - frame.positions[i]
-
-        # i-j MIC distance in the supercell
-        rij_T = cell @ mic_T + rij_in_cell
-
-        # same thing, but the sign of T is reversed
-        rij_mT = -cell @ mic_T + rij_in_cell
-
-        # Check whether the two distances are the same
-        equal_distance = np.isclose(np.linalg.norm(rij_T), np.linalg.norm(rij_mT))
-
-        if not equal_distance:
-            return mic_T, False
-            # # Return the T that gives the shortest distance
-            # if np.linalg.norm(rij_T) < np.linalg.norm(rij_mT):
-            #     return mic_T
-            # else:
-            #     return -np.asarray(mic_T)
-        else:
-            # If the distances are equal, choose the T that has the first non-zero component posiviely signed
-            idx = np.where(~(np.sign(mic_T) == np.sign(-np.asarray(mic_T))))
-
-            if len(idx[0]) == 0:
-                assert np.linalg.norm(mic_T) == 0, mic_T
-                return mic_T, False
-            else:
-                idx = idx[0][0]
-                if np.sign(mic_T[idx]) == 1:
-                    return mic_T, False
-                else:
-                    return -np.asarray(mic_T), True
-
-    """Find the minimum image convention translation vector from atom I to atom J in the supercell of size kmesh"""
-    assert frame.cell is not None, "Cell must be defined"
-    cell_inv = np.linalg.inv(frame.cell.array.T)
-
-    superframe = frame.repeat(kmesh)
-    if J >= len(superframe):
-        # print(J)
-        J = J % len(superframe)
-        warnings.warn(
-            "J is greater than the number of atoms in the supercell. Mapping J to J % len(superframe)"
-        )
-    assert I < len(frame) and J < len(
-        superframe
-    ), "I and J must be less than the number of atoms in the supercell"
-    # this works correctly only when I<J - J should not be greater than I anyway as I always in 000 cell
-    d = superframe.get_distance(I, J, mic=True, vector=True).T
-    p_i = frame.positions[I]
-    p_j = frame.positions[j]
-    dplus = p_i + d - p_j  # from i to J to the origin of that (unit) cell
-    dminus = p_j - d - p_i  # from j to I to the origin of that (unit) cell
-    # print(
-    # cell_inv @ dplus, cell_inv @ dminus, cell_inv @ (dplus + dminus), "mict,micmt"
-    # )
-    mic_T = np.round(cell_inv @ dplus + epsilon).astype(int)
-    # mic_minusT = np.round(cell_inv @ dminus + epsilon).astype(int)
-    # print("bef", mic_T, mic_minusT, end=" ")
-    mic_T, fixed_plus = fix_translation_sign(frame, mic_T, I, j)
-    mic_minusT = -1 * mic_T
-    fixed_minus = fixed_plus
-    # mic_minusT, fixed_minus = fix_translation_sign(frame, mic_minusT, j, I)
-    # fixed_plus = fixed_minus = False
-    # print("aft", mic_T, mic_minusT)
-    if ifprint:
-        print(cell_inv @ d)
-        print(d)
-    if return_distance:
-        distance = superframe.get_distance(I, J, mic=True, vector=False)
-        return mic_T, mic_minusT, fixed_plus, fixed_minus, distance
-    else:
-        return (
-            mic_T,
-            mic_minusT,
-            fixed_plus,
-            fixed_minus,
-        )  # adding noise to avoid numerical issues
-
-
-# np.floor(cell_inv @ d + epsilon).astype(
-# int
-# )  # adding noise to avoid numerical issues
-# This sometimes returns [-3,-2,0] for [1 2 0] which is correect based on the distance
-
+from metatensor import Labels, TensorBlock, TensorMap
 from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.twocenter_utils import (
     _components_idx,
@@ -566,7 +440,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
 
 def move_cell_shifts_to_keys(blocks):
     """ Move cell shifts when present in samples, to keys"""
-    from metatensor import Labels, TensorBlock, TensorMap
 
     out_blocks = []
     out_block_keys = []
@@ -964,21 +837,7 @@ def inverse_fourier_transform(H_T, T_list = None, k = None, phase = None, norm =
         # return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
-    
-def inverse_fourier_transform_OLD(H_T, T_list, k):
-    '''
-    Compute the Inverse Fourier Transform
-    '''    
-    # print( k, '<')
-    # print(H_T.shape, T_list.shape)
-    if isinstance(H_T, np.ndarray):
-        return 1/np.sqrt(np.shape(T_list)[0])*np.sum([np.exp(2j*np.pi * np.dot(k, Ti)) * H_Ti for Ti, H_Ti in zip(T_list, H_T)], axis = 0)  
-    elif isinstance(H_T, torch.Tensor):
-        k = torch.tensor(k).to(T_list.device)
-        # print(k, T_list)
-        return 1/np.sqrt(len(T_list))*torch.sum(torch.stack([torch.exp(2j*np.pi * torch.dot(k, Ti.type(torch.float64))) * H_Ti for Ti, H_Ti in zip(T_list, H_T)]),  dim=0)
-    else:
-        raise ValueError("H_T must be np.ndarray or torch.Tensor")
+
     
 def inverse_fft(H_T, kmesh):
     '''
@@ -996,19 +855,6 @@ def inverse_fft(H_T, kmesh):
         return torch_ifftn(H_T.reshape(*kmesh, -1), dim = (0, 1, 2), norm = 'ortho').reshape(np.prod(kmesh), shape, shape)
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
-
-def get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh):
-    assert np.all(np.sign(dummy_T) >= 0) or np.all(np.sign(dummy_T) <= 0), "The translation indices must either be all positive or all negative (or zero)"
-    sign = np.sum(dummy_T)
-    if sign != 0:
-        sign = sign/np.abs(sign)
-    dummy_T = np.abs(dummy_T)
-    supercell = frame.repeat(kmesh)
-    I = i
-    J = scidx_from_unitcell(frame, j = j, T = dummy_T, kmesh = kmesh)
-    d = supercell.get_distance(I, J, mic = True, vector = True) - frame.positions[j] + frame.positions[i]
-    mic_T = np.int32(np.round(np.linalg.inv(frame.cell.array).T@d))
-    return I, J, np.int32(sign*mic_T)
 
 def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
     from mlelec.utils.metatensor_utils import TensorBuilder
@@ -1199,7 +1045,6 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     return phase, indices
 
 def TMap_bloch_sums_OLD(target_blocks, phase, indices):
-    from metatensor import Labels, TensorBlock, TensorMap
 
     _Hk = {}
     _Hk0 = {}
@@ -1272,8 +1117,8 @@ def TMap_bloch_sums_OLD(target_blocks, phase, indices):
 
     return _k_target_blocks
 
+dummy_prop = Labels(['dummy'], np.array([[0]]))
 def TMap_bloch_sums(target_blocks, phase, indices):
-    from metatensor import Labels, TensorBlock, TensorMap
 
     _Hk = {}
     _Hk0 = {}
@@ -1295,29 +1140,35 @@ def TMap_bloch_sums(target_blocks, phase, indices):
             _Hk[_kl] = {}
 
         # Loop through the unique (ifr, i, j) triplets
+        b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
         for I, (ifr, i, j) in enumerate(phase[kl]):
+            
             idx = indices[kl][ifr,i,j]
-            values = b.values[idx].to(phase[kl][ifr, i, j])
+            values = b_values[idx]
+            vshape = values.shape
+            pshape = phase[kl][ifr, i, j].shape
+
+            # equivalent to torch.einsum('Tmnv,kT->kmnv', values.to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j]), but faster
+            contraction = (phase[kl][ifr, i, j]@values.reshape(vshape[0], -1)).reshape(pshape[0], *vshape[1:])
 
             if bt != 0:
                 # block type not zero: create dictionary element
                 if (ifr, i, j) in _Hk[_kl]:
-                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])
+                    _Hk[_kl][ifr, i, j] += contraction
                 else:
-                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])
+                    _Hk[_kl][ifr, i, j] = contraction
             else:
                 # block type zero
                 if (ifr, i, j) in _Hk[_kl]:
                     # if the corresponding bt = +1 element exists, sum to it the bt=0 contribution
-                    _Hk[_kl][ifr, i, j] += torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                    _Hk[_kl][ifr, i, j] += contraction*np.sqrt(2)
                 else:
                     # The corresponding bt = +1 element does not exist. Create the dictionary element
-                    _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', values, phase[kl][ifr, i, j])*np.sqrt(2) # TODO
+                    _Hk[_kl][ifr, i, j] = contraction*np.sqrt(2)
                     
     # Now store in a tensormap
     _k_target_blocks = []
     keys = []
-    properties = Labels(['dummy'], np.array([[0]]))
     for kl in _Hk:
 
         same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
@@ -1345,7 +1196,7 @@ def TMap_bloch_sums(target_blocks, phase, indices):
             TensorBlock(
                 samples = samples,
                 components = components,
-                properties = properties,
+                properties = dummy_prop,
                 values = values
             )
         )

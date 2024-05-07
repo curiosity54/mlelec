@@ -10,7 +10,6 @@ import metatensor.operations as operations
 import torch
 import numpy as np
 import warnings
-from mlelec.utils.metatensor_utils import labels_where
 from mlelec.features.acdc_utils import (
     acdc_standardize_keys,
     cg_increment,
@@ -19,16 +18,15 @@ from mlelec.features.acdc_utils import (
     relabel_keys,
     fix_gij,
     drop_blocks_L,
-    block_to_mic_translation,
-    _standardize,
 )
 from typing import List, Optional, Union, Tuple
 import tqdm
+from mlelec.targets import SingleCenter, TwoCenter
+from mlelec.data.dataset import MLDataset
 
 # TODO: use rascaline.clebsch_gordan.combine_single_center_to_nu when support for multiple centers is added
 
 use_native = True  # True for rascaline
-
 
 def single_center_features(
     frames, hypers, order_nu, lcut=None, cg=None, device="cpu", **kwargs
@@ -94,9 +92,6 @@ def pair_features(
     lcut: int = 3,
     device="cpu",
     kmesh=None,
-    T_dict=None,
-    counter=None,
-    mic=False,
     return_rho0ij=False,
     **kwargs,
 ):
@@ -125,7 +120,7 @@ def pair_features(
 
     if all_pairs:    
         repframes = [f.repeat(kmesh[ifr]) for ifr, f in enumerate(frames)]
-        hypers_pair["cutoff"] = np.ceil(np.max([np.max(f.get_all_distances(mic = mic)) for f in repframes]))
+        hypers_pair["cutoff"] = np.ceil(np.max([np.max(f.get_all_distances(mic = False)) for f in repframes]))
         warnings.warn(f"Overwriting hyperparameter 'cutoff' to new value {hypers_pair['cutoff']} for all pair feature.")
 
     calculator = PairExpansion(**hypers_pair)
@@ -134,155 +129,58 @@ def pair_features(
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
 
-    if not mic and return_rho0ij:
+    if return_rho0ij:
         return rho0_ij
 
+    blocks = []
+    for key, block in rho0_ij.items():
+        # print(block.values.shape,'1')
+        block_species_i = key['species_center']
+        block_species_j = key['species_neighbor']
+        all_frames = np.unique(block.samples.values[:, 0])
+        sample_labels = []
+        value_indices = []
 
-    # print(hypers_pair)
-    # ----- MIC mapping ------
-    if mic:
-        from mlelec.utils.pbc_utils import scidx_from_unitcell, scidx_to_mic_translation
+        negative_list = []
+        for isample, sample in enumerate(block.samples):
+            ifr = sample['structure']
+            i = sample['center']
+            j = sample['neighbor']
+            x = sample['cell_shift_a']
+            y = sample['cell_shift_b']
+            z = sample['cell_shift_c']
 
-        # generate all the translations and assign values based on mic map
-        # assert kmesh is not None, "kmesh must be specified for MIC mapping"
-        # we should add the missing samples
-        warnings.warn(f"Using kmesh {kmesh} for MIC mapping")
-        blocks = []
-        for key, block in rho0_ij.items():
-            block_species_i = key['species_center']
-            block_species_j = key['species_neighbor']
-            all_frames = np.unique(block.samples.values[:, 0])
-            value_indices = []
-            fixed_sample = []
+            if False: #[i, j, x, y, z] in negative_list: # <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
+                continue
+            else:
+                value_indices.append(isample)
+                sample_labels.append([ifr, i, j, x, y, z, 1])
+                if not (j==i and x==0 and y==0 and z==0):
+                    sample_labels.append([ifr, j, i, x, y, z, -1])
+                    negative_list.append([j, i, -x, -y, -z])
 
+                    neg_label = Labels(["structure","center","neighbor","cell_shift_a","cell_shift_b","cell_shift_c",],
+                                            values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                    mappedidx = block.samples.position(neg_label)
+                    assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
+                    value_indices.append(mappedidx)
+        
 
-            for ifr in all_frames:
-                
-                for T_dummy in T_dict[ifr]:
-                    for T in T_dict[ifr][T_dummy]:
-                        pairs = np.where(counter[ifr][T])
-
-                        for i, j in zip(*pairs):
-
-                            if not all_pairs:
-                                ij_distance = np.linalg.norm(frames[ifr].cell.array.T @ np.array(T) + frames[ifr].positions[j] - frames[ifr].positions[i])
-                                if ij_distance > hypers_pair['cutoff']:
-                                    continue
-
-                            ai, aj = frames[ifr].numbers[i], frames[ifr].numbers[j]
-                        
-                            if ai != block_species_i or aj != block_species_j:
-                                continue
-                        
-                            x, y, z = T
-                            mic_label = Labels(
-                                [
-                                    "structure",
-                                    "center",
-                                    "neighbor",
-                                    "cell_shift_a",
-                                    "cell_shift_b",
-                                    "cell_shift_c",
-                                ],
-                                values=np.asarray([ifr, i, j, x, y, z]).reshape(1, -1),
-                            )[0]
-                            # print(mic_label)
-                            mappedidx = block.samples.position(mic_label)
-
-                            assert isinstance(mappedidx, int), (mappedidx, mic_label, key,)
-
-                            value_indices.append(mappedidx)
-                            fixed_sample.append([ifr, i, j, T_dummy[0], T_dummy[1], T_dummy[2], 1])  # Here we still label features with the original T
-
-                            mic_label = Labels(
-                                [
-                                    "structure",
-                                    "center",
-                                    "neighbor",
-                                    "cell_shift_a",
-                                    "cell_shift_b",
-                                    "cell_shift_c",
-                                ],
-                                values=np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1),
-                            )[0]
-                            mappedidx = block.samples.position(mic_label)
-                            if ai!=aj:
-                                continue
-                            assert isinstance(mappedidx, int), (mappedidx, mic_label, key)
-
-                            value_indices.append(mappedidx)
-                            fixed_sample.append([ifr, j, i, T_dummy[0], T_dummy[1], T_dummy[2], -1])
-
-            fixed_sample = np.asarray(fixed_sample)
-            
-            blocks.append(
-                sort_block(TensorBlock(
-                    values=block.values[value_indices],
-                    samples=Labels(
-                        block.samples.names + ['sign'],
-                        fixed_sample,
-                    ),
-                    components=block.components,
-                    properties=block.properties,
-                ), axes = 'samples')
-            )
-
-        rho0_ij = TensorMap(keys=rho0_ij.keys, blocks=blocks)
-
-    else:
-
-        blocks = []
-        for key, block in rho0_ij.items():
-            # print(block.values.shape,'1')
-            block_species_i = key['species_center']
-            block_species_j = key['species_neighbor']
-            all_frames = np.unique(block.samples.values[:, 0])
-            sample_labels = []
-            value_indices = []
-
-            negative_list = []
-            for isample, sample in enumerate(block.samples):
-                ifr = sample['structure']
-                i = sample['center']
-                j = sample['neighbor']
-                x = sample['cell_shift_a']
-                y = sample['cell_shift_b']
-                z = sample['cell_shift_c']
-
-                if False: #[i, j, x, y, z] in negative_list: # <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
-                    continue
-                else:
-                    value_indices.append(isample)
-                    sample_labels.append([ifr, i, j, x, y, z, 1])
-                    if not (j==i and x==0 and y==0 and z==0):
-                        sample_labels.append([ifr, j, i, x, y, z, -1])
-                        negative_list.append([j, i, -x, -y, -z])
-
-                        neg_label = Labels(["structure","center","neighbor","cell_shift_a","cell_shift_b","cell_shift_c",],
-                                                values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
-                        mappedidx = block.samples.position(neg_label)
-                        assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
-                        value_indices.append(mappedidx)
-            
-
-            sample_labels = np.asarray(sample_labels)
-            
-            blocks.append(
-                sort_block(TensorBlock(
-                    values = block.values[value_indices],
-                    samples = Labels(
-                        block.samples.names + ['sign'],
-                        sample_labels,
-                    ),
-                    components = block.components,
-                    properties = block.properties,
-                ), axes = 'samples')
-            )
-            # print(blocks[-1].values.shape, '2')
-        rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
-    
-    if mic and return_rho0ij:
-        return rho0_ij 
+        sample_labels = np.asarray(sample_labels)
+        
+        blocks.append(
+            sort_block(TensorBlock(
+                values = block.values[value_indices],
+                samples = Labels(
+                    block.samples.names + ['sign'],
+                    sample_labels,
+                ),
+                components = block.components,
+                properties = block.properties,
+            ), axes = 'samples')
+        )
+        # print(blocks[-1].values.shape, '2')
+    rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
     
     if isinstance(order_nu, list):
         assert (
@@ -355,15 +253,6 @@ def pair_features(
         # )
 
         return rhonu_nupij
-
-
-# TODO: MP feature
-# elements = np.unique(frames[0].numbers)#np.unique(np.hstack([f.numbers for f in frames]))
-# rhoMPi = contract_rho_ij(rhonu_nuijp, elements, rho(NU=nu+nu'+1)i.property_names)
-# print("MPi computed")
-
-# rhoMPij = cg_increment(rhoMPi, rho0_ij, lcut=lcut, other_keys_match=["species_center"], clebsch_gordan=cg)
-
 
 def twocenter_features_periodic_NH(
     single_center: TensorMap, pair: TensorMap, all_pairs = False
@@ -452,7 +341,6 @@ def twocenter_features_periodic_NH(
 
             # for smp_up in range(len(idx_up)):
             for idx in idx_ij:
-                # Sample values except the MIC cell shifts
                 structure, i, j, Tx, Ty, Tz, sign = b.samples.values[idx]
 
                 if i == j == Tx == Ty == Tz == 0:
@@ -523,7 +411,6 @@ def twocenter_hermitian_features(
     single_center: TensorMap,
     pair: TensorMap,
 ) -> TensorMap:
-    # keep this function only for molecules - hanldle 000 shift using hermitian PBC - MIC mapping #FIXME
     # actually special class of features for Hermitian (rank2 tensor)
     keys = []
     blocks = []
@@ -620,154 +507,10 @@ def twocenter_hermitian_features(
             names=pair.keys.names
             + ["block_type"]
             + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
-            # + ["cell_shift_a_MIC", "cell_shift_b_MIC", "cell_shift_c_MIC"],
             values=np.asarray(keys, dtype=np.int32),
         ),
         blocks=blocks,
     )
-
-def twocenter_hermitian_features_periodic(
-    single_center: TensorMap,
-    pair: TensorMap,
-    shift: Optional[Tuple[int, int, int]] = None,
-    antisymmetric: bool = False,
-):
-    if shift == [0, 0, 0]:
-        return twocenter_hermitian_features(single_center, pair)
-
-    keys = []
-    blocks = []
-
-    for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
-            idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
-            if len(idx) == 0:
-                continue
-            keys.append(tuple(k) + (0,))
-            blocks.append(
-                TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values[idx],
-                )
-            )
-        else:
-            raise NotImplementedError  # Handle periodic case for different species
-
-    for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:
-            # off-site, same species
-            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
-            if len(idx_up) == 0:
-                continue
-            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
-            if len(idx_lo) == 0:
-                print(
-                    "Corresponding swapped pair not found",
-                    np.array(b.samples.values)[idx_up],
-                )
-            # else:
-            # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
-            # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            smp_up, smp_lo = 0, 0
-            for smp_up in range(len(idx_up)):
-                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
-                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
-                for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples.view(["neighbor", "center"]).values[
-                        idx_lo[smp_lo]
-                    ]
-                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
-                    if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
-                    ):
-                        raise ValueError(
-                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
-                        )
-                    if tuple(ij) == tuple(ij_lo):
-                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
-                        break
-
-            keys.append(tuple(k) + (1,))
-            keys.append(tuple(k) + (-1,))
-            # print(k.values, b.values.shape, idx_up.shape, idx_lo.shape)
-            if not antisymmetric:
-                blocks.append(
-                    TensorBlock(
-                        samples=Labels(
-                            names=b.samples.names,
-                            values=np.asarray(b.samples.values[idx_up]),
-                        ),
-                        components=b.components,
-                        properties=b.properties,
-                        values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
-                    )
-                )
-                blocks.append(
-                    TensorBlock(
-                        samples=Labels(
-                            names=b.samples.names,
-                            values=np.asarray(b.samples.values[idx_up]),
-                        ),
-                        components=b.components,
-                        properties=b.properties,
-                        values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
-                    )
-                )
-            else:
-                blocks.append(
-                    TensorBlock(
-                        samples=Labels(
-                            names=b.samples.names,
-                            values=np.asarray(b.samples.values[idx_up]),
-                        ),
-                        components=b.components,
-                        properties=b.properties,
-                        values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
-                    )
-                )
-                blocks.append(
-                    TensorBlock(
-                        samples=Labels(
-                            names=b.samples.names,
-                            values=np.asarray(b.samples.values[idx_up]),
-                        ),
-                        components=b.components,
-                        properties=b.properties,
-                        values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
-                    )
-                )
-        elif k["species_center"] < k["species_neighbor"]:
-            # off-site, different species
-            keys.append(tuple(k) + (2,))
-            blocks.append(b.copy())
-
-    # kkeys = [list(k) for k in keys]
-    # print([len(k) for k in keys])
-    # print(keys[2], keys[3], )
-    # print(np.asarray(kkeys).shape   )
-    # print(Labels(
-    #         names=pair.keys.names + ["block_type"],
-    #         values=np.asarray(keys),
-    #     ),)
-    return TensorMap(
-        keys=Labels(
-            names=pair.keys.names + ["block_type"],
-            values=np.asarray(keys),
-        ),
-        blocks=blocks,
-    )
-
-
-from mlelec.targets import SingleCenter, TwoCenter
-from mlelec.data.dataset import MLDataset
-
 
 def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     hypers = kwargs.get("hypers", None)
