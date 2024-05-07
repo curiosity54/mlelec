@@ -128,7 +128,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
 
 
     if not "order_nu" in key_names:
-        key_names = key_names = np.asarray(["order_nu"] +list(key_names), dtype='<U22')
+        key_names = np.asarray(["order_nu"] + list(key_names), dtype='<U22')
 
     
     key_names = tuple(key_names)
@@ -138,9 +138,9 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
     keys = []
     for key, block in descriptor.items():
         key = tuple(key)
-        if not "o3_sigma" in key_names:
+        if "o3_sigma" not in key_names:
             key = (1,) + key
-        if not "order_nu" in key_names:
+        if "order_nu" not in key_names:
             key = (1,) + key
         keys.append(key)
         property_names = _remove_suffix(block.properties.names, "_1")
@@ -191,7 +191,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         )
 
     return TensorMap(
-        keys=Labels(names=key_names, values=np.asarray(keys, dtype=np.int32)),
+        keys=Labels(names=key_names, values=np.asarray(keys)),
         blocks=blocks,
     )
 
@@ -206,6 +206,38 @@ def flatten(x):
         for aa in x:
             flat_list_tuples.append(flatten(aa))
         return flat_list_tuples
+
+def sample_atom_atom(block_a, block_b):
+    return slice(None)
+
+def sample_atom_pair(block_a, block_b, is_mp = False):
+
+    samples_a = block_a.samples
+    samples_b = block_b.samples
+
+    if is_mp:
+        center_slice = []
+        smp_a, smp_b = 0, 0
+        while smp_b < samples_b.values.shape[0]:
+            # print(index_b, samples_b[smp_b][["structure", "center", "neighbor"]], index_a, samples_a[smp_a])
+            idx = [idx for idx, tup in enumerate(samples_a) if tup[0] == samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["neighbor"]][0]
+            center_slice.append(idx)
+            smp_b += 1
+        center_slice = np.asarray(center_slice)
+        return center_slice
+    
+    else:
+        neighbor_slice = []
+        smp_a, smp_b = 0, 0
+        
+        while smp_b < samples_b.values.shape[0]:
+            if (samples_b[smp_b]["structure"], samples_b[smp_b]["center"],) != (samples_a[smp_a]["structure"], samples_a[smp_a]["center"]):
+                if smp_a + 1 < samples_a.values.shape[0]:
+                    smp_a += 1
+            neighbor_slice.append(smp_a)
+            smp_b += 1
+        neighbor_slice = np.asarray(neighbor_slice)
+        return neighbor_slice    
 
 # Serious TODO: Cleanup please FIXME
 def cg_combine(
@@ -232,337 +264,108 @@ def cg_combine(
     if clebsch_gordan is None:
         clebsch_gordan = ClebschGordanReal(max(lcut, lmax_a, lmax_b) + 1, device=device)
 
-    other_keys_a = tuple(
-        name
-        for name in x_a.keys.names
-        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
-    )
-    other_keys_b = tuple(
-        name
-        for name in x_b.keys.names
-        if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"]
-    )
+    other_keys_a = tuple(name for name in x_a.keys.names if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"])
+    other_keys_b = tuple(name for name in x_b.keys.names if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"])
+
+    # atom-atom
+    # atom-gij
+    # gij_gij
+    # mp
+
     if mp:
         if other_keys_match is None:
-            OTHER_KEYS = [k + "_a" for k in other_keys_a] + [
-                k + "_b" for k in other_keys_b
-            ]
+            OTHER_KEYS = [k + "_a" for k in other_keys_a] + [k + "_b" for k in other_keys_b]
         else:
-            OTHER_KEYS = (
-                [
-                    k + ("_a" if k in other_keys_b else "")
-                    for k in other_keys_a
-                    if k not in other_keys_match
-                ]
-                + [
-                    k + ("_b" if k in other_keys_a else "")
-                    for k in other_keys_b
-                    if k not in other_keys_match
-                ]
-                + other_keys_match
-            )
+            OTHER_KEYS = ([k + ("_a" if k in other_keys_b else "") for k in other_keys_a if k not in other_keys_match] + \
+                          [k + ("_b" if k in other_keys_a else "") for k in other_keys_b if k not in other_keys_match] + \
+                           other_keys_match)
+            
     else:
         if other_keys_match is None:
-            OTHER_KEYS = [k + "_a" for k in other_keys_a] + [
-                k + "_b" for k in other_keys_b
-            ]
+            OTHER_KEYS = [k + "_a" for k in other_keys_a] + [k + "_b" for k in other_keys_b]
         else:
-            OTHER_KEYS = (
-                other_keys_match
-                + [
-                    k + ("_a" if k in other_keys_b else "")
-                    for k in other_keys_a
-                    if k not in other_keys_match
-                ]
-                + [
-                    k + ("_b" if k in other_keys_a else "")
-                    for k in other_keys_b
-                    if k not in other_keys_match
-                ]
-            )
-
-    if x_a.block(0).has_gradient("positions"):
-        grad_components = x_a.block(0).gradient("positions").components
-    else:
-        grad_components = None
+            OTHER_KEYS = (other_keys_match + [k + ("_a" if k in other_keys_b else "") for k in other_keys_a if k not in other_keys_match] + \
+                                             [k + ("_b" if k in other_keys_a else "") for k in other_keys_b if k not in other_keys_match])
 
     # automatic generation of the output features names
     # "x1 x2 x3 ; x1 x2 -> x1_a x2_a x3_a k_nu x1_b x2_b l_nu"
     if feature_names is None:
         NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
-        feature_names = (
-            tuple(n + "_a" for n in x_a.property_names)
-            + ("k_" + str(NU),)
-            + tuple(n + "_b" for n in x_b.property_names)
-            + ("l_" + str(NU),)
-        )
-    # else:
-    #     print(feature_names)
+        feature_names = (tuple(n + "_a" for n in x_a.property_names) + ("k_" + str(NU),) + tuple(n + "_b" for n in x_b.property_names) + ("l_" + str(NU),))
 
     X_idx = {}
     X_blocks = {}
     X_samples = {}
-    X_grad_samples = {}
-    X_grads = {}
+
+    l_sigma_nu = ["spherical_harmonics_l", "inversion_sigma", "order_nu"]
 
     for index_a, block_a in x_a.items():
         block_a = sort_block(block_a, axes="samples")
-        lam_a = index_a["spherical_harmonics_l"]
-        sigma_a = index_a["inversion_sigma"]
-        order_a = index_a["order_nu"]
-        properties_a = (
-            block_a.properties
-        )  # pre-extract this block as accessing a c property has a non-zero cost
+        lam_a, sigma_a, order_a = [index_a[label] for label in l_sigma_nu]
+        properties_a = block_a.properties  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
+
         for index_b, block_b in x_b.items():
             block_b = sort_block(block_b, axes="samples")
-            lam_b = index_b["spherical_harmonics_l"]
-            sigma_b = index_b["inversion_sigma"]
-            order_b = index_b["order_nu"]
+            lam_b, sigma_b, order_b = [index_b[label] for label in l_sigma_nu]
             properties_b = block_b.properties
             samples_b = block_b.samples
+
             samples_final = samples_b
+            
             b_slice = list(range(len(samples_b)))
 
             if other_keys_match is None:
-                OTHERS = tuple(index_a[name] for name in other_keys_a) + tuple(
-                    index_b[name] for name in other_keys_b
-                )
+                OTHERS = tuple(index_a[name] for name in other_keys_a) + tuple(index_b[name] for name in other_keys_b)
             else:
-                OTHERS = tuple(
-                    index_a[k] for k in other_keys_match if index_a[k] == index_b[k]
-                )
+                OTHERS = tuple(index_a[k] for k in other_keys_match if index_a[k] == index_b[k])
+
                 if len(OTHERS) < len(other_keys_match):
                     continue
                 # adds non-matching keys to build outer product
                 if mp:
-                    OTHERS = (
-                        tuple(
-                            index_a[k]
-                            for k in other_keys_a
-                            if k not in other_keys_match
-                        )
-                        + OTHERS
-                    )
-                    OTHERS = (
-                        tuple(
-                            index_b[k]
-                            for k in other_keys_b
-                            if k not in other_keys_match
-                        )
-                        + OTHERS
-                    )
+                    OTHERS = (tuple(index_a[k] for k in other_keys_a if k not in other_keys_match) + OTHERS)
+                    OTHERS = (tuple(index_b[k] for k in other_keys_b if k not in other_keys_match) + OTHERS)
+
                 else:
-                    OTHERS = OTHERS + tuple(
-                        index_a[k] for k in other_keys_a if k not in other_keys_match
-                    )
-                    OTHERS = OTHERS + tuple(
-                        index_b[k] for k in other_keys_b if k not in other_keys_match
-                    )
+                    OTHERS = OTHERS + tuple(index_a[k] for k in other_keys_a if k not in other_keys_match)
+                    OTHERS = OTHERS + tuple(index_b[k] for k in other_keys_b if k not in other_keys_match)
 
             if mp:
                 # combine rho_j and g_ji (i.e. combine dentiy on neighbor j with the g_ji vector where i is the central atom)
                 if "neighbor" in samples_b.names and "neighbor" not in samples_a.names:
-                    center_slice = []
-                    smp_a, smp_b = 0, 0
-                    while smp_b < samples_b.values.shape[0]:
-                        # print(index_b, samples_b[smp_b][["structure", "center", "neighbor"]], index_a, samples_a[smp_a])
-                        idx = [
-                            idx
-                            for idx, tup in enumerate(samples_a)
-                            if tup[0] == samples_b[smp_b]["structure"]
-                            and tup[1] == samples_b[smp_b]["neighbor"]
-                        ][0]
-                        center_slice.append(idx)
-                        smp_b += 1
-                    center_slice = np.asarray(center_slice)
-                    # print(
-                    #     index_a,
-                    #     index_b,
-                    #     center_slice,
-                    #     block_a.samples.values[center_slice],
-                    #     block_b.samples.values,
-                    # )
+                    center_slice = sample_atom_pair(block_a, block_b, is_mp = True)
                 else:
-                    center_slice = slice(None)
+                    center_slice = sample_atom_atom(block_a, block_b)
+
             else:
                 # combine rho_i and g_ij (i.e. combine dentiy on central atom i with the g_ji vector where i is the central atom)
                 if "neighbor" in samples_b.names and "neighbor" not in samples_a.names:
-                    neighbor_slice = []
-                    smp_a, smp_b = 0, 0
-                    while smp_b < samples_b.values.shape[0]:
-                        if (
-                            samples_b[smp_b]["structure"],
-                            samples_b[smp_b]["center"],
-                        ) != (
-                            samples_a[smp_a]["structure"],
-                            samples_a[smp_a]["center"],
-                        ):
-                            # if np.all(
-                            #     samples_b.values[smp_b][:2] != samples_a.values[smp_a]
-                            # ):
-                            if smp_a + 1 < samples_a.values.shape[0]:
-                                smp_a += 1
-                        neighbor_slice.append(smp_a)
-                        smp_b += 1
-                    neighbor_slice = np.asarray(neighbor_slice)
-                    # print(
-                    #     index_a,
-                    #     index_b,
-                    #     neighbor_slice,
-                    #     "NS",
-                    #     block_a.samples.values[neighbor_slice],
-                    #     "A samples",
-                    #     block_b.samples.values,
-                    #     "B samples",
-                    # )
-
-                elif "neighbor" in samples_b.names and "neighbor" in samples_a.names:
-                    # taking tensor products of gij and gik
-                    neighbor_slice = []
-                    b_slice = []
-                    samples_final = []
-                    smp_a, smp_b = 0, 0
-                    """
-                    while smp_b < samples_b.shape[0]:
-                        idx= [idx for idx, tup in enumerate(samples_a) if tup[0] ==samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["center"]]
-                        neighbor_slice.extend(idx)
-                        b_slice.extend([smp_b]*len(idx))
-                        samples_final.extend(flatten(list(product([samples_b[smp_b]],block_a.samples.asarray()[idx][:,-1]))))
-                        smp_b+=1
-                    """
-                    sc_b = (-1, -1)
-                    while smp_b < samples_b.values.shape[0]:
-                        # checks if structure index needs updating
-                        if (
-                            samples_b[smp_b]["center"] != sc_b[1]
-                            or samples_b[smp_b]["structure"] != sc_b[0]
-                        ):
-                            # checks if structure index needs updating
-                            ## FIXME metatensor update
-                            sc_b = samples_b[smp_b][["structure", "center"]]
-                            idx = np.where(
-                                (
-                                    samples_b[smp_b]["structure"]
-                                    == samples_a["structure"]
-                                )
-                                & (samples_b[smp_b]["center"] == samples_a["center"])
-                            )[0]
-
-                            smp_a_idx = samples_a["neighbor"][idx].view(np.int32)
-                            if "pair_id" in block_a.samples.names:
-                                smp_a_idx = (
-                                    samples_a["pair_id"][idx].view(np.int32),
-                                    samples_a["neighbor"][idx].view(np.int32),
-                                )
-                                smp_a_idx = [
-                                    (
-                                        smp_a_idx[0][i].view(np.int32),
-                                        smp_a_idx[1][i].view(np.int32),
-                                    )
-                                    for i in range(len(smp_a_idx[0]))
-                                ]
-                                # smp_a_idx = Labels(["pair_id", "neighbor"], np.array(x, dtype=np.int32))
-                        neighbor_slice.extend(idx)
-                        b_slice.extend([smp_b] * len(idx))
-                        # samples_final.extend(flatten(list(product([samples_b[smp_b]],smp_a_idx))))
-                        # samples_final.extend(np.hstack([[tuple(samples_b[smp_b-1])]*8, smp_a_idx[:,np.newaxis] ]) )
-                        # print(smp_a_idx, samples_b[smp_b])
-                        if "pair_id" in block_a.samples.names:
-                            samples_final.extend(
-                                [
-                                    tuple(samples_b.values[smp_b]) + idx
-                                    for idx in smp_a_idx
-                                ]
-                            )
-                            # print(samples_final)
-                        else:
-                            samples_final.extend(
-                                [
-                                    tuple(samples_b.values[smp_b]) + (idx,)
-                                    for idx in smp_a_idx
-                                ]
-                            )
-                        smp_b += 1
-                    neighbor_slice = np.asarray(neighbor_slice)
-                    if (
-                        "pair_id" in block_a.samples.names
-                        and "pair_id" in block_b.samples.names
-                    ):
-                        # print(np.asarray(samples_final).shape)
-                        samples_final = Labels(
-                            [
-                                "structure",
-                                "pair_id1",
-                                "center",
-                                "neighbor_1",
-                                "pair_id2",
-                                "neighbor_2",
-                            ],
-                            np.asarray(samples_final, dtype=np.int32),
-                        )
-                    else:
-                        samples_final = Labels(
-                            ["structure", "center", "neighbor_1", "neighbor_2"],
-                            np.asarray(samples_final, dtype=np.int32),
-                        )
-                elif "neighbor_1" in samples_b.names:
-                    # combining three center feature with rho_{i i1 i2}
-                    neighbor_slice = []
-                    b_slice = []
-                    smp_a, smp_b = 0, 0
-                    """
-                    while smp_b < samples_b.shape[0]:
-                        idx= [idx for idx, tup in enumerate(samples_a) if tup[0] ==samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["center"]]
-                        neighbor_slice.extend(idx)
-                        b_slice.extend([smp_b]*len(idx))
-                        smp_b+=1
-                    """
-                    sc_b = (-1, -1)
-                    while smp_b < samples_b.values.shape[0]:
-                        # checks if structure index needs updating
-                        if (
-                            samples_b[smp_b]["center"] != sc_b[1]
-                            or samples_b[smp_b]["structure"] != sc_b[0]
-                        ):
-                            # checks if structure index needs updating
-                            sc_b = samples_b[smp_b][["structure", "center"]]
-                            idx = np.where(
-                                (
-                                    samples_b[smp_b]["structure"]
-                                    == samples_a["structure"]
-                                )
-                                & (samples_b[smp_b]["center"] == samples_a["center"])
-                            )[0]
-                        neighbor_slice.extend(idx)
-                        b_slice.extend([smp_b] * len(idx))
-                        smp_b += 1
-                    neighbor_slice = np.asarray(neighbor_slice)
-                #                     print(samples_b[b_slice], samples_a[neighbor_slice])
-
+                    neighbor_slice = sample_atom_pair(block_a, block_b)
+                    
                 else:
-                    neighbor_slice = slice(None)
+                    neighbor_slice = sample_atom_atom(block_a, block_b)
 
             # determines the properties that are in the select list
             sel_feats = []
             sel_idx = []
-            sel_feats = (
-                np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
-            )
+            sel_feats = np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
 
             prop_ids_a = []
             prop_ids_b = []
-            for n_a, f_a in enumerate(properties_a):
+
+            for f_a in properties_a:
                 prop_ids_a.append(tuple(f_a) + (lam_a,))
-            for n_b, f_b in enumerate(properties_b):
+            for f_b in properties_b:
                 prop_ids_b.append(tuple(f_b) + (lam_b,))
+            
             prop_ids_a = np.asarray(prop_ids_a)
             prop_ids_b = np.asarray(prop_ids_b)
-            sel_idx = np.hstack(
-                [prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]]
-            )  # creating a tensor product
+            sel_idx = np.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
+            
             if len(sel_feats) == 0:
                 continue
+            
             # loops over all permissible output blocks. note that blocks will
             # be filled from different la, lb
             for L in range(np.abs(lam_a - lam_b), 1 + min(lam_a + lam_b, lcut)):
@@ -571,74 +374,37 @@ def cg_combine(
                 if not S in filter_sigma:
                     continue
                 NU = order_a + order_b
-                KEY = (
-                    NU,
-                    S,
-                    L,
-                ) + OTHERS
+                KEY = (NU, S, L,) + OTHERS
+
                 if not KEY in X_idx:
                     X_idx[KEY] = []
                     X_blocks[KEY] = []
                     X_samples[KEY] = samples_final
-                    if grad_components is not None:
-                        X_grads[KEY] = []
-                        X_grad_samples[KEY] = block_b.gradient("positions").samples
 
                 # builds all products in one go
                 if mp:
                     if isinstance(center_slice, slice) or len(center_slice):
-                        one_shot_blocks = clebsch_gordan.combine(
-                            block_a.values[center_slice][:, :, sel_feats[:, 0]],
-                            block_b.values[:, :, sel_feats[:, 1]],
-                            L,
-                            combination_string="iq,iq->iq",
-                        )
+                        one_shot_blocks = clebsch_gordan.combine(block_a.values[center_slice][:, :, sel_feats[:, 0]],
+                                                                 block_b.values[:, :, sel_feats[:, 1]],
+                                                                 L,
+                                                                 combination_string = "iq,iq->iq")
 
-                        if grad_components is not None:
-                            raise ValueError("grads not implemented with MP")
                     else:
                         one_shot_blocks = []
 
                 else:
                     if isinstance(neighbor_slice, slice) or len(neighbor_slice):
-                        one_shot_blocks = clebsch_gordan.combine(
-                            block_a.values[neighbor_slice][:, :, sel_feats[:, 0]],
-                            block_b.values[b_slice][:, :, sel_feats[:, 1]],
-                            L,
-                            combination_string="iq,iq->iq",
-                        )
+                        one_shot_blocks = clebsch_gordan.combine(block_a.values[neighbor_slice][:, :, sel_feats[:, 0]],
+                                                                 block_b.values[b_slice][:, :, sel_feats[:, 1]],
+                                                                 L,
+                                                                 combination_string = "iq,iq->iq")
 
-                        if grad_components is not None:
-                            grad_a = block_a.gradient("positions")
-                            grad_b = block_b.gradient("positions")
-                            grad_a_data = np.swapaxes(grad_a.data, 1, 2)
-                            grad_b_data = np.swapaxes(grad_b.data, 1, 2)
-                            one_shot_grads = clebsch_gordan.combine(
-                                block_a.values[grad_a.samples["sample"]][
-                                    neighbor_slice, :, sel_feats[:, 0]
-                                ],
-                                grad_b_data[b_slice][..., sel_feats[:, 1]],
-                                L=L,
-                                combination_string="iq,iaq->iaq",
-                            ) + clebsch_gordan.combine(
-                                block_b.values[grad_b.samples["sample"]][b_slice][
-                                    :, :, sel_feats[:, 1]
-                                ],
-                                grad_a_data[neighbor_slice, ..., sel_feats[:, 0]],
-                                L=L,
-                                combination_string="iq,iaq->iaq",
-                            )
                     else:
                         one_shot_blocks = []
 
-                # now loop over the selected features to build the blocks
-
                 X_idx[KEY].append(sel_idx)
                 if len(one_shot_blocks):
-                    # print(X_blocks[KEY], "e", one_shot_blocks, "<<<1")
                     X_blocks[KEY].append(one_shot_blocks)
-                if grad_components is not None:
-                    X_grads[KEY].append(one_shot_grads)
 
     # turns data into sparse storage format (and dumps any empty block in the process)
     nz_idx = []
@@ -649,29 +415,17 @@ def cg_combine(
         if len(X_blocks[KEY]) == 0:
             continue  # skips empty blocks
         nz_idx.append(KEY)
-        #         print(KEY, X_samples[KEY], len(X_blocks[KEY]) , X_blocks[KEY][0])
         block_data = torch.cat(X_blocks[KEY], dim=-1)
-        sph_components = Labels(
-            ["spherical_harmonics_m"],
-            np.asarray(range(-L, L + 1), dtype=np.int32).reshape(-1, 1),
-        )
+        sph_components = Labels(["spherical_harmonics_m"], np.asarray(range(-L, L + 1)).reshape(-1, 1))
         newblock = TensorBlock(
             values=block_data,
             samples=X_samples[KEY],
             components=[sph_components],
-            properties=Labels(
-                feature_names, np.asarray(np.vstack(X_idx[KEY]), dtype=np.int32)
-            ),
-        )
+            properties=Labels(feature_names, np.asarray(np.vstack(X_idx[KEY]))))
 
         nz_blk.append(newblock)
-    X = TensorMap(
-        Labels(
-            ["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS,
-            np.asarray(nz_idx, dtype=np.int32),
-        ),
-        nz_blk,
-    )
+
+    X = TensorMap(Labels(["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS, np.asarray(nz_idx)), nz_blk)
     return X
 
 def cg_increment(
@@ -850,7 +604,7 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
     rhoMPi = TensorMap(
         Labels(
             ["order_nu", "inversion_sigma", "spherical_harmonics_l", "species_center"],
-            np.asarray(rhoMPi_keys, dtype=np.int32),
+            np.asarray(rhoMPi_keys),
         ),
         rhoMPi_blocks,
     )
@@ -924,13 +678,13 @@ def compute_rhoi_pca(
             samples=Labels(
                 ["pca"],
                 np.asarray(
-                    [i for i in range(len(block.properties))], dtype=np.int32
+                    [i for i in range(len(block.properties))]
                 ).reshape(-1, 1),
             ),
             properties=Labels(
                 ["pca"],
                 np.asarray(
-                    [i for i in range(vh[retained].T.shape[1])], dtype=np.int32
+                    [i for i in range(vh[retained].T.shape[1])]
                 ).reshape(-1, 1),
             ),
         )
@@ -951,12 +705,12 @@ def get_pca_tmap(rhoi, pca_vh_all):
             samples=Labels(
                 ["pca"],
                 np.asarray(
-                    [i for i in range(len(block.properties))], dtype=np.int32
+                    [i for i in range(len(block.properties))]
                 ).reshape(-1, 1),
             ),
             properties=Labels(
                 ["pca"],
-                np.asarray([i for i in range(vt.shape[-1])], dtype=np.int32).reshape(
+                np.asarray([i for i in range(vt.shape[-1])]).reshape(
                     -1, 1
                 ),
             ),
@@ -985,7 +739,7 @@ def apply_pca(rhoi, pca_tmap):
             properties=Labels(
                 ["pca"],
                 np.asarray(
-                    [i for i in range(xl_pca.shape[-1])], dtype=np.int32
+                    [i for i in range(xl_pca.shape[-1])]
                 ).reshape(-1, 1),
             ),
         )

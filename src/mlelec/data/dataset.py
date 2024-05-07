@@ -734,7 +734,6 @@ class PySCFPeriodicDataset(Dataset):
     from mlelec.utils.pbc_utils import (
         fourier_transform,
         inverse_fourier_transform,
-        get_T_from_pair,
     )
 
     # TODO: make format compatible with MolecularDataset
@@ -881,79 +880,6 @@ class PySCFPeriodicDataset(Dataset):
     def set_kpts(self):
         self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
         self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
-    
-    def compute_translation_counter(self, mic = True): # TODO:remove
-        from itertools import product
-        from mlelec.utils.pbc_utils import get_T_from_pair
-
-        counter_T = []
-        for ifr, (frame, kmesh) in enumerate(zip(self.structures, self.kmesh)):
-            counter_T.append({})
-            natm = frame.get_global_number_of_atoms()
-            supercell = frame.repeat(kmesh)
-            shifts = [
-                list(p)
-                for p in product(range(kmesh[0]), range(kmesh[1]), range(kmesh[2]))
-            ]
-            for dummy_T in shifts:
-                for i in range(frame.get_global_number_of_atoms()):
-                    for j in range(frame.get_global_number_of_atoms()):
-                        if mic:
-                            _, _, mic_T = get_T_from_pair(frame, supercell, i, j, dummy_T, kmesh)
-                        else:
-                            mic_T = dummy_T
-                        mic_T = tuple(mic_T)
-                        if mic_T not in counter_T[ifr]:
-                            counter_T[ifr][mic_T] = np.zeros((natm, natm))
-                        counter_T[ifr][mic_T][i, j] += 1
-        return counter_T
-
-    def compute_translation_dict(self): # TODO:remove
-        T_dict = []
-
-        for ifr, counter in enumerate(self._translation_counter):
-            natm = self.structures[ifr].get_global_number_of_atoms()
-            T_dict.append({})
-            full_T_list = list(counter.keys())
-            i0 = 0
-            i_skip = 0
-            for i in range(len(full_T_list)):
-                if i < i0 + i_skip:
-                    continue
-
-                summa = 0
-                counter_list = []
-                T_list = []
-                i_skip = 0
-                while summa != natm**2:
-                    counter_list.append(counter[full_T_list[i + i_skip]])
-                    T_list.append(full_T_list[i + i_skip])
-                    summa = np.sum(counter_list)
-                    i_skip += 1
-                i0 = i
-                T_dict[ifr][full_T_list[i]] = T_list
-        return T_dict
-
-    # def get_kpoint_target(self, translated_matrices):
-    #     """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
-    #     kmatrix = []
-    #     for ifr in range(self.nstructs):
-    #         framekmatrix = torch.zeros_like(
-    #             torch.tensor(self.fock_kspace[0]), dtype=torch.complex128
-    #         ).to(self.device)
-    #         # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
-    #         for kpt in range(np.prod(self.kmesh[ifr])):
-    #             for i, t in enumerate(translated_matrices.keys()):
-    #                 # for i in range(len(translated_matrices)):
-    #                 framekmatrix[kpt] += (
-    #                     translated_matrices[t][ifr] * self.phase_matrices[ifr][i][kpt]
-    #                 )
-    #         kmatrix.append(framekmatrix)
-    #     return kmatrix
-
-    # def check_block_(self):
-    #     # mat -> blocks _> couple -> uncouple -> mat
-    #     pass
 
     def _set_matrices_realspace(self, matrices_realspace):
         _matrices_realspace = []

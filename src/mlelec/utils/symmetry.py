@@ -303,32 +303,30 @@ class ClebschGordanReal:
         for l1 in range(self.lmax + 1):
             for l2 in range(self.lmax + 1):
                 for L in range(abs(l1 - l2), min(self.lmax, (l1 + l2)) + 1):
-                    rcg = _real_clebsch_gordan_matrix(
-                        l1,
-                        l2,
-                        L,
-                        r2c_l1=self.r2c[l1],
-                        r2c_l2=self.r2c[l2],
-                        c2r_L=self.c2r[L],
-                        device=self.device,
-                    )
+                    rcg = _real_clebsch_gordan_matrix(l1,
+                                                      l2,
+                                                      L,
+                                                      r2c_l1=self.r2c[l1],
+                                                      r2c_l2=self.r2c[l2],
+                                                      c2r_L=self.c2r[L],
+                                                      device=self.device)
 
-                    # sparsify: take only the non-zero entries (indices
-                    # of m1 and m2 components) for each M
-                    new_cg = []
-                    for M in range(2 * L + 1):
-                        cg_nonzero = torch.where(abs(rcg[:, :, M]) > 1e-15)
-                        cg_M = torch.zeros(
-                            (len(cg_nonzero[0]), 3),
-                            # dtype=[(torch.int32, torch.int32, torch.int32)],
-                            device=self.device,
-                        )
-                        cg_M[:, 0] = cg_nonzero[0].type(torch.int)
-                        cg_M[:, 1] = cg_nonzero[1].type(torch.int)
-                        cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
-                        new_cg.append(cg_M)
+                    # # sparsify: take only the non-zero entries (indices
+                    # # of m1 and m2 components) for each M
+                    # new_cg = []
+                    # for M in range(2 * L + 1):
+                    #     cg_nonzero = torch.where(abs(rcg[:, :, M]) > 1e-15)
+                    #     cg_M = torch.zeros(
+                    #         (len(cg_nonzero[0]), 3),
+                    #         # dtype=[(torch.int32, torch.int32, torch.int32)],
+                    #         device=self.device,
+                    #     )
+                    #     cg_M[:, 0] = cg_nonzero[0].type(torch.int)
+                    #     cg_M[:, 1] = cg_nonzero[1].type(torch.int)
+                    #     cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
+                    #     new_cg.append(cg_M)
 
-                    self._cg[(l1, l2, L)] = new_cg
+                    self._cg[(l1, l2, L)] = rcg # new_cg
         # self._cg.to(self.device)
         # self._cg = {
         #     k: v.to(device=self.device, non_blocking=True) for k, v in self._cg.items()
@@ -363,14 +361,21 @@ class ClebschGordanReal:
         Y = torch.zeros((n_items, 2 * L + 1) + ycombine[1:], device=self.device)
 
         if (l1, l2, L) in self._cg:
-            for M in range(2 * L + 1):
-                for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                    m1 = m1.type(torch.int)
-                    m2 = m2.type(torch.int)
-                    # print(m1, m2, M, m1.dtype)
-                    Y[:, M, ...] += torch.einsum(
-                        combination_string, y1[:, m1, ...], y2[:, m2, ...] * cg
-                    )
+            s, m, p = y1.shape
+            cg = self._cg[(l1, l2, L)]
+            n, M = cg.shape[1:]
+
+            # slightly faster than torch.einsum('smp,snp,mnM->sMp', y1, y2, cg)
+            Y = (y1.swapaxes(1,2).reshape(s*p,1,m) @ (y2.swapaxes(1,2).reshape(s*p, n) @ cg).swapaxes(1,0)).reshape(s,p,M).swapaxes(1,2)
+
+                # for m1, m2, cg in self._cg[(l1, l2, L)][M]:
+                #     m1 = m1.type(torch.int)
+                #     m2 = m2.type(torch.int)
+                #     # print(m1, m2, M, m1.dtype)
+                #     Y[:, M, ...] += y1[:, m1, ...]*y2[:, m2, ...]*cg
+                #     # torch.einsum(
+                        # combination_string, y1[:, m1, ...], y2[:, m2, ...] * cg
+                    # )
 
         return Y
 
