@@ -288,6 +288,7 @@ class ClebschGordanReal:
     def __init__(self, lmax: int, device: str = None):
         self.lmax = lmax
         self._cg = {}
+        self._cgold = {}
         if device is not None:
             self.device = device
         else:
@@ -313,24 +314,24 @@ class ClebschGordanReal:
 
                     # # sparsify: take only the non-zero entries (indices
                     # # of m1 and m2 components) for each M
-                    # new_cg = []
-                    # for M in range(2 * L + 1):
-                    #     cg_nonzero = torch.where(abs(rcg[:, :, M]) > 1e-15)
-                    #     cg_M = torch.zeros(
-                    #         (len(cg_nonzero[0]), 3),
-                    #         # dtype=[(torch.int32, torch.int32, torch.int32)],
-                    #         device=self.device,
-                    #     )
-                    #     cg_M[:, 0] = cg_nonzero[0].type(torch.int)
-                    #     cg_M[:, 1] = cg_nonzero[1].type(torch.int)
-                    #     cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
-                    #     new_cg.append(cg_M)
-
+                    new_cg = []
+                    for M in range(2 * L + 1):
+                        cg_nonzero = torch.where(abs(rcg[:, :, M]) > 1e-15)
+                        cg_M = torch.zeros(
+                            (len(cg_nonzero[0]), 3),
+                            # dtype=[(torch.int32, torch.int32, torch.int32)],
+                            device=self.device,
+                        )
+                        cg_M[:, 0] = cg_nonzero[0].type(torch.int)
+                        cg_M[:, 1] = cg_nonzero[1].type(torch.int)
+                        cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
+                        new_cg.append(cg_M)
+                    self._cgold [(l1, l2, L)]= new_cg
                     self._cg[(l1, l2, L)] = rcg # new_cg
         # self._cg.to(self.device)
-        # self._cg = {
-        #     k: v.to(device=self.device, non_blocking=True) for k, v in self._cg.items()
-        # }
+        self._cgold = {
+            k: v for k, v in self._cgold.items()
+        }
 
     def combine(
         self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str
@@ -457,24 +458,16 @@ class ClebschGordanReal:
                     )
 
                 # in the new coupled term, prepend (l1,l2) to the existing label
+                device = dec_term.device
+                if device != self.device:
+                    dec_term = dec_term.to(self.device)
+                
                 coupled[(l1, l2) + ltuple] = {}
                 for L in range(
                     max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1
                 ):
-                    # ensure that Lterm is created on the same device as the dec_term
-                    device = dec_term.device
-                    if device != self.device:
-                        dec_term = dec_term.to(self.device)
-                    Lterm = torch.zeros(
-                        size=dec_term.shape[:-2] + (2 * L + 1,), device=self.device
-                    )
-                    for M in range(2 * L + 1):
-                        for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                            Lterm[..., M] += (
-                                dec_term[..., m1.type(torch.int), m2.type(torch.int)]
-                                * cg
-                            )
-                    coupled[(l1, l2) + ltuple][L] = Lterm
+                    # Lterm = torch.einsum('spmn,mnM->spM', dec_term, self._cg[(l1, l2, L)])
+                    coupled[(l1, l2) + ltuple][L] = torch.tensordot(dec_term, self._cg[(l1, l2, L)], dims=2)
 
         # repeat if required
         if iterate > 0:
@@ -493,28 +486,17 @@ class ClebschGordanReal:
             # the initial pair in the key indicates the decoupled terms that generated
             # the L entries
             l1, l2 = ltuple[:2]
-
             # shape of the coupled matrix (last entry is the 2L+1 M terms)
             shape = next(iter(lcomponents.values())).shape[:-1]
 
-            dec_term = torch.zeros(
-                shape
-                + (  # noqa
-                    2 * l1 + 1,
-                    2 * l2 + 1,
-                ),
-                device=self.device,
-            )
+            dec_term = torch.zeros(shape+ ( 2 * l1 + 1, 2 * l2 + 1),device=self.device)
             for L in range(max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1):
                 # supports missing L components, e.g. if they are zero because of symmetry
                 if L not in lcomponents:
                     continue
-                for M in range(2 * L + 1):
-                    for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                        dec_term[..., m1.type(torch.int), m2.type(torch.int)] += (
-                            cg * lcomponents[L][..., M]
-                        )
-            # stores the result with a key that drops the l's we have just decoupled
+                # decouples the L term into m1, m2 components
+                # a = torch.einsum('spM,mnM->spmn', lcomponents[L], self._cg[(l1, l2, L)])
+                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)], dims=([2],[2]))
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}
             decoupled[ltuple[2:]][l2] = dec_term
@@ -529,53 +511,3 @@ class ClebschGordanReal:
         return decoupled
 
 
-def _reflect_hermitian(matrix: Union[torch.tensor, np.ndarray], retain_upper=True):
-    """
-    TODO: support matrices (_, N, N)
-
-    matrix: (N,N) matrix (could be non-hermitian)
-    retain_upper: bool. If true, the upper triangle of the matrix is retained and reflected along the diagonal, else the lower triangle is retained.
-
-    Returns a hermitian matrix with the same diagonal elements as the input matrix and the upper or lower triangle elements reflected along the diagonal.
-    """
-
-    if isinstance(matrix, torch.Tensor):
-        lib = torch
-    else:
-        lib = np
-    tmp = lib.zeros_like(matrix)
-    dim = matrix.shape[-1]
-    if not retain_upper:
-        tmp[lib.tril_indices(dim)] = matrix[lib.tril_indices(dim)]
-
-    tmp[lib.triu_indices(dim)] = matrix[
-        lib.triu_indices(dim)
-    ]  # selected_matrice[tuple(s)][0][np.triu_indices(nao)]
-    tmp += tmp.T
-    # fix the diagonal
-    for i in range(tmp.shape[0]):
-        tmp[i, i] /= 2
-    assert np.isclose(tmp - tmp.T, 0).all()
-    return tmp
-
-
-def recover_nonhermitian(matA, matB, retain_upper=True):
-    # TODO: support (_,N,N) matrices
-    """take pair of matrices where matA = matB^T"""
-    assert len(matA.shape) == 2, "matA must be a square 2D matrix"
-    assert len(matB.shape) == 2, "matB must be a square 2D matrix"
-    assert matA.shape == matB.shape
-    if isinstance(matA, torch.Tensor):
-        lib = torch
-    else:
-        lib = np
-    nh_A = lib.zeros_like(matA)
-    nh_B = lib.zeros_like(matB)
-    dim = matA.shape[-1]
-    nh_A[lib.triu_indices(dim)] = matA[lib.triu_indices(dim)]
-    nh_B[lib.triu_indices(dim)] = matB[lib.triu_indices(dim)]
-
-    nh_A[lib.tril_indices(dim, 1)] = matB[lib.triu_indices(dim, 1)]
-    nh_B[lib.tril_indices(dim, 1)] = matA[lib.triu_indices(dim, 1)]
-
-    return nh_A, nh_B

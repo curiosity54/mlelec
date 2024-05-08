@@ -6,6 +6,10 @@ from rascaline import SphericalExpansionByPair as PairExpansion
 import ase
 
 from metatensor import TensorMap, TensorBlock, Labels, sort_block
+from metatensor.torch import Labels as mtstorch_Labels
+from metatensor.torch import TensorBlock as mtstorch_TensorBlock
+from metatensor.torch import TensorMap as mtstorch_TensorMap
+from metatensor.torch import sort_block as mtstorch_sort_block
 import metatensor.operations as operations
 import torch
 import numpy as np
@@ -30,7 +34,8 @@ use_native = True  # True for rascaline
 
 def single_center_features(
     frames, hypers, order_nu, lcut=None, cg=None, device="cpu", **kwargs
-):
+):  
+    print(device, 'single center features')
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
     rho1i = acdc_standardize_keys(rhoi)
@@ -93,15 +98,27 @@ def pair_features(
     device="cpu",
     kmesh=None,
     return_rho0ij=False,
+    backend='torch',
     **kwargs,
 ):
+    print(device, 'pair features')
     """
     hypers: dictionary of hyperparameters for the pair expansion as in Rascaline
     cg: object of utils:symmetry:ClebschGordanReal
     rhonu_i: TensorMap of single center features
     order_nu: int or list of int, order of the spherical expansion
     """
-
+    if device is None or backend == "numpy":
+        mts_tblock = TensorBlock
+        mts_tmap = TensorMap
+        mts_labels = Labels
+        mts_sort = sort_block
+    else:
+        backend = 'torch'
+        mts_tblock = mtstorch_TensorBlock
+        mts_tmap = mtstorch_TensorMap
+        mts_labels = mtstorch_Labels
+        mts_sort = mtstorch_sort_block
     if not isinstance(frames, list):
         frames = [frames]
 
@@ -199,7 +216,7 @@ def pair_features(
     # must compute rhoi as sum of rho_0ij
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, device = device, kwargs=kwargs
         )
         # rhonu_i = _standardize(rhonu_i)
     # if not both_centers:
@@ -210,6 +227,7 @@ def pair_features(
         other_keys_match=["species_center"],
         lcut=lcut,
         feature_names=kwargs.get("feature_names", None),
+        device=device,
     )
     if not both_centers:
         return rhonu_ij
@@ -225,6 +243,7 @@ def pair_features(
                 hypers=hypers,
                 lcut=lcut,
                 cg=cg,
+                device=device,
                 kwargs=kwargs,
             )
         else:
@@ -242,6 +261,7 @@ def pair_features(
             clebsch_gordan=cg,
             mp=True,  # for combining with neighbor
             feature_names=kwargs.get("feature_names", None),
+            device=device,
         )
         # combine with rhoi
         # rhonu_nupij = cg_combine(
@@ -256,8 +276,17 @@ def pair_features(
         return rhonu_nupij
 
 def twocenter_features_periodic_NH(
-    single_center: TensorMap, pair: TensorMap, all_pairs = False
+    single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
 ) -> TensorMap:
+
+    if device is None or device == "cpu":
+        mts_tblock = TensorBlock
+        mts_tmap = TensorMap
+        mts_labels = Labels
+    else:
+        mts_tblock = mtstorch_TensorBlock
+        mts_tmap = mtstorch_TensorMap
+        mts_labels = mtstorch_Labels
 
     keys = []
     blocks = []
@@ -271,8 +300,8 @@ def twocenter_features_periodic_NH(
             samples_array = np.asarray(b.samples.values)
             samples_array = np.hstack([samples_array, samples_array[:, -1:]])
         blocks.append(
-            TensorBlock(
-                samples=Labels(
+            mts_tblock(
+                samples=mts_labels(
                     names=b.samples.names
                     + [
                         "neighbor",
@@ -360,8 +389,8 @@ def twocenter_features_periodic_NH(
             keys.append(tuple(k) + (-1,))
             
             blocks.append(
-                TensorBlock(
-                    samples=Labels(
+                mts_tblock(
+                    samples=mts_labels(
                         names=b.samples.names[:-1],
                         values=np.asarray(
                             b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
@@ -373,8 +402,8 @@ def twocenter_features_periodic_NH(
                 )
             )
             blocks.append(
-                TensorBlock(
-                    samples=Labels(
+                mts_tblock(
+                    samples=mts_labels(
                         names=b.samples.names[:-1],
                         values=np.asarray(
                             b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
@@ -398,7 +427,7 @@ def twocenter_features_periodic_NH(
                 )
 
 
-    return TensorMap(
+    return mts_tmap(
         keys=Labels(
             names=pair.keys.names + ["block_type"],
             values=np.asarray(keys),

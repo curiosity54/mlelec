@@ -73,6 +73,8 @@ def L2_kspace_loss(pred: Union[TensorMap],
 
 def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1):
     """L2 loss function"""
+    import metatensor
+    
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)
         assert (
@@ -80,6 +82,7 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
         ), "Prediction and target must have the same shape"
         # target = target.to(pred)
         return torch.sum((pred - target) ** 2)
+    
     elif isinstance(pred, TensorMap):
         assert isinstance(
             target, TensorMap
@@ -99,10 +102,24 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
             else:
                 losses.append(torch.tensor(0.0, requires_grad = True).to(block.values))
 
-        if loss_per_block:
-            return losses, sum(losses)
-        else:
-            return sum(losses)
+        # losses_b = []
+        # for b in metatensor.pow(metatensor.subtract(pred, target), 2).blocks():
+        #     losses.append(torch.sum(b.values)/norm)
+        # return losses
+
+       
+    elif isinstance(pred, dict):
+        assert isinstance(target, dict), "Target must be a dictionary"
+        losses = []
+        for key, values in pred.items():
+            losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
+            norm)
+
+    if loss_per_block:
+        return losses, sum(losses)
+    else:
+        return sum(losses)
+
 
 
 def Eigval_loss(

@@ -797,7 +797,7 @@ class PySCFPeriodicDataset(Dataset):
             if overlap_realspace is not None:
                 for ifr in range(len(overlap_realspace)):
                     for T in overlap_realspace[ifr]:
-                        overlap_realspace[ifr][ik] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
+                        overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
 
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
         if apply_condon_shortley:

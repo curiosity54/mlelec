@@ -6,7 +6,7 @@ import torch
 import ase
 import numpy as np
 from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
-from mlelec.utils.symmetry import ClebschGordanReal, _reflect_hermitian
+from mlelec.utils.symmetry import ClebschGordanReal
 import warnings
 
 SQRT_2 = 2 ** (0.5)
@@ -479,8 +479,8 @@ def _matrix_to_blocks(
     block_builder = TensorBuilder(
         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
-        [["m1"], ["m2"]],
-        ["value"],
+        [["m_i"], ["m_j"]],
+        ["dummy"],
     )
     orbs_tot, _ = _orbs_offsets(orbitals)
     for A in range(len(frames)):
@@ -1051,8 +1051,8 @@ def _to_uncoupled_basis(
         # may have an additional sample name indexing the
         # molecule id
         blocks.sample_names,
-        [["m1"], ["m2"]],
-        ["value"],
+        [["m_i"], ["m_j"]],
+        ["dummy"],
     )
     for idx, block in blocks.items():
         block_type = idx["block_type"]

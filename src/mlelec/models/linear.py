@@ -63,25 +63,26 @@ class EquivariantNonLinearity(nn.Module):
         if device is None:
             device = 'cpu'
         self.device = device
-        self.norm = False
+        
         if norm:
-            self.norm=True
-             
-        self.nn = [
-            nn.LayerNorm(layersize, device = self.device),
-            self.nonlinearity,
-            nn.LayerNorm(layersize, device = self.device)
-        ]
+            self.nn = [
+                nn.LayerNorm(layersize, device = self.device),
+                self.nonlinearity,
+                nn.LayerNorm(layersize, device = self.device)
+            ]
+        else:
+            self.nn = [self.nonlinearity]
+
         self.nn = nn.Sequential(*self.nn)
         
     def forward(self, x):
+
         assert len(x.shape) == 3
-        # create an invariant
+
         x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
         x_inv = self.nn(x_inv)
         out = torch.einsum("if, imf->imf", x_inv, x) #/norm
-        # normout = torch.sqrt(torch.sum(out**2) + self.epsilon)
-        # out = out * norm / normout
+
         return out
 
 
@@ -120,13 +121,13 @@ class MLP(nn.Module):
         self,
         nlayers: int,
         nin: int,
-        nhidden: int,
+        nhidden: Union[int, list],
         nout: int = 1,
         activation: Union[str, callable] = None,
         bias: bool = False,
         device=None,
         apply_layer_norm = False, 
-        activation_with_linear = False,
+        # activation_with_linear = False,
     ):
         super().__init__()
 
@@ -135,37 +136,51 @@ class MLP(nn.Module):
             self.mlp = [nn.Linear(nin, nout, bias=bias)]
 
         else:
-            # From features to first hidden layer
-            self.mlp = [nn.Linear(nin, nhidden, bias = bias)]
 
-            # Define the hidden-layer architecture
-            if activation is not None:
-                if isinstance(activation, str):
-                    if activation.lower() == 'linear':
-                        activation = lambda x: x
-                    else:
-                        activation = getattr(nn, activation)()
-                elif issubclass(torch.nn.SiLU, torch.nn.Module): # FIXME must be a better way to check if isinstance(activation, nn.activation callable)
-                    activation = activation
-                else:
-                    raise ValueError('activation MUST be a string')
-                if activation_with_linear:
-                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize = nhidden), 
-                                nn.Linear(nhidden, nhidden, bias=bias)]
-                else: 
-                    mid_layer = [EquivariantNonLinearity(nonlinearity=activation, device=device, norm = apply_layer_norm, layersize = nhidden)]
-            else: 
-                mid_layer = [nn.Linear(nhidden, nhidden, bias=bias)]
+            if not isinstance(nhidden, list):
+                nhidden = [nhidden] * nlayers
+            else:
+                assert len(nhidden) == nlayers, "len(nhidden) must be equal to nlayers"
 
-            # Add hidder layers
-            for _ in range(nlayers):
-                self.mlp.extend(mid_layer)
+            # Input layer
+            self.mlp = [nn.Linear(nin, nhidden[0], bias = bias)]
             
-            # final linear layer
-            self.mlp.append(nn.Linear(nhidden, nout, bias=bias))
+            # Hidden layers
+            last_n = nhidden[0]
+            for n in nhidden[1:]:
+                self.mlp.extend(self.middle_layer(last_n, n, activation, bias, device, apply_layer_norm))
+                last_n = n
             
+            # Output layer
+            # self.mlp.append(nn.Linear(nhidden[-1], nout, bias=bias))
+            self.mlp.extend(self.middle_layer(last_n, nout, activation, bias, device, apply_layer_norm))
+                            
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
+
+    def middle_layer(self, 
+                     n_in, 
+                     n_out, 
+                     activation = None, 
+                     bias = False, 
+                     device = 'cpu',
+                     apply_layer_norm = False,
+                     ):
+        
+        if activation is None:
+            return [nn.Linear(n_in, n_out, bias = bias)]
+        
+        else:
+            if isinstance(activation, str):
+                activation = getattr(nn, activation)()
+            elif not issubclass(activation, torch.nn.Module):
+                raise ValueError('activation must be a string or a torch.nn.Module instance')
+                
+            return [EquivariantNonLinearity(nonlinearity = activation, 
+                                            device = device, 
+                                            norm = apply_layer_norm, 
+                                            layersize = n_in),
+                    nn.Linear(n_in, n_out, bias = bias)]
 
     def forward(self, x):
         return self.mlp(x)
@@ -447,7 +462,6 @@ class LinearModelPeriodic(nn.Module):
         frames,
         orbitals,
         device=None,
-        train_kspace = False,
         apply_norm = False,
         **kwargs,
     ):
@@ -456,7 +470,6 @@ class LinearModelPeriodic(nn.Module):
         self.target_blocks = target_blocks
         self.frames = frames
         self.orbitals = orbitals
-        self.train_kspace = train_kspace
         self.apply_norm = apply_norm
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -483,7 +496,7 @@ class LinearModelPeriodic(nn.Module):
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
                     activation=kwargs.get("activation", None),
-                    activation_with_linear=kwargs.get("activation_with_linear", False),
+                    # activation_with_linear=kwargs.get("activation_with_linear", False),
                     apply_layer_norm=self.apply_norm,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
@@ -507,13 +520,6 @@ class LinearModelPeriodic(nn.Module):
                 # nsamples, ncomp, nprops = block.values.shape
                 nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                if not self.train_kspace:
-                    nsamples, ncomp, nprops = block.values.shape
-                    assert np.all(block.samples.values == feat.samples.values[:, :6]), (
-                    k,
-                    block.samples.values.shape,
-                    feat.samples.values.shape,
-                )
                 pred = self.blockmodels[str(tuple(k))](feat.values)
                 # print(pred.shape, nsamples)
 

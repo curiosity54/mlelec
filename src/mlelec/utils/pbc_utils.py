@@ -910,7 +910,6 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
         for ik, matrixT in enumerate(matrices[A]):  # Loop over the dataset.fock_kspace
 
 
-            # Not 100% this is correct: FIXME
             # When the calculation is at Gamma you want to skip i==j samples
             is_gamma_point = dataset.kmesh[A] == [1,1,1] and ik == 0
 
@@ -996,7 +995,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            # The same-orbital and i == j element is exactly zero, so we skip it. 
+                            # The same-orbital and i == j element is exactly zero (btype=-1), so we skip it. 
                             # Skip also the Gamma point sample when the calculation is only done at Gamma 
                             # if (not (same_orbitals and i == j)):
                             if (not (is_gamma_point and i == j)):
@@ -1022,6 +1021,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
     from metatensor import sort
     tmap = sort(tmap.to(arrays='numpy')).to(arrays='torch')
     return tmap
+
+
 
 def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     phase = {}
@@ -1118,7 +1119,7 @@ def TMap_bloch_sums_OLD(target_blocks, phase, indices):
     return _k_target_blocks
 
 dummy_prop = Labels(['dummy'], np.array([[0]]))
-def TMap_bloch_sums(target_blocks, phase, indices):
+def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
 
     _Hk = {}
     _Hk0 = {}
@@ -1166,46 +1167,57 @@ def TMap_bloch_sums(target_blocks, phase, indices):
                     # The corresponding bt = +1 element does not exist. Create the dictionary element
                     _Hk[_kl][ifr, i, j] = contraction*np.sqrt(2)
                     
-    # Now store in a tensormap
-    _k_target_blocks = []
-    keys = []
-    for kl in _Hk:
+    if return_tensormap:
+        # Now store in a tensormap
+        _k_target_blocks = []
+        keys = []
+        for kl in _Hk:
 
-        same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+            same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
 
-        values = []
-        samples = []
-        
-        for ifr, i, j in sorted(_Hk[kl]):
+            values = []
+            samples = []
             
-            # skip when same orbitals, atoms, and block type == -1
-            # print(kl[0], '|', kl[2], kl[3], kl[5], kl[6],'|',ifr,i,j)
-            # if not (same_orbitals and (i == j) and (kl[0] == -1)):
-                # if kl[0] == -1:
-                #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
-                # Fill values and samples
-                values.append(_Hk[kl][ifr, i, j])
-                samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+            for ifr, i, j in sorted(_Hk[kl]):
+                
+                # skip when same orbitals, atoms, and block type == -1
+                # print(kl[0], '|', kl[2], kl[3], kl[5], kl[6],'|',ifr,i,j)
+                # if not (same_orbitals and (i == j) and (kl[0] == -1)):
+                    # if kl[0] == -1:
+                    #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
+                    # Fill values and samples
+                    values.append(_Hk[kl][ifr, i, j])
+                    samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+                
+            values = torch.concatenate(values)
+            _, n_mi, n_mj, _ = values.shape
+            samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
+            components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
             
-        values = torch.concatenate(values)
-        _, n_mi, n_mj, _ = values.shape
-        samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
-        components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
-        
-        _k_target_blocks.append(
-            TensorBlock(
-                samples = samples,
-                components = components,
-                properties = dummy_prop,
-                values = values
+            _k_target_blocks.append(
+                TensorBlock(
+                    samples = samples,
+                    components = components,
+                    properties = dummy_prop,
+                    values = values
+                )
             )
-        )
-        
-        keys.append(list(kl))
+            
+            keys.append(list(kl))
 
-    _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
+        _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
 
-    return _k_target_blocks
+        _Hk = None
+        del _Hk
+
+        return _k_target_blocks
+    else:
+        Hk = {}
+        for k in _Hk:
+            Hk[k] = {}
+            for ifr, i, j in sorted(_Hk[k]):
+                Hk[k][ifr, i, j] = _Hk[k][ifr, i, j]
+        return Hk
 
 
 def kblocks_to_matrix(k_target_blocks, dataset):
@@ -1284,3 +1296,16 @@ def kblocks_to_matrix(k_target_blocks, dataset):
 
     recon_Hk = list(recon_Hk.values())
     return recon_Hk
+
+def tmap_to_dict(tmap):
+    temp={}
+    for k,b in tmap.items():
+        kl = tuple(k.values.tolist())
+        temp[kl] = {}
+        bsamp = np.array(b.samples.values.tolist())
+        values = b.values.clone()
+        ifrij = np.unique(bsamp[:,:3], axis = 0)
+        for I in ifrij:
+            idx = np.where(np.all(bsamp[:,:3] == I, axis = 1))[0]
+            temp[kl][tuple(I.tolist())] = values[idx]
+    return temp
