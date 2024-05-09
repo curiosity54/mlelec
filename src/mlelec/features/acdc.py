@@ -153,33 +153,38 @@ def pair_features(
     blocks = []
     for key, block in rho0_ij.items():
         # print(block.values.shape,'1')
-        block_species_i = key['species_center']
-        block_species_j = key['species_neighbor']
-        all_frames = np.unique(block.samples.values[:, 0])
+        # block_species_i = key['species_center']
+        # block_species_j = key['species_neighbor']
+        same_species = key['species_center'] == key['species_neighbor']
+        # all_frames = np.unique(block.samples.values[:, 0])
         sample_labels = []
         value_indices = []
 
         negative_list = []
         for isample, sample in enumerate(block.samples):
-            ifr = sample['structure']
-            i = sample['center']
-            j = sample['neighbor']
-            x = sample['cell_shift_a']
-            y = sample['cell_shift_b']
-            z = sample['cell_shift_c']
+            ifr, i, j, x, y, z = [sample[lab] for lab in ['structure', 'center', 'neighbor', 'cell_shift_a', 'cell_shift_b', 'cell_shift_c']]
 
+            same_atoms = i == j
+            is_central_cell = x == 0 and y == 0 and z == 0
+            
             if False: #[i, j, x, y, z] in negative_list: # <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
                 continue
             else:
                 value_indices.append(isample)
                 sample_labels.append([ifr, i, j, x, y, z, 1])
-                if not (j==i and x==0 and y==0 and z==0):
+        
+                # Look for negative translation for |bt|=1
+                if not ((same_atoms and is_central_cell)):
+                    if not same_species:
+                        continue
+                    
                     sample_labels.append([ifr, j, i, x, y, z, -1])
                     negative_list.append([j, i, -x, -y, -z])
 
-                    neg_label = Labels(["structure","center","neighbor","cell_shift_a","cell_shift_b","cell_shift_c",],
-                                            values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                    neg_label = Labels(["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                                       values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
                     mappedidx = block.samples.position(neg_label)
+                    
                     assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
                     value_indices.append(mappedidx)
         

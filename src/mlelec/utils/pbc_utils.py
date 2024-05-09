@@ -248,15 +248,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
     if device is None:
         device = dataset.device
 
-    key_names = [
-        "block_type",
-        "species_i",
-        "n_i",
-        "l_i",
-        "species_j",
-        "n_j",
-        "l_j"
-    ]
+    key_names = ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"]
     sample_names = ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"]
     property_names = ["dummy"]
     property_values = np.asarray([[0]])
@@ -350,7 +342,8 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
-                    n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
+                    # n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
+                    n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_j) for k2 in orbs_i], ()))
 
                     # if all_pairs:
                     #     # n1l1n2l2 = np.concatenate(tuple(tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j))
@@ -365,10 +358,11 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                     # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
                     block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
 
-                    block_split = [torch.split(blocki, list(orbs_j.values()), dim = 1) for blocki in torch.split(block_ij, list(orbs_i.values()), dim=0)]
+                    block_split = [torch.split(blocki, list(orbs_j.values()), dim = 1) for blocki in torch.split(block_ij, list(orbs_i.values()), dim = 0)]
                     block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
+
                         # if not all_pairs:
                         #     iorbital = orbital_idx[iorbital]
                         value = block_split[iorbital]
@@ -944,7 +938,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                         
                     orbs_j = orbs_mult[aj]
                     
-                    n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
+                    n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_j) for k2 in orbs_i], ()))
 
                     block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
 
