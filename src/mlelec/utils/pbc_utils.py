@@ -77,24 +77,32 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
 
     for A, frame in enumerate(dataset.structures):  # Loop over frames
+        if not dataset._ismolecule:
+            if cutoff_was_none:
+                cutoff = dataset.cells[A].rcut * Bohr
+                warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')
 
-        if cutoff_was_none:
-            cutoff = dataset.cells[A].rcut * Bohr
-            warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')
-
-        if target.lower() == "fock":
-            if dataset.fock_realspace is None:
-                matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+            if target.lower() == "fock":
+                if dataset.fock_realspace is None:
+                    matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+                else:
+                    matrices = dataset.fock_realspace[A]
+            elif target.lower() == "overlap":
+                if dataset.overlap_realspace is None:
+                    matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+                else:
+                    matrices = dataset.overlap_realspace[A]
             else:
-                matrices = dataset.fock_realspace[A]
-        elif target.lower() == "overlap":
-            if dataset.overlap_realspace is None:
-                matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+                raise ValueError("target must be either 'fock' or 'overlap'")
+        else: 
+            matrices= {}
+            if target.lower() == "fock":
+                matrices[0,0,0] = dataset.fock_realspace[A]
+            elif target.lower() == "overlap":
+                matrices[0,0,0] = dataset.overlap_realspace[A]
             else:
-                matrices = dataset.overlap_realspace[A]
-        else:
-            raise ValueError("target must be either 'fock' or 'overlap'")
-
+                raise ValueError("target must be either 'fock' or 'overlap")
+        
         for iii,T in enumerate(matrices):
             mT = tuple(-t for t in T)
             assert mT in matrices, f"{mT} not in the real space matrix keys"
@@ -108,7 +116,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                 matrixT = matrixT.to(device)
                 matrixmT = matrixmT.to(device)
             assert np.isclose(torch.norm(matrixT - matrixmT.T).item(), 0.0), f"Failed to check H({T}) = H({mT})^\dagger"
-
             i_start = 0
             # Loop over the all the atoms in the structure, by atomic number
             for i, ai in enumerate(frame.numbers):

@@ -152,18 +152,13 @@ def pair_features(
 
     blocks = []
     for key, block in rho0_ij.items():
-        # print(block.values.shape,'1')
-        # block_species_i = key['species_center']
-        # block_species_j = key['species_neighbor']
         same_species = key['species_center'] == key['species_neighbor']
-        # all_frames = np.unique(block.samples.values[:, 0])
         sample_labels = []
         value_indices = []
 
         negative_list = []
         for isample, sample in enumerate(block.samples):
             ifr, i, j, x, y, z = [sample[lab] for lab in ['structure', 'center', 'neighbor', 'cell_shift_a', 'cell_shift_b', 'cell_shift_c']]
-
             same_atoms = i == j
             is_central_cell = x == 0 and y == 0 and z == 0
             
@@ -214,9 +209,10 @@ def pair_features(
         assert isinstance(order_nu, int), "specify order_nu as int or list of 2 ints"
         order_nu_i = order_nu
 
-    if not (frames[0].pbc.any()):
-        for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
-            rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
+    # # remove periodic boundary conditions if not present
+    # if not (frames[0].pbc.any()):
+    #     for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
+    #         rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
 
     # must compute rhoi as sum of rho_0ij
     if rhonu_i is None:
@@ -295,6 +291,10 @@ def twocenter_features_periodic_NH(
 
     keys = []
     blocks = []
+    if "cell_shift_a" not in pair.keys.names:
+        assert "cell_shift_b" not in pair.keys.names
+        assert "cell_shift_c" not in pair.keys.names
+        # return twocenter_hermitian_features(single_center, pair)
 
     for k, b in single_center.items():
         keys.append(tuple(k) + (k["species_center"], 0,))

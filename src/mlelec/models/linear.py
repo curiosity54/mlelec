@@ -643,7 +643,7 @@ class LinearModelPeriodic(nn.Module):
         self.recon = {}
 
         pred_blocks = []
-        ridges = []
+        self.ridges = []
         for k, block in self.target_blocks.items():
             blockval = torch.linalg.norm(block.values)
             bias = False
@@ -676,7 +676,7 @@ class LinearModelPeriodic(nn.Module):
                 # print(pred.shape, nsamples)
 
                 pred = ridge.predict(x)
-                ridges.append(ridge)
+                self.ridges.append(ridge)
 
                 pred_blocks.append(
                     TensorBlock(
@@ -703,7 +703,40 @@ class LinearModelPeriodic(nn.Module):
         pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
         self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
 
-        return self.recon_blocks, ridges
+        return self.recon_blocks, self.ridges
+    
+    def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):
+        if self.ridges is None:
+            assert ridges is not None, 'Ridges must be fitted first'
+            self.ridges = ridges
+        if hfeat is None:
+            hfeat = self.feats
+            warnings.warn('Using train hfeat, otherwise provide test hfeat')
+        if target_blocks is None:
+            target_blocks = self.target_blocks
+            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+
+        pred_blocks = []
+        for imdl, (key, tkey) in enumerate(zip(self.ridges, target_blocks.keys)):
+            # k = Labels( targetkeynames, values =np.array(eval(key)).reshape(1,-1))
+            # nsamples, ncomp, nprops = target.values.shape
+            
+            feat = map_targetkeys_to_featkeys(hfeat, tkey)
+            nsamples, ncomp, _ = feat.values.shape
+            x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))/1).cpu().numpy())
+            pred = self.ridges[imdl].predict(x)
+            pred_blocks.append(
+                            TensorBlock(
+                                values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
+                                .to(self.device),
+                                samples=feat.samples,
+                                components=feat.components,
+                                properties=self.dummy_property,
+                            )
+                        )
+
+        return TensorMap(target_blocks.keys, pred_blocks)
+        
 
     def regularization_loss(self, regularization):
         return (
