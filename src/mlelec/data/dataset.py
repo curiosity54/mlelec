@@ -485,7 +485,7 @@ class PeriodicDataset(Dataset):
         aux: List[str] = ["real_overlap"],
         use_precomputed: bool = True,
         device="cuda",
-        orbs: str = "sto-3g",
+        orbs: str = None, #"sto-3g",
         desired_shifts: List = None,
     ):
         self.structures = frames
@@ -754,6 +754,7 @@ class PySCFPeriodicDataset(Dataset):
         dimension: int = 3,
         fix_p_orbital_order = False,
         apply_condon_shortley = False,
+        ismolecule=False,
     ):
     
         self.structures = frames
@@ -770,7 +771,7 @@ class PySCFPeriodicDataset(Dataset):
             self.kmesh = [
                 kmesh for _ in range(self.nstructs)
             ]  # currently easiest to do
-
+  
         self.device = device
         self.basis = orbs  # actual orbitals
         self.basis_name = orbs_name
@@ -779,8 +780,11 @@ class PySCFPeriodicDataset(Dataset):
         if not use_precomputed:
             raise NotImplementedError("You must use precomputed data for now.")
         
+        self._ismolecule = ismolecule
+        if not frames[0].pbc.any():
+            self._ismolecule = True
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
-        if fix_p_orbital_order:
+        if fix_p_orbital_order and not self._ismolecule:
             from mlelec.utils.twocenter_utils import fix_orbital_order
             if fock_kspace is not None:
                 for ifr in range(len(fock_kspace)):
@@ -798,6 +802,16 @@ class PySCFPeriodicDataset(Dataset):
                 for ifr in range(len(overlap_realspace)):
                     for T in overlap_realspace[ifr]:
                         overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
+        
+        elif self._ismolecule:
+            from mlelec.utils.twocenter_utils import fix_orbital_order
+            assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
+            for ifr in range(len(fock_realspace)):
+                    fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
+            if overlap_realspace is not None:
+                assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
+                for ifr in range(len(overlap_realspace)):
+                        overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
         if apply_condon_shortley:
@@ -833,15 +847,16 @@ class PySCFPeriodicDataset(Dataset):
         # self.target_names = target
         # self.aux_names = aux
 
+
         self.cells = []
         self.phase_matrices = []
         self.supercells = []
-
-        for ifr, structure in enumerate(self.structures):
-            cell, scell, phase = get_scell_phase(
-                structure, self.kmesh[ifr], basis=self.basis_name
-            )
-            self.cells.append(cell)
+        if self._ismolecule ==False:
+            for ifr, structure in enumerate(self.structures):
+                cell, scell, phase = get_scell_phase(
+                    structure, self.kmesh[ifr], basis=self.basis_name
+                )
+                self.cells.append(cell)
         self.set_kpts()
 
         # Assign/compute Hamiltonian
@@ -851,7 +866,8 @@ class PySCFPeriodicDataset(Dataset):
             # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
         elif (fock_kspace is None) and (fock_realspace is not None):
             self.fock_realspace = self._set_matrices_realspace(fock_realspace)
-            self.fock_kspace = self.bloch_sum(fock_realspace)
+            if not self._ismolecule:
+                self.fock_kspace = self.bloch_sum(fock_realspace)
         elif (fock_kspace is None) and (fock_realspace is None):
             raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
         elif (fock_kspace is not None) and (fock_realspace is not None):
@@ -882,23 +898,28 @@ class PySCFPeriodicDataset(Dataset):
         self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
 
     def _set_matrices_realspace(self, matrices_realspace):
+        if not isinstance(matrices_realspace[0], dict):
+            assert self._ismolecule, "matrices_realspace should be a dictionary of translated unless molecule"
+            return matrices_realspace
+        
         _matrices_realspace = []
-        _matrices_realspace_neg = []
+        # _matrices_realspace_neg = []
+        
         for m in matrices_realspace:
             _matrices_realspace.append({})
-            _matrices_realspace_neg.append({})
+            # _matrices_realspace_neg.append({})
             for k in m:
                 minus_k = tuple(-np.array(k))
                 if isinstance(m[k], torch.Tensor):
                     _matrices_realspace[-1][k] = m[k]
-                    _matrices_realspace_neg[-1][k] = m[minus_k]
+                    # _matrices_realspace_neg[-1][k] = m[minus_k]
                 elif isinstance(m[k], np.ndarray):
                     _matrices_realspace[-1][k] = torch.from_numpy(m[k])
-                    _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
+                    # _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
 
                 elif isinstance(m[k], list):
                     _matrices_realspace[-1][k] = torch.tensor(m[k])
-                    _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
+                    # _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
                 else:
                     raise ValueError(
                         "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
