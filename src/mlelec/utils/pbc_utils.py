@@ -249,7 +249,7 @@ def move_cell_shifts_to_keys(blocks):
 
 
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None):
+def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False):
     if device is None:
         device = dataset.device
         
@@ -283,7 +283,10 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None):
     }
 
     reconstructed_matrices = []
-
+    
+    bt1factor = ISQRT_2 
+    if all_pairs:
+        bt1factor/=2
 
     for A in range(len(dataset.structures)):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
@@ -350,7 +353,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None):
                              ] = values.T
             
             elif abs(block_type) == 1:
-                values *= ISQRT_2
+                values *= bt1factor
                 # <i \phi| H(T)|j \psi> = # block_(+)ijT + block_(-)ijT 
                 matrix_T[
                             i_start + ioffset : i_start + ioffset + i_end,
