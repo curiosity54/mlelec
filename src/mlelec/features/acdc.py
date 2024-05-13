@@ -99,6 +99,7 @@ def pair_features(
     kmesh=None,
     return_rho0ij=False,
     backend='torch',
+    overwrite_cutoff = False,
     **kwargs,
 ):
     print(device, 'pair features')
@@ -137,8 +138,14 @@ def pair_features(
 
     if all_pairs:    
         repframes = [f.repeat(kmesh[ifr]) for ifr, f in enumerate(frames)]
-        hypers_pair["cutoff"] = np.ceil(np.max([np.max(f.get_all_distances(mic = False)) for f in repframes]))
-        warnings.warn(f"Overwriting hyperparameter 'cutoff' to new value {hypers_pair['cutoff']} for all pair feature.")
+        min_cutoff = np.max([np.max(f.get_all_distances(mic = False)) for f in repframes])
+        if hypers_pair["cutoff"] < min_cutoff:
+            if overwrite_cutoff:
+                hypers_pair["cutoff"] = np.ceil(min_cutoff)
+                warnings.warn(f"Overwriting hyperparameter 'cutoff' to new value {hypers_pair['cutoff']} for all pair feature.")
+            else:
+                raise ValueError("The selected cutoff is less than the maximum distance among atoms in the system!")
+        
 
     calculator = PairExpansion(**hypers_pair)
     rho0_ij = calculator.compute(frames, use_native_system = use_native)
