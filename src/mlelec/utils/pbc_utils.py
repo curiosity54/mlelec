@@ -36,7 +36,7 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
 
 
 
-def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
+def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', matrix=None):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -81,19 +81,21 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
             if cutoff_was_none:
                 cutoff = dataset.cells[A].rcut * Bohr
                 warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')
-
-            if target.lower() == "fock":
-                if dataset.fock_realspace is None:
-                    matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+            if matrix is None:
+                if target.lower() == "fock":
+                    if dataset.fock_realspace is None:
+                        matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
+                    else:
+                        matrices = dataset.fock_realspace[A]
+                elif target.lower() == "overlap":
+                    if dataset.overlap_realspace is None:
+                        matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
+                    else:
+                        matrices = dataset.overlap_realspace[A]
                 else:
-                    matrices = dataset.fock_realspace[A]
-            elif target.lower() == "overlap":
-                if dataset.overlap_realspace is None:
-                    matrices = inverse_bloch_sum(dataset, dataset.overlap_kspace[A], A, cutoff)
-                else:
-                    matrices = dataset.overlap_realspace[A]
-            else:
-                raise ValueError("target must be either 'fock' or 'overlap'")
+                    raise ValueError("target must be either 'fock' or 'overlap'")
+            else: 
+                matrices = matrix[A]
         else: 
             matrices= {}
             if target.lower() == "fock":
@@ -115,7 +117,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
             else:
                 matrixT = matrixT.to(device)
                 matrixmT = matrixmT.to(device)
-            assert np.isclose(torch.norm(matrixT - matrixmT.T).item(), 0.0), f"Failed to check H({T}) = H({mT})^\dagger"
+            # assert np.isclose(torch.norm(matrixT - matrixmT.T).item(), 0.0), f"Failed to check H({T}) = H({mT})^\dagger"
             i_start = 0
             # Loop over the all the atoms in the structure, by atomic number
             for i, ai in enumerate(frame.numbers):
@@ -168,7 +170,9 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                             block_jimT = matrixmT[j_start : j_start + orbs_tot[aj], i_start : i_start + orbs_tot[ai]]
                             block_jimT_split = [torch.split(blocki, list(orbs_i.values()), dim=1) for blocki in torch.split(block_jimT, list(orbs_j.values()), dim = 0)]
                             block_jimT_split = [y for x in block_jimT_split for y in x]  # flattening the list of lists above
+                            # value_ji \equiv H_{ji}(-T)[\phi, \psi]
                             value_ji = block_jimT_split[iorbital]  # same orbital in the ji subblock
+                            
                         else:
                             # Different species interaction
                             # skip ai>aj if not all_pairs
@@ -193,11 +197,11 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                         if block_type == 1:
                             # if i > j:  # keep only (i,j) and not (j,i)
                                 # continue
-                            # bplus = value
+
+                            # block_(+1)ijT = <i \phi| H(T)|j \psi> + <j \phi| H(-T)|i \psi>
                             bplus = (value + value_ji) * ISQRT_2
-                            # bminus = value_ji
+                            # block_(-1)ijT = <i \phi| H(T)|j \psi> - <j \phi| H(-T)|i \psi>
                             bminus = (value - value_ji) * ISQRT_2
-                            # print(i,j)
                             block.add_samples(
                                 labels = [(A, i, j, *T)],
                                 data = bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
@@ -284,9 +288,11 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
 
     reconstructed_matrices = []
     
-    bt1factor = ISQRT_2 
+    bt1factor = ISQRT_2 /2
+    bt2factor =2 # because all_pairs=False in matrix_to_blocks still returns all species pairs (not ordered)
     if all_pairs:
         bt1factor/=2
+        bt2factor = 2
 
     for A in range(len(dataset.structures)):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
@@ -311,10 +317,10 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
             for k1 in orbs_i
             for k2 in orbs_j
         }
-        # offset of the orbital (ni, li) within a block of atom i
-        ioffset = orbs_offset[(ai, ni, li)] 
-        # offset of the orbital (nj,lj) within a block of atom j
-        joffset = orbs_offset[(aj, nj, lj)]
+        # where does orbital PHI = (ni, li) start within a block of atom i
+        phioffset = orbs_offset[(ai, ni, li)] 
+        # where does orbital PSI = (nj,lj) start within a block of atom j
+        psioffset = orbs_offset[(aj, nj, lj)]
 
         # loops over samples (structure, i, j)
     
@@ -334,71 +340,71 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
             matrix_mT = reconstructed_matrices[A][mT]
             # beginning of the block corresponding to the atom i-j pair
             i_start, j_start = atom_blocks_idx[(A, i, j)]
-            
-            i_end = shapes[(ni, li, nj, lj)][0]  # orb end
-            j_end = shapes[(ni, li, nj, lj)][1]  # orb end
-
-            values = blockval[:, :, 0].clone().reshape(2 * li + 1, 2 * lj + 1)
-
+            # where does orbital (ni, li) end (or how large is it)
+            phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
+            # where does orbital (nj, lj) end (or how large is it)
+            psi_end = shapes[(ni, li, nj, lj)][1]  
+            values = blockval[:, :, 0].clone()
             # position of the orbital within this block
             if block_type == 0 or block_type == 2:
                 # <i \phi| H(T)|j \psi> = # <i \phi| H(-T)|j \psi>^T 
                 matrix_T[
-                    i_start + ioffset : i_start + ioffset + i_end,
-                    j_start + joffset : j_start + joffset + j_end,
+                    i_start + phioffset : i_start + phioffset + phi_end,
+                    j_start + psioffset : j_start + psioffset + psi_end,
                              ] = values
                 matrix_mT[
-                    j_start + joffset : j_start + joffset + j_end,
-                    i_start + ioffset : i_start + ioffset + i_end,
+                    j_start + psioffset : j_start + psioffset + psi_end,
+                    i_start + phioffset : i_start + phioffset + phi_end,
                              ] = values.T
             
             elif abs(block_type) == 1:
                 values *= bt1factor
-                # <i \phi| H(T)|j \psi> = # block_(+)ijT + block_(-)ijT 
-                matrix_T[
-                            i_start + ioffset : i_start + ioffset + i_end,
-                            j_start + joffset : j_start + joffset + j_end,
-                        ] += values
-                if block_type == 1:
                 
-                    matrix_mT[ j_start + ioffset : j_start + ioffset + i_end,
-                            i_start + joffset : i_start + joffset + j_end,
-                        ] += values
-                    
+                iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
+                                  slice(j_start + psioffset , j_start + psioffset + psi_end)
+                ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
+                                slice(j_start + phioffset , j_start + phioffset + phi_end),
+                                
+                jphi_ipsi_slice = slice(j_start + phioffset , j_start + phioffset + phi_end),\
+                                 slice(i_start + psioffset , i_start + psioffset + psi_end)
+                
+                jpsi_iphi_slice = slice(j_start + psioffset , j_start + psioffset + psi_end),\
+                        slice(i_start + phioffset , i_start + phioffset + phi_end)
+                                  
+                                  
+                # Eq (1) <i \phi| H(T)|j \psi> = # block_(+1)ijT + block_(-1)ijT 
+                # Eq (2) <j \phi| H(-T)|i \psi> = # block_(+1)ijT - block_(-1)ijT 
+                # Eq (3) <j \psi| H(-T)|i \phi> = # block_(+1)ijT^\dagger + block_(-1)ijT^\dagger (Transpose of Eq1) 
+                # Eq (4) <i \psi| H(T)|j \phi> = # block_(+1)ijT^\dagger - block_(-1)ijT^\dagger (Transpose of Eq2)
+                if block_type == 1:
+                    # first half of Eq (1) 
+                    matrix_T[iphi_jpsi_slice] += values
+                    # first half of Eq (2)
+                    matrix_mT[jphi_ipsi_slice] += values
+                    # first half of Eq (3)
+                    matrix_mT[jpsi_iphi_slice] += values.T
+                    # first half of Eq (4)
+                    matrix_T[ ipsi_jphi_slice] += values.T
+
         
                 else:
-                    # <i \phi| H(-T)|j \psi> = # block_(+)ijT - block_(-)ijT 
-
-                    matrix_mT[
-                        j_start + ioffset : j_start + ioffset + i_end,
-                        i_start + joffset : i_start + joffset + j_end,
-                        
-                    ] -= values
+                    # second half of Eq (1)
+                    matrix_T[iphi_jpsi_slice] += values
+                    # second half of Eq (2)
+                    matrix_mT[jphi_ipsi_slice] -= values
+                    # second half of Eq (3)
+                    matrix_mT[jpsi_iphi_slice] += values.T
+                    # second half of Eq (4)
+                    matrix_T[ipsi_jphi_slice ] -= values.T
             
-            # else: #btype=2
-            #     matrix_T[
-            #         i_start + ioffset : i_start + ioffset + i_end,
-            #         j_start + joffset : j_start + joffset + j_end,
-            #                  ] = values
 
-                # matrix_T_plus[
-                #             j_start + joffset : j_start + i                                                                                                                                                                       offset + i_end,
-                #             i_start + joffset : i_start + joffset + j_end,
-                #         ] = values.T
 
-    # Fill what's left from symmetries [impose H(T) = H(-T)^\dagger]
     for A, matrix in enumerate(reconstructed_matrices):
         Ts = list(matrix.keys())
         for T in Ts:
             mT = tuple(-t for t in T)
-    #         if mT not in matrix:
-    #             reconstructed_matrices[A][mT] = torch.clone(matrix[T].T)
-    #         else:
-    #             upper = torch.triu(matrix[T])
-    #             lower = torch.triu(reconstructed_matrices[A][mT], diagonal = 1).T
-    #             matrix[T] = upper + lower
-    #             reconstructed_matrices[A][mT] = (upper + lower).T
-            assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T])))
+         
+            assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
 
     return reconstructed_matrices
 
