@@ -144,8 +144,7 @@ def pair_features(
                 hypers_pair["cutoff"] = np.ceil(min_cutoff)
                 warnings.warn(f"Overwriting hyperparameter 'cutoff' to new value {hypers_pair['cutoff']} for all pair feature.")
             else:
-                raise ValueError("The selected cutoff is less than the maximum distance among atoms in the system!")
-        
+                warnings.warn(f"The selected cutoff is less than the maximum distance as repeated for kmesh ({np.ceil(min_cutoff)}) among atoms in the system!")
 
     calculator = PairExpansion(**hypers_pair)
     rho0_ij = calculator.compute(frames, use_native_system = use_native)
