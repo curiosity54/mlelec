@@ -768,7 +768,11 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
         return Hk
 
 
-def kblocks_to_matrix(k_target_blocks, dataset):
+def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False):
+    """
+    k_target_blocks: UNCOUPLED blocks of H(k)
+   
+    """
     from mlelec.utils.pbc_utils import _orbs_offsets, _atom_blocks_idx
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
@@ -785,6 +789,11 @@ def kblocks_to_matrix(k_target_blocks, dataset):
         }
         for species in dataset.basis
     }
+    bt1factor = ISQRT_2 
+    if all_pairs:
+        bt1factor/=1
+        bt2factor = 2 # because we add both <I \phi | J \psi> and <I \psi | J \phi> 
+
 
     recon_Hk = {}
     for k, block in k_target_blocks.items():
@@ -823,16 +832,16 @@ def kblocks_to_matrix(k_target_blocks, dataset):
             i_end, j_end = shapes[(ni, li, nj, lj)]
 
             
-            islice = slice(i_start + ioffset, i_start + ioffset + i_end)
-            jslice = slice(j_start + joffset, j_start + joffset + j_end)
-            ijslice = slice(i_start + joffset, i_start + joffset + j_end)
-            jislice = slice(j_start + ioffset, j_start + ioffset + i_end)
+            islice = slice(i_start + ioffset, i_start + ioffset + i_end) #<i \phi|
+            jslice = slice(j_start + joffset, j_start + joffset + j_end) #<j \psi|
+            ijslice = slice(i_start + joffset, i_start + joffset + j_end) #<i \psi|
+            jislice = slice(j_start + ioffset, j_start + ioffset + i_end) #<j \phi|
 
             if bt == 0:
                 recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
                 
             elif abs(bt) == 1:
-                blockval /= np.sqrt(2)
+                blockval *= bt1factor
                 if bt == 1:
                     recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
                     if i != j:
@@ -842,9 +851,12 @@ def kblocks_to_matrix(k_target_blocks, dataset):
                     if i != j:
                         recon_Hk[A][ik, jislice, ijslice] -= blockval[..., 0].conj()
             else: 
-                recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
-                recon_Hk[A][ik, jslice, islice] += blockval[..., 0].conj().T
-
+                recon_Hk[A][ik, islice, jslice] += blockval[..., 0]/bt2factor
+                recon_Hk[A][ik, jslice, islice] += blockval[..., 0].conj().T/bt2factor
+    
+    for Hk in recon_Hk: 
+        for ik in range(len(recon_Hk[Hk])):
+            assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
     recon_Hk = list(recon_Hk.values())
     return recon_Hk
 

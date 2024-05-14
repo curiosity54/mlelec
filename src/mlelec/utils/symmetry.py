@@ -334,7 +334,7 @@ class ClebschGordanReal:
         }
 
     def combine(
-        self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str
+        self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str=None
     ) -> torch.tensor:
         """
         Combines two spherical tensors y1, y2 into a single one.
@@ -358,7 +358,8 @@ class ClebschGordanReal:
             )
 
         # infers the shape of the output using the einsum internals
-        ycombine = torch.einsum(combination_string, y1[:, 0, ...], y2[:, 0, ...]).shape
+        # ycombine = torch.einsum(combination_string, y1[:, 0, ...], y2[:, 0, ...]).shape
+        ycombine = y1[:, 0, ...].shape
         Y = torch.zeros((n_items, 2 * L + 1) + ycombine[1:], device=self.device)
 
         if (l1, l2, L) in self._cg:
