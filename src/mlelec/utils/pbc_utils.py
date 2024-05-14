@@ -36,7 +36,7 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
 
 
 
-def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', matrix=None):
+def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', matrix=None, sort_orbs = False):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -158,6 +158,9 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
                         value = block_split[iorbital]
 
                         if i == j and np.linalg.norm(T) == 0:
+                            if sort_orbs:
+                                if ni > nj or (ni == nj and li > lj):
+                                    continue
                             # On-site
                             # we could further sort n1l1,n2l2 pairs :TODO
                             block_type = 0
@@ -165,6 +168,11 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
 
                         elif (ai == aj) or (i == j and T != [0, 0, 0]):
                             # Same species interaction
+                           #----sorting ni,li,nj,lj---  
+                            if sort_orbs:
+                                if ni > nj or (ni == nj and li > lj):
+                                    continue
+                            #-------
                             block_type = 1
                             key = (block_type, ai, ni, li, aj, nj, lj)
                             block_jimT = matrixmT[j_start : j_start + orbs_tot[aj], i_start : i_start + orbs_tot[ai]]
@@ -253,7 +261,7 @@ def move_cell_shifts_to_keys(blocks):
 
 
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False):
+def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = False):
     if device is None:
         device = dataset.device
         
@@ -288,7 +296,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
 
     reconstructed_matrices = []
     
-    bt1factor = ISQRT_2 /2
+    bt1factor = ISQRT_2 
     bt2factor =2 # because all_pairs=False in matrix_to_blocks still returns all species pairs (not ordered)
     if all_pairs:
         bt1factor/=2
@@ -304,7 +312,17 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
         T = key["cell_shift_a"], key["cell_shift_b"], key["cell_shift_c"]
-
+        
+        #----sorting ni,li,nj,lj---
+        if sort_orbs:
+            fac=1 # sorted orbs - we only count everything once
+            if ai == aj and (ni ==nj and li == lj): #except these diag blocks
+                fac=2 #so we need to divide by 2 to avoic double count
+        else: 
+            # no sorting -->  we count everything twice
+            fac=2
+        #----sorting ni,li,nj,lj---
+        #TODO: make consistent in kmatrix_to_blocs, kblocks_to_matrix
         mT = tuple(-t for t in T)
         # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
         # of a p block = 3
@@ -358,7 +376,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False)
                              ] = values.T
             
             elif abs(block_type) == 1:
-                values *= bt1factor
+                values *= bt1factor/fac
                 
                 iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
                                   slice(j_start + psioffset , j_start + psioffset + psi_end)
