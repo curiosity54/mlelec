@@ -336,7 +336,6 @@ class LinearTargetModel(nn.Module):
         self.ridges = []
         # kernels = []
         for k, block in self.dataset.target_train.items():
-            # print(k)
             blockval = torch.linalg.norm(block.values)
             bias = False
             if True:  # blockval > 1e-10:
@@ -345,11 +344,9 @@ class LinearTargetModel(nn.Module):
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.dataset.feat_train, k)
 
-                # featnorm = torch.linalg.norm(feat.values)
                 targetnorm = torch.linalg.norm(block.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
-                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
                 assert np.all(block.samples.values == feat.samples.values), (
                     k,
                     block.samples.values.shape,
@@ -382,10 +379,7 @@ class LinearTargetModel(nn.Module):
                     alphas=np.logspace(-15, -1, 40), fit_intercept=bias
                 ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
-                # print(pred.shape, nsamples)
                 pred = ridge.predict(x)
-                # if k['L']==0:
-                #     print('SCORE', ridge.score(x,y) )
                 self.ridges.append(ridge)
 
                 pred_blocks.append(
@@ -516,18 +510,15 @@ class LinearModelPeriodic(nn.Module):
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True)
 
-                # featnorm = torch.linalg.norm(feat.values)
                 # nsamples, ncomp, nprops = block.values.shape
-                nsamples, ncomp, nprops = feat.values.shape
-                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
+                # nsamples, ncomp, nprops = feat.values.shape
                 pred = self.blockmodels[str(tuple(k))](feat.values)
-                # print(pred.shape, nsamples)
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=pred.reshape((nsamples, ncomp, 1)),
+                        values=pred,#.reshape((nsamples, ncomp, 1)),
                         samples=feat.samples,
-                        components=block.components,
+                        components= block.components,
                         properties=self.dummy_property,
                     )
                 )
@@ -673,7 +664,6 @@ class LinearModelPeriodic(nn.Module):
                     # warnings.warn("Using RidgeCV")
                     ridge = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
-                # print(pred.shape, nsamples)
 
                 pred = ridge.predict(x)
                 self.ridges.append(ridge)
