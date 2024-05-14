@@ -790,9 +790,10 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False):
         for species in dataset.basis
     }
     bt1factor = ISQRT_2 
+    bt2factor = 1
     if all_pairs:
         bt1factor/=1
-        bt2factor = 2 # because we add both <I \phi | J \psi> and <I \psi | J \phi> 
+        bt2factor*= 2 # because we add both <I \phi | J \psi> and <I \psi | J \phi> 
 
 
     recon_Hk = {}
