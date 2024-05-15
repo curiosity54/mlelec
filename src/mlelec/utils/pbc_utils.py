@@ -403,7 +403,6 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                     matrix_mT[jpsi_iphi_slice] += values.T
                     # first half of Eq (4)
                     matrix_T[ ipsi_jphi_slice] += values.T
-
         
                 else:
                     # second half of Eq (1)
@@ -414,9 +413,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                     matrix_mT[jpsi_iphi_slice] += values.T
                     # second half of Eq (4)
                     matrix_T[ipsi_jphi_slice ] -= values.T
-            
-
-
+         
     for A, matrix in enumerate(reconstructed_matrices):
         Ts = list(matrix.keys())
         for T in Ts:
@@ -500,7 +497,7 @@ def inverse_fft(H_T, kmesh):
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
 
-def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
+def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', sort_orbs=False):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -555,7 +552,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
 
 
             # When the calculation is at Gamma you want to skip i==j samples
-            is_gamma_point = dataset.kmesh[A] == [1,1,1] and ik == 0
+            # is_gamma_point = dataset.kmesh[A] == [1,1,1] and ik == 0
+            is_gamma_point = np.linalg.norm(dataset.kpts_rel[A][ik]) < 1e-30
 
             matrixmT = matrixT.conj()
             if isinstance(matrixT, np.ndarray):
@@ -571,6 +569,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                 j_start = 0
 
                 for j, aj in enumerate(frame.numbers):
+
+                    same_species = ai == aj
 
                     # Skip the pair if their distance exceeds the cutoff
                     ij_distance = frame.get_distance(i, j, mic = False)
@@ -589,18 +589,19 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                     orbs_j = orbs_mult[aj]
                     
                     n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_j) for k2 in orbs_i], ()))
-                    # print(n1l1n2l2)
                     block_ij = matrixT[i_start:i_start + orbs_tot[ai], j_start:j_start + orbs_tot[aj]]
 
                     block_split = [torch.split(blocki, list(orbs_j.values()), dim = 1) for blocki in torch.split(block_ij, list(orbs_i.values()), dim=0)]
                     block_split = [y for x in block_split for y in x]  # flattening the list of lists above
 
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
-                        value = block_split[iorbital]
-
-                        same_orbitals = ni == nj and li == lj
-                        
-                        if (ai == aj):
+                        if sort_orbs:
+                            if same_species and (ni > nj or (ni == nj and li > lj)):
+                                continue
+                        value = block_split[iorbital]                        
+                        # if i == 0 and j == 1 and ik == 0 and ni == 1 and li == 0 and nj == 2 and lj == 0:
+                        #     print(value)
+                        if same_species:
                             # Same species interaction
                             block_type = 1
                             key = (block_type, ai, ni, li, aj, nj, lj)
@@ -639,9 +640,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            # The same-orbital and i == j element is exactly zero (btype=-1), so we skip it. 
-                            # Skip also the Gamma point sample when the calculation is only done at Gamma 
-                            # if (not (same_orbitals and i == j)):
+                            # Skip the Gamma point, bt=-1, i==j sample because 
+                            # it's zero [H(Gamma)_{i,i,phi,psi,-1}=0]
                             if (not (is_gamma_point and i == j)):
                                 block_asym = block_builder.blocks[(-1,) + key[1:]]
                                 block_asym.add_samples(
@@ -650,6 +650,9 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
                                 )
 
                         elif block_type == 2:
+                            # if i == 0 and j == 1 and ik == 0 and ni == 1 and li == 0 and nj == 2 and lj == 0:
+
+                            #     print(A, i, j, ik, value)
                             block.add_samples(
                                 labels=[(A, i, j, ik)],
                                 data=value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
@@ -667,6 +670,160 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
     return tmap
 
 
+def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = False):
+    """
+    k_target_blocks: UNCOUPLED blocks of H(k)
+   
+    """
+    from mlelec.utils.pbc_utils import _orbs_offsets, _atom_blocks_idx
+    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
+    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_mult = {
+        species: 
+                {tuple(k): v
+            for k, v in zip(
+                *np.unique(
+                    np.asarray(dataset.basis[species])[:, :2],
+                    axis=0,
+                    return_counts=True,
+                )
+            )
+        }
+        for species in dataset.basis
+    }
+    bt1factor = ISQRT_2 
+    bt2factor = 1
+
+    if all_pairs:
+        bt1factor /= 2
+        bt2factor *= 2 # because we add both <I \phi | J \psi> and <I \psi | J \phi> 
+
+    recon_Hk = {}
+    for k, block in k_target_blocks.items():
+        bt, ai, ni, li, aj, nj, lj = k.values
+        different_orbitals = not (ni == nj and li == lj)
+        orbs_i = orbs_mult[ai]
+        orbs_j = orbs_mult[aj]
+        
+        # The shape of the block corresponding to the orbital pair
+        shapes = {
+            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
+            for k1 in orbs_i
+            for k2 in orbs_j
+        }
+        phioffset = orbs_offset[(ai, ni, li)] 
+        psioffset = orbs_offset[(aj, nj, lj)]
+
+        for sample, blockval_ in zip(block.samples, block.values):
+
+            blockval = blockval_[...,0].clone()
+
+            A = sample["structure"]
+            i = sample["center"]
+            j = sample["neighbor"]
+            ik = sample['kpoint']
+
+            same_species = ai==aj
+            same_atom = i == j
+            bt0factor = 1
+
+            norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+            if A not in recon_Hk:
+                recon_Hk[A] = torch.zeros(dataset.kpts_rel[A].shape[0], norbs, norbs, dtype = torch.complex128)
+            
+            i_start, j_start = atom_blocks_idx[(A, i, j)]   
+            phi_end, psi_end = shapes[(ni, li, nj, lj)]
+            
+            iphi_jpsi = slice(i_start + phioffset, i_start + phioffset + phi_end),\
+                        slice(j_start + psioffset, j_start + psioffset + psi_end)
+            ipsi_jphi = slice(i_start + psioffset, i_start + psioffset + psi_end),\
+                        slice(j_start + phioffset, j_start + phioffset + phi_end)
+            jpsi_iphi = slice(j_start + psioffset, j_start + psioffset + psi_end),\
+                        slice(i_start + phioffset, i_start + phioffset + phi_end)
+            jphi_ipsi = slice(j_start + phioffset, j_start + phioffset + phi_end),\
+                        slice(i_start + psioffset, i_start + psioffset + psi_end)
+                                    
+            if abs(bt) == 1:
+                #----sorting ni,li,nj,lj---
+                if not all_pairs: 
+                    if same_atom and same_species: 
+                        bt0factor = 0.5
+                #----sorting ni,li,nj,lj---
+
+                blockval *= bt1factor*bt0factor
+                
+                # blockval*=bt0factor
+            #     #######################################################################################################################
+            #     # Working
+            #     if same_atom:
+            #         if not all_pairs:
+            #             if sort_orbs:
+            #                 if not different_orbitals:
+            #                     bt0factor = 0.5
+            #             else:
+            #                 bt0factor = 0.5
+            #         else:
+            #             if sort_orbs:
+            #                 if different_orbitals:
+            #                     bt0factor = 2
+            #     if bt == 1:
+            #         recon_Hk[A][ik][iphi_jpsi] += blockval*bt0factor
+            #         recon_Hk[A][ik][jpsi_iphi] += blockval.T.conj()*bt0factor
+            #         if not same_atom and (sort_orbs and different_orbitals):
+            #             recon_Hk[A][ik][jphi_ipsi] += blockval.conj()
+            #             recon_Hk[A][ik][jpsi_iphi] += blockval.T
+            #     else:
+            #         recon_Hk[A][ik][iphi_jpsi] += blockval*bt0factor
+            #         recon_Hk[A][ik][jpsi_iphi] += blockval.T.conj()*bt0factor
+            #         if not same_atom and (sort_orbs and different_orbitals):
+            #             recon_Hk[A][ik][jphi_ipsi] -= blockval.conj()
+            #             recon_Hk[A][ik][jpsi_iphi] -= blockval.T
+
+            # elif bt == 2:
+            #     recon_Hk[A][ik][iphi_jpsi] += blockval/bt2factor
+            #     recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T/bt2factor
+            #     #######################################################################################################################
+            
+                if bt == 1:
+                    recon_Hk[A][ik][iphi_jpsi] += blockval
+                    recon_Hk[A][ik][jphi_ipsi] += blockval.conj()
+                    if not same_species or (sort_orbs and different_orbitals):
+                        recon_Hk[A][ik][ipsi_jphi] += blockval.T
+                        recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
+                else:
+                    recon_Hk[A][ik][iphi_jpsi] += blockval
+                    recon_Hk[A][ik][jphi_ipsi] -= blockval.conj()
+                    if not same_species or (sort_orbs and different_orbitals):
+                        recon_Hk[A][ik][ipsi_jphi] -= blockval.T
+                        recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
+
+            elif bt == 2:
+                recon_Hk[A][ik][iphi_jpsi] += blockval/bt2factor
+                recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T/bt2factor
+
+            else:
+                raise ValueError(f"bt = {bt} should not be present in kblocks_to_matrix.")
+    
+    for Hk in recon_Hk: 
+        for ik in range(len(recon_Hk[Hk])):
+            assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
+    recon_Hk = list(recon_Hk.values())
+    return recon_Hk
+
+def tmap_to_dict(tmap):
+    temp={}
+    for k,b in tmap.items():
+        kl = tuple(k.values.tolist())
+        temp[kl] = {}
+        bsamp = np.array(b.samples.values.tolist())
+        values = b.values.clone()
+        ifrij = np.unique(bsamp[:,:3], axis = 0)
+        for I in ifrij:
+            idx = np.where(np.all(bsamp[:,:3] == I, axis = 1))[0]
+            temp[kl][tuple(I.tolist())] = values[idx]
+    return temp
+
+#------------------------------------------------------
 
 def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     phase = {}
@@ -790,113 +947,8 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
             for ifr, i, j in sorted(_Hk[k]):
                 Hk[k][ifr, i, j] = _Hk[k][ifr, i, j]
         return Hk
+#------------------------------------------------------
 
-
-def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False):
-    """
-    k_target_blocks: UNCOUPLED blocks of H(k)
-   
-    """
-    from mlelec.utils.pbc_utils import _orbs_offsets, _atom_blocks_idx
-    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
-    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
-    orbs_mult = {
-        species: 
-                {tuple(k): v
-            for k, v in zip(
-                *np.unique(
-                    np.asarray(dataset.basis[species])[:, :2],
-                    axis=0,
-                    return_counts=True,
-                )
-            )
-        }
-        for species in dataset.basis
-    }
-    bt1factor = ISQRT_2 
-    bt2factor = 1
-    if all_pairs:
-        bt1factor/=1
-        bt2factor*= 2 # because we add both <I \phi | J \psi> and <I \psi | J \phi> 
-
-
-    recon_Hk = {}
-    for k, block in k_target_blocks.items():
-        bt, ai, ni, li, aj, nj, lj = k.values
-
-        #####################################################################################
-        # From blocks_to_matrix
-        #####################################################################################
-        orbs_i = orbs_mult[ai]
-        orbs_j = orbs_mult[aj]
-        
-        # The shape of the block corresponding to the orbital pair
-        shapes = {
-            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
-            for k1 in orbs_i
-            for k2 in orbs_j
-        }
-        ioffset = orbs_offset[(ai, ni, li)] 
-        joffset = orbs_offset[(aj, nj, lj)]
-        #####################################################################################
-
-        for sample, blockval_ in zip(block.samples, block.values):
-
-            blockval = blockval_.clone()
-
-            A = sample["structure"]
-            i = sample["center"]
-            j = sample["neighbor"]
-            ik = sample['kpoint']
-           
-            norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
-            if A not in recon_Hk:
-                recon_Hk[A] = torch.zeros(dataset.kpts_rel[A].shape[0], norbs, norbs, dtype = torch.complex128)
-            
-            i_start, j_start = atom_blocks_idx[(A, i, j)]   
-            i_end, j_end = shapes[(ni, li, nj, lj)]
-
-            
-            islice = slice(i_start + ioffset, i_start + ioffset + i_end) #<i \phi|
-            jslice = slice(j_start + joffset, j_start + joffset + j_end) #<j \psi|
-            ijslice = slice(i_start + joffset, i_start + joffset + j_end) #<i \psi|
-            jislice = slice(j_start + ioffset, j_start + ioffset + i_end) #<j \phi|
-
-            if bt == 0:
-                recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
-                
-            elif abs(bt) == 1:
-                blockval *= bt1factor
-                if bt == 1:
-                    recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
-                    if i != j:
-                        recon_Hk[A][ik, jislice, ijslice] += blockval[..., 0].conj()
-                else:
-                    recon_Hk[A][ik, islice, jslice] += blockval[..., 0]
-                    if i != j:
-                        recon_Hk[A][ik, jislice, ijslice] -= blockval[..., 0].conj()
-            else: 
-                recon_Hk[A][ik, islice, jslice] += blockval[..., 0]/bt2factor
-                recon_Hk[A][ik, jslice, islice] += blockval[..., 0].conj().T/bt2factor
-    
-    for Hk in recon_Hk: 
-        for ik in range(len(recon_Hk[Hk])):
-            assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
-    recon_Hk = list(recon_Hk.values())
-    return recon_Hk
-
-def tmap_to_dict(tmap):
-    temp={}
-    for k,b in tmap.items():
-        kl = tuple(k.values.tolist())
-        temp[kl] = {}
-        bsamp = np.array(b.samples.values.tolist())
-        values = b.values.clone()
-        ifrij = np.unique(bsamp[:,:3], axis = 0)
-        for I in ifrij:
-            idx = np.where(np.all(bsamp[:,:3] == I, axis = 1))[0]
-            temp[kl][tuple(I.tolist())] = values[idx]
-    return temp
 
 ######--------------- NEW/OLD - to discard or incorporate? --------------------------- ###########################
 def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = None):

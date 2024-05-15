@@ -75,7 +75,7 @@ def plot_hamiltonian(
             c = matrix[j, i]
             if np.abs(c) <= 1e-50:
                 c = 0
-            ax.text(i, j, "{:.2e}".format(c), va="center", ha="center", fontsize=4)
+            ax.text(i, j, "{:.2e}".format(c), va="center", ha="center", fontsize=8)
 
     ax.set_xticks(range(m.shape[0]))
     ax.set_yticks(range(m.shape[1]))
