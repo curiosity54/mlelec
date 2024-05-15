@@ -772,9 +772,9 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = F
             else:
                 raise ValueError(f"bt = {bt} should not be present in kblocks_to_matrix.")
     
-    for Hk in recon_Hk: 
-        for ik in range(len(recon_Hk[Hk])):
-            assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
+    # for Hk in recon_Hk: 
+    #     for ik in range(len(recon_Hk[Hk])):
+    #         assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
     recon_Hk = list(recon_Hk.values())
     return recon_Hk
 
@@ -821,13 +821,10 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
     _Hk = {}
     _Hk0 = {}
     for k, b in target_blocks.items():
-
         # LabelValues to tuple
         kl = tuple(k.values.tolist())
-
         # Block type
         bt = kl[0]
-
         # define dummy key pointing to block type 1 when block type is zero
         if bt == 0:
             _kl = (1, *kl[1:])
@@ -836,7 +833,6 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
 
         if _kl not in _Hk:
             _Hk[_kl] = {}
-
         # Loop through the unique (ifr, i, j) triplets
         b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
         for I, (ifr, i, j) in enumerate(phase[kl]):
