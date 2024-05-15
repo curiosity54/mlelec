@@ -751,38 +751,6 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = F
                 #----sorting ni,li,nj,lj---
 
                 blockval *= bt1factor*bt0factor
-                
-                # blockval*=bt0factor
-            #     #######################################################################################################################
-            #     # Working
-            #     if same_atom:
-            #         if not all_pairs:
-            #             if sort_orbs:
-            #                 if not different_orbitals:
-            #                     bt0factor = 0.5
-            #             else:
-            #                 bt0factor = 0.5
-            #         else:
-            #             if sort_orbs:
-            #                 if different_orbitals:
-            #                     bt0factor = 2
-            #     if bt == 1:
-            #         recon_Hk[A][ik][iphi_jpsi] += blockval*bt0factor
-            #         recon_Hk[A][ik][jpsi_iphi] += blockval.T.conj()*bt0factor
-            #         if not same_atom and (sort_orbs and different_orbitals):
-            #             recon_Hk[A][ik][jphi_ipsi] += blockval.conj()
-            #             recon_Hk[A][ik][jpsi_iphi] += blockval.T
-            #     else:
-            #         recon_Hk[A][ik][iphi_jpsi] += blockval*bt0factor
-            #         recon_Hk[A][ik][jpsi_iphi] += blockval.T.conj()*bt0factor
-            #         if not same_atom and (sort_orbs and different_orbitals):
-            #             recon_Hk[A][ik][jphi_ipsi] -= blockval.conj()
-            #             recon_Hk[A][ik][jpsi_iphi] -= blockval.T
-
-            # elif bt == 2:
-            #     recon_Hk[A][ik][iphi_jpsi] += blockval/bt2factor
-            #     recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T/bt2factor
-            #     #######################################################################################################################
             
                 if bt == 1:
                     recon_Hk[A][ik][iphi_jpsi] += blockval
