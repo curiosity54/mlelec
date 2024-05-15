@@ -744,10 +744,28 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = F
                         slice(i_start + psioffset, i_start + psioffset + psi_end)
                                     
             if abs(bt) == 1:
-                #----sorting ni,li,nj,lj---
                 if not all_pairs: 
-                    if same_atom and same_species: 
+                    if not sort_orbs:
+                        bt0factor = 0.25
+                        if same_species and not same_atom:
+                            bt0factor = 0.5
+                            
+                    else: 
                         bt0factor = 0.5
+                        if same_atom and not different_orbitals:
+                            bt0factor = 0.25
+                        if same_species and different_orbitals and not same_atom:
+                            bt0factor = 1
+                else: 
+                    if not sort_orbs:
+                        bt0factor = 0.5
+                    else: 
+                        if same_species and not different_orbitals:
+                            bt0factor = 0.5
+                #----sorting ni,li,nj,lj---
+                # if not all_pairs: 
+                #     if same_atom and same_species: 
+                #         bt0factor = 0.5
                 #----sorting ni,li,nj,lj---
 
                 blockval *= bt1factor*bt0factor
@@ -755,15 +773,17 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = F
                 if bt == 1:
                     recon_Hk[A][ik][iphi_jpsi] += blockval
                     recon_Hk[A][ik][jphi_ipsi] += blockval.conj()
-                    if not same_species or (sort_orbs and different_orbitals):
-                        recon_Hk[A][ik][ipsi_jphi] += blockval.T
-                        recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
+                    # if not same_species or (sort_orbs and different_orbitals):
+                    # if sort_orbs and different_orbitals:
+                    recon_Hk[A][ik][ipsi_jphi] += blockval.T
+                    recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
                 else:
                     recon_Hk[A][ik][iphi_jpsi] += blockval
                     recon_Hk[A][ik][jphi_ipsi] -= blockval.conj()
-                    if not same_species or (sort_orbs and different_orbitals):
-                        recon_Hk[A][ik][ipsi_jphi] -= blockval.T
-                        recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
+                    # if not same_species or (sort_orbs and different_orbitals):
+                    # if sort_orbs and different_orbitals:
+                    recon_Hk[A][ik][ipsi_jphi] -= blockval.T
+                    recon_Hk[A][ik][jpsi_iphi] += blockval.conj().T
 
             elif bt == 2:
                 recon_Hk[A][ik][iphi_jpsi] += blockval/bt2factor
@@ -772,9 +792,9 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = F
             else:
                 raise ValueError(f"bt = {bt} should not be present in kblocks_to_matrix.")
     
-    # for Hk in recon_Hk: 
-    #     for ik in range(len(recon_Hk[Hk])):
-    #         assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
+    for Hk in recon_Hk: 
+        for ik in range(len(recon_Hk[Hk])):
+            assert torch.norm(recon_Hk[Hk][ik] -  recon_Hk[Hk][ik].conj().T) < 1e-10, "Hk is not hermitian"
     recon_Hk = list(recon_Hk.values())
     return recon_Hk
 
