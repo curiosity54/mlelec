@@ -15,6 +15,7 @@ import torch
 
 def inverse_bloch_sum(dataset, matrix, A, cutoff):
     dimension = dataset.dimension
+
     T_list = np.linalg.solve(dataset.cells[A].lattice_vectors().T, dataset.cells[A].get_lattice_Ls(rcut = cutoff/Bohr, dimension = dimension).T).T
     assert np.linalg.norm(T_list - np.round(T_list)) < 1e-9, np.linalg.norm(Ts - np.round(Ts))
     Ts = torch.from_numpy(np.round(T_list))
@@ -23,20 +24,42 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
         matrix = torch.from_numpy(matrix)
     else:
         assert isinstance(matrix, torch.Tensor), f"Matrix must be np.ndarray or torch.Tensor, but it's {type(matrix)}"
-
+    T_list = np.int32(np.round(T_list))
     HT = fourier_transform(matrix, T_list = Ts, k = k_list, norm = 1/k_list.shape[0])
 
-    T_list = np.int32(np.round(T_list))
+    frame = dataset.structures[A]
+    cell = frame.cell.array.T
+    rji_mat = frame.get_all_distances(mic = False, vector = True)
+    natm = frame.get_global_number_of_atoms()
+    lengths = dataset.structures[A].repeat(dataset.kmesh[A]).cell.lengths()
+    phys_cutoff = np.min(lengths/2)
+    if phys_cutoff < cutoff:
+        warnings.warn(f"Structure {A} is not large enough for the selected cutoff. Real space target computed with cutoff of {phys_cutoff:.2f} Angstrom")
+        cutoff = phys_cutoff
+    offsets = np.cumsum([len(dataset.basis[species]) for species in frame.numbers])
+    offsets -= offsets[0]
+    
     H_T = {}
     for T, H in zip(T_list, HT):
         assert torch.norm(H - H.real) < 1e-10, torch.norm(H - H.real).item()
-        # print(torch.norm(H - H.real))
-        H_T[tuple(T)] = H.real
+        H = H.real
+        
+        CT = cell @ T
+        dist_ij = np.linalg.norm(rji_mat + CT[np.newaxis, np.newaxis, :], axis = 2).T
+        dist = dist_ij <= cutoff
+        for i in range(natm):
+            i_off = offsets[i]
+            i_orbs = len(dataset.basis[frame.numbers[i]])
+            for j in range(natm):
+                j_off = offsets[j]
+                j_orbs = len(dataset.basis[frame.numbers[j]])
+                if not dist[i, j]:
+                    H[i_off:i_off+i_orbs, j_off:j_off+j_orbs] = 0.0
+
+        H_T[tuple(T)] = H
     return H_T
 
-
-
-def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', matrix=None, sort_orbs = False):
+def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', matrix=None, sort_orbs = True):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -84,6 +107,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, targ
             if matrix is None:
                 if target.lower() == "fock":
                     if dataset.fock_realspace is None:
+
                         matrices = inverse_bloch_sum(dataset, dataset.fock_kspace[A], A, cutoff)
                     else:
                         matrices = dataset.fock_realspace[A]
@@ -261,7 +285,7 @@ def move_cell_shifts_to_keys(blocks):
 
 
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = False):
+def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True):
     if device is None:
         device = dataset.device
         
@@ -497,7 +521,7 @@ def inverse_fft(H_T, kmesh):
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
 
-def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, target='fock', sort_orbs=False):
+def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', sort_orbs=True):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -670,7 +694,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = True, cutoff = None, tar
     return tmap
 
 
-def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = False):
+def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = True):
     """
     k_target_blocks: UNCOUPLED blocks of H(k)
    

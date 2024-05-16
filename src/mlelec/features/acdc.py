@@ -14,7 +14,7 @@ import metatensor.operations as operations
 import torch
 import numpy as np
 import warnings
-from mlelec.features.acdc_utils import (
+from mlelec.features.acdc_utils_diag import (
     acdc_standardize_keys,
     cg_increment,
     cg_combine,
@@ -57,7 +57,7 @@ def single_center_features(
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
-        rho_x = cg_combine(
+        rho_x = cg_increment(
             rho_prev,
             rho1i,
             clebsch_gordan=cg,
@@ -76,6 +76,7 @@ def single_center_features(
         lcut=lcut,
         other_keys_match=["species_center"],
         feature_names=kwargs.get("feature_names", None),
+        device=device,
     )
     if kwargs.get("pca_final", False):
         warnings.warn("PCA final features")
@@ -91,7 +92,7 @@ def pair_features(
     rhonu_i: TensorMap = None,
     order_nu: Union[
         List[int], int
-    ] = None,  # List currently not supported - useful when combining nu on i and nu' on j
+    ] = None,  # List - useful when combining nu on i and nu' on j
     all_pairs: bool = False,
     both_centers: bool = False,
     lcut: int = 3,
@@ -131,7 +132,6 @@ def pair_features(
 
         L = max(lcut, hypers["max_angular"])
         cg = ClebschGordanReal(lmax=L, device=device)
-        # cg = ClebschGordanReal(lmax=lcut)
 
     if hypers_pair is None:
         hypers_pair = hypers
@@ -215,12 +215,13 @@ def pair_features(
         assert isinstance(order_nu, int), "specify order_nu as int or list of 2 ints"
         order_nu_i = order_nu
 
+###------ removed only for BENZENE TEST -------------
     # # remove periodic boundary conditions if not present
     # if not (frames[0].pbc.any()):
     #     for _ in ["cell_shift_a", "cell_shift_b", "cell_shift_c"]:
     #         rho0_ij = operations.remove_dimension(rho0_ij, axis="samples", name=_)
+#################################################
 
-    # must compute rhoi as sum of rho_0ij
     if rhonu_i is None:
         rhonu_i = single_center_features(
             frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, device = device, kwargs=kwargs
@@ -330,24 +331,29 @@ def twocenter_features_periodic_NH(
 
     # TODO: why two loops?
     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
-    for (k, b) in pair.items():
-        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
+    # for (k, b) in pair.items():
+    #     if k["species_center"] == k["species_neighbor"]:  # self translared pairs
             
-            idx = np.where(
-                (b.samples["center"] == b.samples["neighbor"])
-                & (b.samples["cell_shift_a"] != 0)
-                & (b.samples["cell_shift_b"] != 0)
-                & (b.samples["cell_shift_c"] != 0)
-            )[0]
-
-            if len(idx) != 0:
-                # SHOULD BE ZERO
-                raise ValueError("btype0 should be zero for pair")
-        else: 
-            print("off-site, different species")
+        #     idx = np.where(
+        #           (b.samples["center"] == b.samples["neighbor"])
+        #         & (b.samples["cell_shift_a"] == 0)
+        #         & (b.samples["cell_shift_b"] == 0)
+        #         & (b.samples["cell_shift_c"] == 0)
+        #     )[0]
+        #     print(len(idx))
+        #     if len(idx) != 0:
+        #         # SHOULD BE ZERO
+        #         raise ValueError("btype0 should be zero for pair", b.samples.values[idx])
+        # else: 
+        #     print("off-site, different species")
 
 
     for k, b in pair.items():
+        if all_pairs:
+            diff_species= k["species_center"] != k["species_neighbor"]
+        else: 
+            diff_species = k["species_center"] < k["species_neighbor"]
+
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
             atom_i = b.samples["center"]
@@ -369,11 +375,11 @@ def twocenter_features_periodic_NH(
             if len(idx_ij) == 0:
                 continue
 
-            if len(np.where(b.samples["center"] > b.samples["neighbor"])[0]) == 0:
-                print(
-                    "Corresponding swapped pair not found",
-                    np.array(b.samples.values)[idx_ij],
-                )
+            # if len(np.where(b.samples["center"] > b.samples["neighbor"])[0]) == 0:
+            #     print(
+            #         "Corresponding swapped pair not found",
+            #         np.array(b.samples.values)[idx_ij],
+            #     )
 
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
@@ -425,7 +431,8 @@ def twocenter_features_periodic_NH(
                     values=(b.values[idx_ij] - b.values[idx_ji]),
                 )
             )
-        elif k["species_center"] != k["species_neighbor"]:
+        
+        elif diff_species:
             # off-site, different species
             keys.append(tuple(k) + (2,))
             # blocks.append(b.copy())

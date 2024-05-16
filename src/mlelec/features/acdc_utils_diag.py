@@ -250,11 +250,11 @@ def cg_combine(
     other_keys_match=None,
     mp=False,
     device=None,
+    diag_tensor=False, 
 ):
     """
     modified cg_combine from acdc_mini.py to add the MP contraction, that contracts over NOT the center but the neighbor yielding |rho_j> |g_ij>, can be merged
     """
-
     # determines the cutoff in the new features
     lmax_a = max(x_a.keys["spherical_harmonics_l"])
     lmax_b = max(x_b.keys["spherical_harmonics_l"])
@@ -266,11 +266,6 @@ def cg_combine(
 
     other_keys_a = tuple(name for name in x_a.keys.names if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"])
     other_keys_b = tuple(name for name in x_b.keys.names if name not in ["spherical_harmonics_l", "order_nu", "inversion_sigma"])
-
-    # atom-atom
-    # atom-gij
-    # gij_gij
-    # mp
 
     if mp:
         if other_keys_match is None:
@@ -291,7 +286,14 @@ def cg_combine(
     # "x1 x2 x3 ; x1 x2 -> x1_a x2_a x3_a k_nu x1_b x2_b l_nu"
     if feature_names is None:
         NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
-        feature_names = (tuple(n + "_a" for n in x_a.property_names) + ("k_" + str(NU),) + tuple(n + "_b" for n in x_b.property_names) + ("l_" + str(NU),))
+        feature_names = ['species_neighbor_1', 'n_1']
+        for i in range(2, NU+1):
+            if diag_tensor:
+                feature_names.extend([f'k_{i}', f'l_{i}'])
+            else:
+            ## full tensor product of properties
+                feature_names.extend([f'k_{i}', f'species_neighbor_{i}', f'n_{i}', f'l_{i}'])
+
 
     X_idx = {}
     X_blocks = {}
@@ -349,8 +351,13 @@ def cg_combine(
             # determines the properties that are in the select list
             sel_feats = []
             sel_idx = []
-            sel_feats = np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
-
+            if diag_tensor:
+                idx_nu1 = np.where((properties_b.values[:,:2] == properties_a.values[:,:2][:,None]).all(-1))[1]
+                sel_feats = np.array(list(zip(range(len(properties_a.values)), idx_nu1)))
+                print(sel_feats.shape, 'sel_feats')
+            else:
+                sel_feats = np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
+            
             prop_ids_a = []
             prop_ids_b = []
 
@@ -361,8 +368,9 @@ def cg_combine(
             
             prop_ids_a = np.asarray(prop_ids_a)
             prop_ids_b = np.asarray(prop_ids_b)
-            sel_idx = np.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
             
+            sel_idx = np.hstack([prop_ids_a[sel_feats[:, 0]][:,:], prop_ids_b[sel_feats[:, 1]][:,-1:]])  # creating a tensor product
+            # print(sel_idx ,"JJJJJJ"  )
             if len(sel_feats) == 0:
                 continue
             
@@ -386,8 +394,7 @@ def cg_combine(
                     if isinstance(center_slice, slice) or len(center_slice):
                         one_shot_blocks = clebsch_gordan.combine(block_a.values[center_slice][:, :, sel_feats[:, 0]],
                                                                  block_b.values[:, :, sel_feats[:, 1]],
-                                                                 L,
-                                                                #  combination_string = "iq,iq->iq"
+                                                                 L
                                                                  )
 
                     else:
@@ -397,8 +404,7 @@ def cg_combine(
                     if isinstance(neighbor_slice, slice) or len(neighbor_slice):
                         one_shot_blocks = clebsch_gordan.combine(block_a.values[neighbor_slice][:, :, sel_feats[:, 0]],
                                                                  block_b.values[b_slice][:, :, sel_feats[:, 1]],
-                                                                 L,
-                                                                #  combination_string = "iq,iq->iq"
+                                                                 L
                                                                  )
 
                     else:
@@ -439,28 +445,38 @@ def cg_increment(
     other_keys_match=None,
     mp=False,
     feature_names=None,
+    device=None,
+    diag_tensor= True,
 ):
     """Specialized version of the CG product to perform iterations with nu=1 features"""
 
     nu = x_nu.keys["order_nu"][0]
 
-    feature_roots = _remove_suffix(x_1.block(0).properties.names)
-    # if nu == 1:
-    #     feature_names = (
-    #         tuple(root + "_1" for root in feature_roots)
-    #         + ("l_1",)
-    #         + tuple(root + "_2" for root in feature_roots)
-    #         + ("l_2",)
-    #     )
-    # else:
-    feature_names = feature_names
+    feature_roots = _remove_suffix(x_1.property_names)
+    len(feature_roots)
     if feature_names is None:
-        feature_names = (
-            tuple(x_nu.block(0).properties.names)
-            + ("k_" + str(nu + 1),)
-            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-            + ("l_" + str(nu + 1),)
-        )
+        if not diag_tensor:
+        # feature_names = tuple(f"k_{i}" for i in range(2, nu+1)) + (f"l_{nu}")
+            feature_names = (tuple(x_nu.property_names)+
+                            ("k_" + str(nu + 1),)
+                            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+                            + ("l_" + str(nu + 1),)
+                            )
+        else:
+            if nu==1: 
+                feature_names = (tuple(x_nu.property_names)+
+                            ("k_" + str(nu + 1),)+ ("l_" + str(nu + 1),)
+                            )
+            else:
+                print(nu, _remove_suffix(x_nu.property_names)[:2] , _remove_suffix(x_1.property_names))
+                assert _remove_suffix(x_nu.property_names)[:2] == _remove_suffix(x_1.property_names)
+
+                # diag tensor prod such that species_neighbor_{nu+1}, n_{nu +1} = species_neighbor_1, n_1
+                feature_names = (tuple(x_nu.property_names)+
+                            ("k_" + str(nu + 1),)+  ("l_" + str(nu + 1),)
+                            )
+            print(feature_names, 'cg_inc')
+
     return cg_combine(
         x_nu,
         x_1,
@@ -470,6 +486,8 @@ def cg_increment(
         filter_sigma=filter_sigma,
         other_keys_match=other_keys_match,
         mp=mp,
+        diag_tensor = diag_tensor, 
+        device=device,
     )
 
 def relabel_keys(tensormap, key_name: str = None):
