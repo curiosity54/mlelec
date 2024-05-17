@@ -112,7 +112,7 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
         # uncoupled block
         x = [
             ",".join([str(lbl[i]) for i in [0, 2, 3, 5, 6]])
-            for lbl in target_blocks.keys()
+            for lbl in target_blocks.keys.values.tolist()
         ]
     fs = plt.rcParams["figure.figsize"]
 

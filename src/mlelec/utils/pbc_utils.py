@@ -38,14 +38,13 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
         cutoff = phys_cutoff
     offsets = np.cumsum([len(dataset.basis[species]) for species in frame.numbers])
     offsets -= offsets[0]
-    
     H_T = {}
     for T, H in zip(T_list, HT):
         assert torch.norm(H - H.real) < 1e-10, torch.norm(H - H.real).item()
         H = H.real
         
         CT = cell @ T
-        dist_ij = np.linalg.norm(rji_mat + CT[np.newaxis, np.newaxis, :], axis = 2).T
+        dist_ij = np.linalg.norm(rji_mat + CT[np.newaxis, np.newaxis, :], axis = 2)
         dist = dist_ij <= cutoff
         for i in range(natm):
             i_off = offsets[i]
@@ -161,7 +160,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                             continue
                        
                     # Skip the pair if their distance exceeds the cutoff
-                    ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(T) + frame.positions[j] - frame.positions[i])
+                    ij_distance = np.linalg.norm(frame.cell.array.T @ np.array(T) + frame.get_distance(i,j,mic=False,vector=True))
                     if ij_distance > cutoff:
                         j_start += orbs_tot[aj]
                         continue
@@ -521,7 +520,7 @@ def inverse_fft(H_T, kmesh):
     else:
         raise ValueError("H_T must be np.ndarray or torch.Tensor")
 
-def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', sort_orbs=True):
+def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', sort_orbs=True, matrix=None):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -562,12 +561,15 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
 
     from itertools import product
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
-    if target.lower() == "fock":
-        matrices = dataset.fock_kspace
-    elif target.lower() == "overlap":
-        matrices = dataset.overlap_kspace
+    if matrix is not None: 
+        matrices = matrix 
     else:
-        raise ValueError("target must be either 'fock' or 'overlap'")
+        if target.lower() == "fock":
+            matrices = dataset.fock_kspace
+        elif target.lower() == "overlap":
+            matrices = dataset.overlap_kspace
+        else:
+            raise ValueError("target must be either 'fock' or 'overlap'")
 
     for A in range(len(dataset.structures)):  # Loop over frames
 
@@ -841,29 +843,40 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     phase = {}
     indices = {}
     where_inv = {}
+    kpts_idx = []
     for k, b in target_blocks.items():
         kl = tuple(k.values.tolist())
+        bt_is_minus_1 = kl[0] == -1
+
         phase[kl] = {}
         indices[kl] = {}        
+        
         ifrij, inv = np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
         where_inv[kl] = inv
+
+        if bt_is_minus_1:
+            kpts_idx.append([np.where(np.linalg.norm(dataset.kpts_rel[ifr], axis = 1) > 1e-30)[0] for ifr in np.unique(b.samples.values[:,0])])
+        
         for I, (ifr, i, j) in enumerate(ifrij):
             dist = dataset.structures[ifr].get_distance(i, j, mic = False)
             if dist > cutoff:
                 continue
             idx = np.where(where_inv[kl] == I)[0]
             indices[kl][ifr,i,j] = idx
+
             kpts = torch.from_numpy(dataset.kpts_rel[ifr])
+            if bt_is_minus_1 and i == j:
+                kpts = kpts[kpts_idx[-1][ifr]]
+
             Ts = torch.from_numpy(b.samples.values[idx, 3:6]).to(kpts)
             phase[kl][ifr,i,j] = torch.exp(2j*np.pi*torch.einsum('ka,Ta->kT', kpts, Ts))
-    return phase, indices
+    return phase, indices, kpts_idx
 
 
 dummy_prop = Labels(['dummy'], np.array([[0]]))
-def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
+def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = False):
 
     _Hk = {}
-    _Hk0 = {}
     for k, b in target_blocks.items():
         # LabelValues to tuple
         kl = tuple(k.values.tolist())
@@ -908,13 +921,15 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
         # Now store in a tensormap
         _k_target_blocks = []
         keys = []
+        count = 0
         for kl in _Hk:
 
-            same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+            # same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+            bt_is_minus_1 = kl[0] == -1
 
             values = []
             samples = []
-            
+           
             for ifr, i, j in sorted(_Hk[kl]):
                 
                 # skip when same orbitals, atoms, and block type == -1
@@ -924,7 +939,14 @@ def TMap_bloch_sums(target_blocks, phase, indices, return_tensormap = False):
                     #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
                     # Fill values and samples
                     values.append(_Hk[kl][ifr, i, j])
-                    samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+
+                    if i == j and bt_is_minus_1:
+                        samples.extend([[ifr, i, j] + [ik] for ik in kpts_idx[count][ifr]])
+                    else:
+                        samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+            
+            if bt_is_minus_1:
+                count += 1
                 
             values = torch.concatenate(values)
             _, n_mi, n_mj, _ = values.shape
