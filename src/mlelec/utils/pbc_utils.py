@@ -38,6 +38,7 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
         cutoff = phys_cutoff
     offsets = np.cumsum([len(dataset.basis[species]) for species in frame.numbers])
     offsets -= offsets[0]
+
     H_T = {}
     for T, H in zip(T_list, HT):
         assert torch.norm(H - H.real) < 1e-10, torch.norm(H - H.real).item()
@@ -319,10 +320,10 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
 
     reconstructed_matrices = []
     
-    bt1factor = ISQRT_2 
+    bt1factor = ISQRT_2
     bt2factor =2 # because all_pairs=False in matrix_to_blocks still returns all species pairs (not ordered)
     if all_pairs:
-        bt1factor/=2
+        bt1factor /= 2
         bt2factor = 2
 
     for A in range(len(dataset.structures)):
@@ -335,6 +336,8 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
         T = key["cell_shift_a"], key["cell_shift_b"], key["cell_shift_c"]
+
+        T_is_not_zero = np.linalg.norm(T) > 1e-20
         
         #----sorting ni,li,nj,lj---
         if sort_orbs:
@@ -370,6 +373,10 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             A = sample["structure"]
             i = sample["center"]
             j = sample["neighbor"]
+
+            other_fac = 1
+            if i == j and T_is_not_zero and not all_pairs:
+                other_fac = 0.5
             
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
@@ -399,7 +406,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                              ] = values.T
             
             elif abs(block_type) == 1:
-                values *= bt1factor/fac
+                values *= bt1factor/fac*other_fac
                 
                 iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
                                   slice(j_start + psioffset , j_start + psioffset + psi_end)

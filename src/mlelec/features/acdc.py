@@ -14,7 +14,7 @@ import metatensor.operations as operations
 import torch
 import numpy as np
 import warnings
-from mlelec.features.acdc_utils_diag import (
+from mlelec.features.acdc_utils import (
     acdc_standardize_keys,
     cg_increment,
     cg_combine,
