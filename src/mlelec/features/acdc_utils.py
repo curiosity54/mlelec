@@ -439,6 +439,7 @@ def cg_increment(
     other_keys_match=None,
     mp=False,
     feature_names=None,
+    device=None,
 ):
     """Specialized version of the CG product to perform iterations with nu=1 features"""
 
@@ -470,6 +471,7 @@ def cg_increment(
         filter_sigma=filter_sigma,
         other_keys_match=other_keys_match,
         mp=mp,
+        device=device
     )
 
 def relabel_keys(tensormap, key_name: str = None):
