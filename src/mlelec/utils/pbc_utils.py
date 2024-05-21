@@ -286,6 +286,7 @@ def move_cell_shifts_to_keys(blocks):
 
 
 def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True):
+    ## WARNING: currently 'detaching' values before filling in matrices, so DONT train on reconstructed matrices
     if device is None:
         device = dataset.device
         
