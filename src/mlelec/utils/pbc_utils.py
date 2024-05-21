@@ -392,19 +392,42 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
             # where does orbital (nj, lj) end (or how large is it)
             psi_end = shapes[(ni, li, nj, lj)][1]  
-            values = blockval[:, :, 0].clone()
+            values = blockval[:, :, 0].detach().clone()
             # position of the orbital within this block
-            if block_type == 0 or block_type == 2:
+            if block_type == 0:
                 # <i \phi| H(T)|j \psi> = # <i \phi| H(-T)|j \psi>^T 
+                if not sort_orbs:
+                    ff = 0.5
+                else: 
+                    # ff = 0.5
+                    if not(ni==nj and li==lj):
+                        ff = 1
+                    else:
+                        ff = 0.5
                 matrix_T[
                     i_start + phioffset : i_start + phioffset + phi_end,
                     j_start + psioffset : j_start + psioffset + psi_end,
-                             ] = values
+                             ] += values*ff
                 matrix_mT[
                     j_start + psioffset : j_start + psioffset + psi_end,
                     i_start + phioffset : i_start + phioffset + phi_end,
-                             ] = values.T
-            
+                             ] += values.T*other_fac*ff
+            elif block_type==2:
+                ff=0.5
+                if not all_pairs:
+                    ff=1
+                # if all_pairs: # and not sort_orbs:
+                #     ff=0.5
+                # else: 
+                #     ff = 100
+                matrix_T[
+                    i_start + phioffset : i_start + phioffset + phi_end,
+                    j_start + psioffset : j_start + psioffset + psi_end,
+                             ] += values*ff
+                matrix_mT[
+                    j_start + psioffset : j_start + psioffset + psi_end,
+                    i_start + phioffset : i_start + phioffset + phi_end,
+                             ] += values.T*other_fac*ff
             elif abs(block_type) == 1:
                 values *= bt1factor/fac*other_fac
                 
