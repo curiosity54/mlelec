@@ -1154,27 +1154,54 @@ def split_by_Aij(tensor, features = None):
 
     if features is None:
         values = {}
+        keys = {}
         for k, b in tensor.items():
             kl = tuple(k.values.tolist())
-            values[kl] = split_block_by_Aij(b)
+            value = split_block_by_Aij(b)
 
-        return values
+            for Aij in value:
+                if Aij not in values:
+                    values[Aij] = []
+                    keys[Aij] = []
+                keys[Aij].append(kl)
+                values[Aij].append(value[Aij])
+
+        outdict = {}
+        for Aij in values:
+            outdict[Aij] = {k: v for k, v in zip(keys[Aij], values[Aij])}
+        
+        return outdict
 
     else:
         
         target_values = {}
         feature_values = {}
-        
+        keys = {}
+
         for k, target in tensor.items():
-            
+
+            kl = tuple(k.values.tolist())            
             feature = map_targetkeys_to_featkeys(features, k)
             
-            kl = tuple(k.values.tolist())
-            
-            target_values[kl] = split_block_by_Aij(target)
-            feature_values[kl] = split_block_by_Aij(feature)
-    
-        return feature_values, target_values
+            tvalue = split_block_by_Aij(target)
+            fvalue = split_block_by_Aij(feature)
+
+            for Aij in tvalue:
+                if Aij not in target_values:
+                    target_values[Aij] = []
+                    feature_values[Aij] = []
+                    keys[Aij] = []
+                keys[Aij].append(kl)
+                target_values[Aij].append(tvalue[Aij])
+                feature_values[Aij].append(fvalue[Aij])
+
+        target_outdict = {}
+        features_outdict = {}
+        for Aij in target_values:
+            target_outdict[Aij] = {k: v for k, v in zip(keys[Aij], target_values[Aij])}
+            features_outdict[Aij] = {k: v for k, v in zip(keys[Aij], feature_values[Aij])}
+        
+        return features_outdict, target_outdict 
 
 def split_by_Aij_mts(tensor, features = None):
     
