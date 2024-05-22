@@ -16,16 +16,16 @@ import warnings
 import torch.utils.data as data
 import copy
 from collections import defaultdict
-
+from pathlib import Path
+mlelec_dir = Path(__file__).parents[3]
 
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
 class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
-    water_1000 = "examples/data/water_1000"
-    water_rotated = "examples/data/water_rotated"
-    ethane = "examples/data/ethane"
-    pbc_c2_rotated = "examples/data/pbc/c2_rotated"
-
+    water_1000 = f"{mlelec_dir}/examples/data/water_1000"
+    water_rotated = f"{mlelec_dir}/examples/data/water_rotated"
+    ethane = f"{mlelec_dir}/examples/data/ethane"
+    pbc_c2_rotated = f"{mlelec_dir}/examples/data/pbc/c2_rotated"
 
 # No model/feature info here
 class MoleculeDataset(Dataset):
