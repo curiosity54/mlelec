@@ -870,6 +870,19 @@ def tmap_to_dict(tmap):
 
 #------------------------------------------------------
 
+def unique_Aij_block(block):
+    Aij, inv = np.unique(block.samples.values[:, :3].tolist(), axis = 0, return_inverse = True)
+    return Aij, inv
+
+def unique_Aij(tensor):
+    Aijs = []
+    invs = []
+    for b in tensor.blocks():
+        Aij, inv = unique_Aij_block(b)
+        Aijs.append(Aij)
+        invs.append(inv)
+    return Aijs, invs
+
 def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     phase = {}
     indices = {}
@@ -880,13 +893,13 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
         bt_is_minus_1 = kl[0] == -1
 
         phase[kl] = {}
-        indices[kl] = {}        
+        indices[kl] = {}
         
-        ifrij, inv = np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
-        where_inv[kl] = inv
+        ifrij, where_inv[kl] = unique_Aij_block(b) #np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
 
         if bt_is_minus_1:
-            kpts_idx.append([np.where(np.linalg.norm(dataset.kpts_rel[ifr], axis = 1) > 1e-30)[0] for ifr in np.unique(b.samples.values[:,0])])
+            where_k_is_not_Gamma = [np.where(np.linalg.norm(dataset.kpts_rel[ifr], axis = 1) > 1e-30)[0] for ifr in np.unique(b.samples.values[:,0])]
+            kpts_idx.append(where_k_is_not_Gamma)
         
         for I, (ifr, i, j) in enumerate(ifrij):
             dist = dataset.structures[ifr].get_distance(i, j, mic = False)

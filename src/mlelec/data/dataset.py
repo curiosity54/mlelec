@@ -7,7 +7,7 @@ from enum import Enum
 from ase.io import read
 import hickle
 from mlelec.targets import ModelTargets
-from metatensor import TensorMap, Labels
+from metatensor import TensorMap, Labels, TensorBlock
 import metatensor.operations as operations
 import numpy as np
 import os
@@ -17,6 +17,8 @@ import torch.utils.data as data
 import copy
 from collections import defaultdict
 from pathlib import Path
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
+from mlelec.utils.pbc_utils import unique_Aij_block
 mlelec_dir = Path(__file__).parents[3]
 
 # Dataset class  - to load and pass around structures, targets and
@@ -1116,3 +1118,143 @@ def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-1
         assert (
             torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol
         ), (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
+
+############################################################################################################################################################
+# Dataset/Dataloader specific functions
+
+def split_block_by_Aij(block):
+    
+    Aij, where_inv = unique_Aij_block(block)
+
+    values = {}
+    b_values = block.values
+    for I, (A, i, j) in enumerate(Aij):
+        idx = np.where(where_inv == I)[0]
+        values[A, i, j] = b_values[idx]
+
+    return values
+
+def split_block_by_Aij_mts(block):
+
+    Aij, where_inv = unique_Aij_block(block)
+
+    new_blocks = {}
+    b_values = block.values
+    b_samples = block.samples
+    b_components = block.components
+    b_properties = block.properties
+    for I, (A, i, j) in enumerate(Aij):
+        idx = np.where(where_inv == I)[0]
+        new_blocks[A, i, j] = TensorBlock(samples = Labels(b_samples.names, np.array(b_samples.values[idx].tolist())),
+                                          components = b_components,
+                                          properties = b_properties,
+                                          values = b_values[idx])
+
+    return new_blocks
+
+def split_by_Aij(tensor, features = None):
+
+    if features is None:
+        values = {}
+        keys = {}
+        for k, b in tensor.items():
+            kl = tuple(k.values.tolist())
+            value = split_block_by_Aij(b)
+
+            for Aij in value:
+                if Aij not in values:
+                    values[Aij] = []
+                    keys[Aij] = []
+                keys[Aij].append(kl)
+                values[Aij].append(value[Aij])
+
+        outdict = {}
+        for Aij in values:
+            outdict[Aij] = {k: v for k, v in zip(keys[Aij], values[Aij])}
+        
+        return outdict
+
+    else:
+        
+        target_values = {}
+        feature_values = {}
+        keys = {}
+
+        for k, target in tensor.items():
+
+            kl = tuple(k.values.tolist())            
+            feature = map_targetkeys_to_featkeys(features, k)
+            
+            tvalue = split_block_by_Aij(target)
+            fvalue = split_block_by_Aij(feature)
+
+            for Aij in tvalue:
+                if Aij not in target_values:
+                    target_values[Aij] = []
+                    feature_values[Aij] = []
+                    keys[Aij] = []
+                keys[Aij].append(kl)
+                target_values[Aij].append(tvalue[Aij])
+                feature_values[Aij].append(fvalue[Aij])
+
+        target_outdict = {}
+        features_outdict = {}
+        for Aij in target_values:
+            target_outdict[Aij] = {k: v for k, v in zip(keys[Aij], target_values[Aij])}
+            features_outdict[Aij] = {k: v for k, v in zip(keys[Aij], feature_values[Aij])}
+        
+        return features_outdict, target_outdict 
+
+def split_by_Aij_mts(tensor, features = None):
+    
+    if features is None:
+
+        blocks = {}
+        keys = {}
+        for k, b in tensor.items():
+            block = split_block_by_Aij_mts(b)
+
+            for Aij in block:
+                if Aij not in blocks:
+                    blocks[Aij] = []
+                    keys[Aij] = []
+                keys[Aij].append(k.values.tolist())
+                blocks[Aij].append(block[Aij])
+
+
+        tmaps = {}
+        for Aij in blocks:
+            tmap_keys = Labels(tensor.keys.names, np.array(keys[Aij]))
+            tmap_blocks = blocks[Aij]
+            tmaps[Aij] = TensorMap(tmap_keys, tmap_blocks)
+        
+        return tmaps
+
+    else:
+        feature_blocks = {}
+        target_blocks = {}
+        keys = {}
+        for k, b in tensor.items():
+            feature = map_targetkeys_to_featkeys(features, k)
+            
+            target_block = split_block_by_Aij_mts(b)
+            feature_block = split_block_by_Aij_mts(feature)
+
+            for Aij in target_block:
+                if Aij not in target_blocks:
+                    feature_blocks[Aij] = []
+                    target_blocks[Aij] = []
+                    keys[Aij] = []
+                kval = k.values.tolist()
+                keys[Aij].append(kval)
+                feature_blocks[Aij].append(feature_block[Aij])
+                target_blocks[Aij].append(target_block[Aij])
+
+        tmaps_feature = {}
+        tmaps_target = {}
+        for Aij in feature_blocks:
+            tmap_keys = Labels(tensor.keys.names, np.array(keys[Aij]))
+            tmaps_feature[Aij] = TensorMap(tmap_keys, feature_blocks[Aij])
+            tmaps_target[Aij] = TensorMap(tmap_keys, target_blocks[Aij])
+        
+        return tmaps_feature, tmaps_target
