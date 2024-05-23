@@ -191,7 +191,9 @@ class MoleculeDataset(Dataset):
             except:
                 warnings.warn("Aux data {} skipped shuffling ".format(t))
                 continue
-
+    
+    def __len__(self):
+        return len(self.structures)
 
 class MLDataset(Dataset):
     # TODO: add compatibility with PeriodicDataset
