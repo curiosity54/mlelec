@@ -598,10 +598,8 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
         frame = dataset.structures[A]
         for ik, matrixT in enumerate(matrices[A]):  # Loop over the dataset.fock_kspace
 
-
             # When the calculation is at Gamma you want to skip i==j samples
-            # is_gamma_point = dataset.kmesh[A] == [1,1,1] and ik == 0
-            is_gamma_point = np.linalg.norm(dataset.kpts_rel[A][ik]) < 1e-30
+            # is_gamma_point = np.linalg.norm(dataset.kpts_rel[A][ik]) < 1e-30
 
             matrixmT = matrixT.conj()
             if isinstance(matrixT, np.ndarray):
@@ -920,8 +918,10 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
     for k, b in target_blocks.items():
         # LabelValues to tuple
         kl = tuple(k.values.tolist())
+
         # Block type
         bt = kl[0]
+        
         # define dummy key pointing to block type 1 when block type is zero
         factor = 1
         if bt == 0:
@@ -932,11 +932,20 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
 
         if _kl not in _Hk:
             _Hk[_kl] = {}
+        
         # Loop through the unique (ifr, i, j) triplets
         b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
-        for I, (ifr, i, j) in enumerate(phase[kl]):
 
-            idx = indices[kl][ifr,i,j]
+        # If batching, we can't loop over phase keys anymore
+        ifrij, where_inv = unique_Aij_block(b)
+
+        for I, (ifr, i, j) in enumerate(ifrij): #enumerate(phase[kl]):
+            if (ifr, i, j) not in phase[_kl]:
+                continue
+
+            idx = np.where(where_inv == I)[0]
+            # indices[kl][ifr,i,j] = idx
+            # idx = indices[kl][ifr,i,j]
             values = b_values[idx]
             vshape = values.shape
             pshape = phase[kl][ifr, i, j].shape
@@ -993,26 +1002,27 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
             # if bt_is_minus_1:
             #     count += 1
 
-            samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))                
-            values = torch.concatenate(values)
-            
-            if is_coupled:
-                n_M = values.shape[1]
-                components = [Labels(['M'], np.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
-            else:
-                n_mi, n_mj = values.shape[1:3]
-                components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
-            
-            _k_target_blocks.append(
-                TensorBlock(
-                    samples = samples,
-                    components = components,
-                    properties = dummy_prop,
-                    values = values
+            if values != []:
+                samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))                
+                values = torch.concatenate(values)
+                
+                if is_coupled:
+                    n_M = values.shape[1]
+                    components = [Labels(['M'], np.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
+                else:
+                    n_mi, n_mj = values.shape[1:3]
+                    components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
+                
+                _k_target_blocks.append(
+                    TensorBlock(
+                        samples = samples,
+                        components = components,
+                        properties = dummy_prop,
+                        values = values
+                    )
                 )
-            )
             
-            keys.append(list(kl))
+                keys.append(list(kl))
 
         _k_target_blocks = TensorMap(Labels(target_blocks.keys.names, np.array(keys)), _k_target_blocks)
             # ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j']        
