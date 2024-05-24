@@ -234,21 +234,12 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                             bplus = (value + value_ji) * ISQRT_2
                             # block_(-1)ijT = <i \phi| H(T)|j \psi> - <j \phi| H(-T)|i \psi>
                             bminus = (value - value_ji) * ISQRT_2
-                            block.add_samples(
-                                labels = [(A, i, j, *T)],
-                                data = bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
-                            )
 
-                            block_asym.add_samples(
-                                labels = [(A, i, j, *T)],
-                                data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
-                            )
+                            block.add_samples(     labels = [(A, i, j, *T)], data =  bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
+                            block_asym.add_samples(labels = [(A, i, j, *T)], data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
 
                         elif block_type == 0 or block_type == 2:
-                            block.add_samples(
-                                labels = [(A, i, j, *T)],
-                                data = value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
-                            )
+                            block.add_samples(labels = [(A, i, j, *T)], data = value.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
                         
                         else:
                             raise ValueError("Block type not implemented")
@@ -349,7 +340,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             # no sorting -->  we count everything twice
             fac=2
         #----sorting ni,li,nj,lj---
-        #TODO: make consistent in kmatrix_to_blocs, kblocks_to_matrix
+        #TODO: make consistent in kmatrix_to_blocks, kblocks_to_matrix
         mT = tuple(-t for t in T)
         # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
         # of a p block = 3
@@ -628,6 +619,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
                 for j, aj in enumerate(frame.numbers):
 
                     same_species = ai == aj
+                    same_atom_in_unit_cell = i == j
 
                     # Skip the pair if their distance exceeds the cutoff
                     ij_distance = frame.get_distance(i, j, mic = False)
@@ -699,7 +691,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
 
                             # Skip the Gamma point, bt=-1, i==j sample because 
                             # it's zero [H(Gamma)_{i,i,phi,psi,-1}=0]
-                            if (not (is_gamma_point and i == j)):
+                            if not same_atom_in_unit_cell: #(not (is_gamma_point and i == j)):
                                 block_asym = block_builder.blocks[(-1,) + key[1:]]
                                 block_asym.add_samples(
                                     labels=[(A, i, j, ik)],
@@ -897,9 +889,9 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
         
         ifrij, where_inv[kl] = unique_Aij_block(b) #np.unique(b.samples.values[:,:3].tolist(), axis = 0, return_inverse = True)
 
-        if bt_is_minus_1:
-            where_k_is_not_Gamma = [np.where(np.linalg.norm(dataset.kpts_rel[ifr], axis = 1) > 1e-30)[0] for ifr in np.unique(b.samples.values[:,0])]
-            kpts_idx.append(where_k_is_not_Gamma)
+        # if bt_is_minus_1:
+            # where_k_is_not_Gamma = [np.where(np.linalg.norm(dataset.kpts_rel[ifr], axis = 1) > 1e-30)[0] for ifr in np.unique(b.samples.values[:,0])]
+            # kpts_idx.append(where_k_is_not_Gamma)
         
         for I, (ifr, i, j) in enumerate(ifrij):
             dist = dataset.structures[ifr].get_distance(i, j, mic = False)
@@ -909,8 +901,8 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
             indices[kl][ifr,i,j] = idx
 
             kpts = torch.from_numpy(dataset.kpts_rel[ifr])
-            if bt_is_minus_1 and i == j:
-                kpts = kpts[kpts_idx[-1][ifr]]
+            # if bt_is_minus_1 and i == j:
+                # kpts = kpts[kpts_idx[-1][ifr]]
 
             Ts = torch.from_numpy(b.samples.values[idx, 3:6]).to(kpts)
             phase[kl][ifr,i,j] = torch.exp(2j*np.pi*torch.einsum('ka,Ta->kT', kpts, Ts))
@@ -920,6 +912,10 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
 dummy_prop = Labels(['dummy'], np.array([[0]]))
 def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = False):
 
+    is_coupled = False
+    if 'L' in target_blocks.keys.names:
+        is_coupled = True
+
     _Hk = {}
     for k, b in target_blocks.items():
         # LabelValues to tuple
@@ -927,8 +923,10 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
         # Block type
         bt = kl[0]
         # define dummy key pointing to block type 1 when block type is zero
+        factor = 1
         if bt == 0:
             _kl = (1, *kl[1:])
+            factor = np.sqrt(2)
         else:
             _kl = kl
 
@@ -937,29 +935,31 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
         # Loop through the unique (ifr, i, j) triplets
         b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
         for I, (ifr, i, j) in enumerate(phase[kl]):
-            
+
             idx = indices[kl][ifr,i,j]
             values = b_values[idx]
             vshape = values.shape
             pshape = phase[kl][ifr, i, j].shape
 
             # equivalent to torch.einsum('Tmnv,kT->kmnv', values.to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j]), but faster
-            contraction = (phase[kl][ifr, i, j]@values.reshape(vshape[0], -1)).reshape(pshape[0], *vshape[1:])
+            contraction = (phase[kl][ifr, i, j]@values.reshape(vshape[0], -1)).reshape(pshape[0], *vshape[1:])*factor
 
-            if bt != 0:
-                # block type not zero: create dictionary element
+            # if bt == 1 or bt == 2 or (bt == -1 and i != j):
+
+            if bt != -1 or (bt == -1 and i != j):
                 if (ifr, i, j) in _Hk[_kl]:
                     _Hk[_kl][ifr, i, j] += contraction
                 else:
                     _Hk[_kl][ifr, i, j] = contraction
-            else:
-                # block type zero
-                if (ifr, i, j) in _Hk[_kl]:
-                    # if the corresponding bt = +1 element exists, sum to it the bt=0 contribution
-                    _Hk[_kl][ifr, i, j] += contraction*np.sqrt(2)
-                else:
-                    # The corresponding bt = +1 element does not exist. Create the dictionary element
-                    _Hk[_kl][ifr, i, j] = contraction*np.sqrt(2)
+
+            # elif bt == 0:
+            #     # block type zero
+            #     if (ifr, i, j) in _Hk[_kl]:
+            #         # if the corresponding bt = +1 element exists, sum to it the bt=0 contribution
+            #         _Hk[_kl][ifr, i, j] += contraction*np.sqrt(2)
+            #     else:
+            #         # The corresponding bt = +1 element does not exist. Create the dictionary element
+            #         _Hk[_kl][ifr, i, j] = contraction*np.sqrt(2)
                     
     if return_tensormap:
         # Now store in a tensormap
@@ -984,18 +984,24 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
                     # Fill values and samples
                     values.append(_Hk[kl][ifr, i, j])
 
-                    if i == j and bt_is_minus_1:
-                        samples.extend([[ifr, i, j] + [ik] for ik in kpts_idx[count][ifr]])
-                    else:
-                        samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+                    # if i == j and bt_is_minus_1:
+                    #     samples.extend([[ifr, i, j] + [ik] for ik in kpts_idx[count][ifr]])
+                    # else:
+                    #     samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+                    samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
             
-            if bt_is_minus_1:
-                count += 1
-                
+            # if bt_is_minus_1:
+            #     count += 1
+
+            samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))                
             values = torch.concatenate(values)
-            _, n_mi, n_mj, _ = values.shape
-            samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
-            components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
+            
+            if is_coupled:
+                n_M = values.shape[1]
+                components = [Labels(['M'], np.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
+            else:
+                n_mi, n_mj = values.shape[1:3]
+                components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
             
             _k_target_blocks.append(
                 TensorBlock(
@@ -1008,8 +1014,8 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
             
             keys.append(list(kl))
 
-        _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
-
+        _k_target_blocks = TensorMap(Labels(target_blocks.keys.names, np.array(keys)), _k_target_blocks)
+            # ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j']        
         _Hk = None
         del _Hk
 
