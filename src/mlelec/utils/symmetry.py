@@ -468,7 +468,7 @@ class ClebschGordanReal:
                     max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1
                 ):
                     # Lterm = torch.einsum('spmn,mnM->spM', dec_term, self._cg[(l1, l2, L)])
-                    coupled[(l1, l2) + ltuple][L] = torch.tensordot(dec_term, self._cg[(l1, l2, L)], dims=2)
+                    coupled[(l1, l2) + ltuple][L] = torch.tensordot(dec_term, self._cg[(l1, l2, L)].to(dec_term), dims=2)
 
         # repeat if required
         if iterate > 0:

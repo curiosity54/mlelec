@@ -951,8 +951,10 @@ def _to_coupled_basis(
     cg: Optional[ClebschGordanReal] = None,
     device: str = "cpu",
     skip_symmetry: bool = False,
-    translations: bool = False,
+    translations: bool = None,
 ):
+    if kspace and translations:
+        raise ValueError("Only one between `kspace` and `translations` can be `True`")
     if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
         assert orbitals is not None, "Need orbitals to convert matrix to blocks"
@@ -960,7 +962,7 @@ def _to_coupled_basis(
     if cg is None:
         lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
         cg = ClebschGordanReal(lmax, device=device)
-    if not translations:
+    if translations is None:
         block_builder = TensorBuilder(
             ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
             ["structure", "center", "neighbor"],
@@ -968,21 +970,22 @@ def _to_coupled_basis(
             ["value"],
         )
     else:
-        block_builder = TensorBuilder(
-            [
-                "block_type",
-                "species_i",
-                "n_i",
-                "l_i",
-                "species_j",
-                "n_j",
-                "l_j",
-                "L",
-            ],
-            ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
-            [["M"]],
-            ["value"],
-        )
+        if translations:
+            block_builder = TensorBuilder(
+                ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+                ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                [["M"]],
+                ["value"],
+            )
+        else:
+            block_builder = TensorBuilder(
+                ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+                ["structure", "center", "neighbor", "ik"],
+                [["M"]],
+                ["value"],
+            )
+        
+        
     for idx, block in blocks.items():
         block_type = idx["block_type"]
         ai = idx["species_i"]
@@ -1009,10 +1012,7 @@ def _to_coupled_basis(
             # skip blocks that are zero because of symmetry
             if ai == aj and ni == nj and li == lj:
                 parity = (-1) ** (li + lj + L)
-                if (
-                    (parity == -1 and block_type in (0, 1))
-                    or (parity == 1 and block_type == -1)
-                ) and not skip_symmetry:
+                if ((parity == -1 and block_type in (0, 1)) or (parity == 1 and block_type == -1)) and not skip_symmetry:
                     continue
 
             new_block = block_builder.add_block(
