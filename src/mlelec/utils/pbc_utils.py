@@ -908,7 +908,7 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
 
 
 dummy_prop = Labels(['dummy'], np.array([[0]]))
-def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = False):
+def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_tensormap = False):
 
     is_coupled = False
     if 'L' in target_blocks.keys.names:
