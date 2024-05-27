@@ -619,8 +619,10 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
                     same_species = ai == aj
                     same_atom_in_unit_cell = i == j
 
-                    # Skip the pair if their distance exceeds the cutoff
-                    ij_distance = frame.get_distance(i, j, mic = False)
+                    # Skip the pair if their MIC distance exceeds the cutoff.
+                    # MIC must be true because any contribution from unit cell translations contributes to H(k)
+                    # If MIC=False, you miss the contributions of i,j pairs which are far away in the unit cell but close in another nonzero translation
+                    ij_distance = frame.get_distance(i, j, mic = True) 
                     if ij_distance > cutoff:
                         j_start += orbs_tot[aj]
                         continue
@@ -761,9 +763,10 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = T
         phioffset = orbs_offset[(ai, ni, li)] 
         psioffset = orbs_offset[(aj, nj, lj)]
 
-        for sample, blockval_ in zip(block.samples, block.values):
+        blockval_ = block.values[..., 0].clone()
+        for sample, blockval in zip(block.samples, blockval_):
 
-            blockval = blockval_[...,0].clone()
+            # blockval = blockval_[...,0].clone()
 
             A = sample["structure"]
             i = sample["center"]
@@ -892,9 +895,9 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
             # kpts_idx.append(where_k_is_not_Gamma)
         
         for I, (ifr, i, j) in enumerate(ifrij):
-            dist = dataset.structures[ifr].get_distance(i, j, mic = False)
-            if dist > cutoff:
-                continue
+            # dist = dataset.structures[ifr].get_distance(i, j, mic = False)
+            # if dist > cutoff:
+            #     continue
             idx = np.where(where_inv[kl] == I)[0]
             indices[kl][ifr,i,j] = idx
 
@@ -955,12 +958,12 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
 
             # if bt == 1 or bt == 2 or (bt == -1 and i != j):
 
-            # if bt != -1 or (bt == -1 and i != j): ### TODO: uncomment when the "rules" are figured out 
+            if bt != -1 or (bt == -1 and i != j): 
 
-            if (ifr, i, j) in _Hk[_kl]:
-                _Hk[_kl][ifr, i, j] += contraction
-            else:
-                _Hk[_kl][ifr, i, j] = contraction
+                if (ifr, i, j) in _Hk[_kl]:
+                    _Hk[_kl][ifr, i, j] += contraction
+                else:
+                    _Hk[_kl][ifr, i, j] = contraction
 
             # elif bt == 0:
             #     # block type zero
