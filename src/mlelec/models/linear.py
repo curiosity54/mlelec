@@ -508,7 +508,7 @@ class LinearModelPeriodic(nn.Module):
                 # if blockval > 1e-10:
                 # sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True)
+                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True)
 
                 # nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
@@ -567,20 +567,27 @@ class LinearModelPeriodic(nn.Module):
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
     
-    def predict_batch(self, features, target_blocks, return_matrix=False):
+    def predict_batch(self, features, target_blocks = None, return_matrix = False):
+
+        if target_blocks is None:
+            target_blocks = self.target_blocks
+            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+
         pred_blocks = []
         for k, block in target_blocks.items():
         # for (k, block), feat in zip(target_blocks.items(), features.blocks()):
             # print(k)
-            blockval = torch.linalg.norm(block.values)
+            # blockval = torch.linalg.norm(block.values)
             if True:
                 # if blockval > 1e-10:
-                sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
+
+                # sample_names = block.samples.names
+
                 # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
 
-                featnorm = torch.linalg.norm(feat.values)
-                nsamples, ncomp, nprops = block.values.shape
+                # featnorm = torch.linalg.norm(feat.values)
+                nsamples, ncomp, _ = feat.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
                 # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
                 # assert np.all(block.samples.values == feat.samples.values[:, :6]), (
@@ -594,8 +601,8 @@ class LinearModelPeriodic(nn.Module):
                 pred_blocks.append(
                     TensorBlock(
                         values=pred.reshape((nsamples, ncomp, 1)),
-                        samples=block.samples,
-                        components=block.components,
+                        samples=feat.samples,
+                        components=feat.components,
                         properties=self.dummy_property,
                     )
                 )

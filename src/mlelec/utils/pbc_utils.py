@@ -880,7 +880,7 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     kpts_idx = []
     for k, b in target_blocks.items():
         kl = tuple(k.values.tolist())
-        bt_is_minus_1 = kl[0] == -1
+        # bt_is_minus_1 = kl[0] == -1
 
         phase[kl] = {}
         indices[kl] = {}
@@ -940,7 +940,7 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
         ifrij, where_inv = unique_Aij_block(b)
 
         for I, (ifr, i, j) in enumerate(ifrij): #enumerate(phase[kl]):
-            if (ifr, i, j) not in phase[_kl]:
+            if (ifr, i, j) not in phase[kl]:
                 continue
 
             idx = np.where(where_inv == I)[0]
@@ -955,11 +955,12 @@ def TMap_bloch_sums(target_blocks, phase, indices, kpts_idx, return_tensormap = 
 
             # if bt == 1 or bt == 2 or (bt == -1 and i != j):
 
-            if bt != -1 or (bt == -1 and i != j):
-                if (ifr, i, j) in _Hk[_kl]:
-                    _Hk[_kl][ifr, i, j] += contraction
-                else:
-                    _Hk[_kl][ifr, i, j] = contraction
+            # if bt != -1 or (bt == -1 and i != j): ### TODO: uncomment when the "rules" are figured out 
+
+            if (ifr, i, j) in _Hk[_kl]:
+                _Hk[_kl][ifr, i, j] += contraction
+            else:
+                _Hk[_kl][ifr, i, j] = contraction
 
             # elif bt == 0:
             #     # block type zero

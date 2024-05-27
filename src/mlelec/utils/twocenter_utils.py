@@ -953,8 +953,6 @@ def _to_coupled_basis(
     skip_symmetry: bool = False,
     translations: bool = None,
 ):
-    if kspace and translations:
-        raise ValueError("Only one between `kspace` and `translations` can be `True`")
     if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
         assert orbitals is not None, "Need orbitals to convert matrix to blocks"
@@ -967,7 +965,7 @@ def _to_coupled_basis(
             ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
             ["structure", "center", "neighbor"],
             [["M"]],
-            ["value"],
+            ["dummy"],
         )
     else:
         if translations:
@@ -975,14 +973,14 @@ def _to_coupled_basis(
                 ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
                 ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
                 [["M"]],
-                ["value"],
+                ["dummy"],
             )
         else:
             block_builder = TensorBuilder(
                 ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
-                ["structure", "center", "neighbor", "ik"],
+                ["structure", "center", "neighbor", "kpoint"],
                 [["M"]],
-                ["value"],
+                ["dummy"],
             )
         
         
