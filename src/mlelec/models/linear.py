@@ -9,6 +9,7 @@ from mlelec.utils.twocenter_utils import (
     _to_matrix,
 )
 from metatensor import Labels, TensorMap, TensorBlock
+import metatensor
 import mlelec.metrics as mlmetrics
 from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
@@ -534,8 +535,8 @@ class LinearModelPeriodic(nn.Module):
         for k, block in target_blocks.items():
             # print(k)
             blockval = torch.linalg.norm(block.values)
-            if True:
-                # if blockval > 1e-10:
+            # if True:
+            if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
                 # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
@@ -561,8 +562,8 @@ class LinearModelPeriodic(nn.Module):
                     )
                 )
             else:
-                raise NotImplementedError
-                # pred_blocks.append(block.copy())
+                # raise NotImplementedError
+                pred_blocks.append(metatensor.zeros_like_block(block))
         pred_tmap = TensorMap(target_blocks.keys, pred_blocks)
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
