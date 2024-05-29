@@ -23,7 +23,7 @@ from mlelec.features.acdc_utils import (
     fix_gij,
     drop_blocks_L,
 )
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Union, Tuple, Dict
 import tqdm
 from mlelec.targets import SingleCenter, TwoCenter
 from mlelec.data.dataset import MLDataset
@@ -86,8 +86,8 @@ def single_center_features(
 
 def pair_features(
     frames: List[ase.Atoms],
-    hypers: dict,
-    hypers_pair: dict = None,
+    hypers: Dict,
+    hypers_pair: Dict = None,
     cg=None,
     rhonu_i: TensorMap = None,
     order_nu: Union[
@@ -597,3 +597,34 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     else:
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features
+
+from mlelec.data.dataset import PySCFPeriodicDataset
+def compute_features(dataset: PySCFPeriodicDataset,
+                     hypers_atom: dict,
+                     lcut: int,
+                     hypers_pair: Optional[dict] = None,
+                     both_centers: Optional[bool] = False,
+                     all_pairs: Optional[bool] = False, 
+                     device: Optional[str] = 'cpu',
+                     **kwargs):
+    
+    # TODO: is this the right place/format for this function?
+
+    if hypers_pair is None:
+        hypers_pair = hypers_atom
+    return_rho0ij = kwargs.get("return_rho0ij", False)
+    
+
+    rhoij = pair_features(dataset.structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
+                          kmesh = dataset.kmesh, device = device, lcut = lcut, return_rho0ij = return_rho0ij)  
+    
+    if both_centers and not return_rho0ij:
+        NU = 3
+    else:
+        NU = 2
+    rhonui = single_center_features(dataset.structures, hypers_atom, order_nu = NU, lcut = lcut, device = device,
+                                    feature_names = rhoij.property_names)
+    
+    hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs)
+
+    return hfeat
