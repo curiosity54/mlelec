@@ -1,19 +1,19 @@
 # ACDC style 1,2 centered features from rascaline
 # depending on the target decide what kind of features must be computed
-
-from rascaline import SphericalExpansion
-from rascaline import SphericalExpansionByPair as PairExpansion
-import ase
-
-from metatensor import TensorMap, TensorBlock, Labels, sort_block
-from metatensor.torch import Labels as mtstorch_Labels
-from metatensor.torch import TensorBlock as mtstorch_TensorBlock
-from metatensor.torch import TensorMap as mtstorch_TensorMap
-from metatensor.torch import sort_block as mtstorch_sort_block
-import metatensor.operations as operations
+from typing import List, Optional, Union, Tuple, Dict
 import torch
 import numpy as np
 import warnings
+import ase
+
+import rascaline.torch
+from rascaline.torch import SphericalExpansion
+from rascaline.torch import SphericalExpansionByPair as PairExpansion
+
+import metatensor.torch as mts
+from metatensor.torch import TensorMap, TensorBlock, Labels
+
+
 from mlelec.features.acdc_utils import (
     acdc_standardize_keys,
     cg_increment,
@@ -23,8 +23,6 @@ from mlelec.features.acdc_utils import (
     fix_gij,
     drop_blocks_L,
 )
-from typing import List, Optional, Union, Tuple, Dict
-import tqdm
 from mlelec.targets import SingleCenter, TwoCenter
 from mlelec.data.dataset import MLDataset
 
@@ -37,7 +35,7 @@ def single_center_features(
 ):  
     print(device, 'single center features')
     calculator = SphericalExpansion(**hypers)
-    rhoi = calculator.compute(frames, use_native_system=use_native)
+    rhoi = calculator.compute(rascaline.torch.systems_to_torch(frames), use_native_system = use_native)
     rho1i = acdc_standardize_keys(rhoi)
     rho1i = rho1i.keys_to_properties(["species_neighbor"])
     # print(rhoi[0].samples)
@@ -110,17 +108,7 @@ def pair_features(
     rhonu_i: TensorMap of single center features
     order_nu: int or list of int, order of the spherical expansion
     """
-    if device is None or backend == "numpy":
-        mts_tblock = TensorBlock
-        mts_tmap = TensorMap
-        mts_labels = Labels
-        mts_sort = sort_block
-    else:
-        backend = 'torch'
-        mts_tblock = mtstorch_TensorBlock
-        mts_tmap = mtstorch_TensorMap
-        mts_labels = mtstorch_Labels
-        mts_sort = mtstorch_sort_block
+    
     if not isinstance(frames, list):
         frames = [frames]
 
@@ -147,8 +135,7 @@ def pair_features(
                 warnings.warn(f"The selected cutoff is less than the maximum distance as repeated for kmesh ({np.ceil(min_cutoff)}) among atoms in the system!")
 
     calculator = PairExpansion(**hypers_pair)
-    rho0_ij = calculator.compute(frames, use_native_system = use_native)
-
+    rho0_ij = calculator.compute(rascaline.torch.systems_to_torch(frames), use_native_system = use_native)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
     
@@ -183,17 +170,17 @@ def pair_features(
                     negative_list.append([j, i, -x, -y, -z])
 
                     neg_label = Labels(["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                                       values = np.asarray([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                                       values = torch.tensor([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
                     mappedidx = block.samples.position(neg_label)
                     
                     assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
                     value_indices.append(mappedidx)
         
 
-        sample_labels = np.asarray(sample_labels)
+        sample_labels = torch.tensor(sample_labels)
         
         blocks.append(
-            sort_block(TensorBlock(
+            mts.sort_block(TensorBlock(
                 values = block.values[value_indices],
                 samples = Labels(
                     block.samples.names + ['sign'],
@@ -226,8 +213,6 @@ def pair_features(
         rhonu_i = single_center_features(
             frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, device = device, kwargs=kwargs
         )
-        # rhonu_i = _standardize(rhonu_i)
-    # if not both_centers:
     rhonu_ij = cg_combine(
         rhonu_i,
         rho0_ij,
@@ -271,15 +256,6 @@ def pair_features(
             feature_names=kwargs.get("feature_names", None),
             device=device,
         )
-        # combine with rhoi
-        # rhonu_nupij = cg_combine(
-        #     rhonu_i,
-        #     rhonuij,
-        #     lcut=lcut,
-        #     other_keys_match=["species_center"],
-        #     clebsch_gordan=cg,
-        #     feature_names=kwargs.get("feature_names", None),
-        # )
 
         return rhonu_nupij
 
@@ -287,21 +263,12 @@ def twocenter_features_periodic_NH(
     single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
 ) -> TensorMap:
     from collections import defaultdict
-    if device is None or device == "cpu":
-        mts_tblock = TensorBlock
-        mts_tmap = TensorMap
-        mts_labels = Labels
-    else:
-        mts_tblock = mtstorch_TensorBlock
-        mts_tmap = mtstorch_TensorMap
-        mts_labels = mtstorch_Labels
 
     keys = []
     blocks = []
     if "cell_shift_a" not in pair.keys.names:
         assert "cell_shift_b" not in pair.keys.names
         assert "cell_shift_c" not in pair.keys.names
-        # return twocenter_hermitian_features(single_center, pair)
 
     for k, b in single_center.items():
         keys.append(tuple(k) + (k["species_center"], 0,))
@@ -309,23 +276,17 @@ def twocenter_features_periodic_NH(
         if len(list(b.samples.values)) == 0:
             samples_array = b.samples
         else:
-            samples_array = np.asarray(b.samples.values)
+            samples_array = b.samples.values
             samples_array = np.hstack([samples_array, samples_array[:, -1:]])
         blocks.append(
-            mts_tblock(
-                samples=mts_labels(
-                    names=b.samples.names
-                    + [
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c"
-                    ],
-                    values=np.pad(samples_array, ((0, 0), (0, 3))),
+            TensorBlock(
+                samples = Labels(
+                    names = b.samples.names + ["neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                    values = torch.from_numpy(np.pad(samples_array, ((0, 0), (0, 3)))),
                 ),
-                components=b.components,
-                properties=b.properties,
-                values=b.values,
+                components = b.components,
+                properties = b.properties,
+                values = b.values,
             )
         )
 
@@ -357,110 +318,70 @@ def twocenter_features_periodic_NH(
             if len(idx_ij) == 0:
                 continue
 
-            # idx_ji = []
-            samplecopy = np.array(b.samples.values[:, :])
+            samplecopy = b.samples.values[:, :]
             block_values = b.values
-            # for smp_up in range(len(idx_up)):
+
             f_ijT = {1: defaultdict(lambda: torch.zeros(block_values.shape[1:])), 
                      -1: defaultdict(lambda: torch.zeros(block_values.shape[1:]))}
-            # for idx in idx_ij:
-                # A, i, j, Tx, Ty, Tz, sign = samplecopy[idx]
+
             for idx, AijTs in enumerate(samplecopy):
                 A, i, j, Tx, Ty, Tz, sign = AijTs
 
-                # if (A, i, j, Tx, Ty, Tz) not in f_ijT[1]:
-                #     f_ijT[1][A, i, j, Tx, Ty, Tz] = block_values[idx] 
-                # else:
-
                 if sign == 1:   
-                    # if [A, i, j, Tx, Ty, Tz, 1] in samplelist:
-                        f_ijT[1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
-                        f_ijT[-1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
+                    f_ijT[1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
+                    f_ijT[-1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
                 else:
-                    # if [A, j, i, Tx, Ty, Tz, 1] in samplelist:
-                        f_ijT[1][A, j, i, Tx, Ty, Tz] += block_values[idx]     
-                        f_ijT[-1][A, j, i, Tx, Ty, Tz] -= block_values[idx]     
+                    f_ijT[1][A, j, i, Tx, Ty, Tz] += block_values[idx]     
+                    f_ijT[-1][A, j, i, Tx, Ty, Tz] -= block_values[idx]     
 
-                # if (A, i, j, Tx, Ty, Tz) not in f_ijT[-1]:
-                #     f_ijT[-1][A, i, j, Tx, Ty, Tz] = sign*block_values[idx] 
-                # else:
-
-                # if i == j == Tx == Ty == Tz == 0:
-                #     continue
-               
-                # Sample to symmetrize over
-                # ji_entry = np.array([structure, j, i, Tx, Ty, Tz, -1])
-
-                # Find the index of the corresponding sample index in the block
-                # where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis = 1))
-
-                # Ensure that there is only one matching sample
-                # assert where_ji.shape == (1, 1), (where_ji.shape, where_ji, ji_entry)
-                # idx_ji.append(where_ji[0, 0])
-
-            # print(torch.norm(torch.stack(list(f_ijT[1].values()))))
             samplelist = samplecopy[idx_ij]
-            samples_plus1 = samplelist[:,:-1]
-            samples_minus1 = samplelist[:,:-1]
+            samples_plus1 = samplelist[:,:-1].clone()
+            samples_minus1 = samplelist[:,:-1].clone()
             values_plus1 = []
             values_minus1 = []
-            # print(f_ijT[1].keys())
-            # for AijT in samplelist[:,:-1]:
-            #     print(AijT)
-            #     values_plus1.append(f_ijT[1][tuple(AijT)])
-            #     values_minus1.append(f_ijT[-1][tuple(AijT)])
             [(values_plus1.append(f_ijT[1][tuple(AijT)]),values_minus1.append(f_ijT[-1][tuple(AijT)]))  for AijT in samplelist[:,:-1]]
-
-            # print(torch.norm(torch.stack(values_plus1)), torch.norm(torch.stack(values_minus1)))
-
-            # values_minus1 = [f_ijT[-1][tuple(AijT)] for AijT in samplelist]
-            # print(len(samples_plus1), len(samples_minus1), len(values_plus1), len(values_minus1))
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
             
             blocks.append(
-                mts_tblock(
-                    samples=mts_labels(
-                        names=b.samples.names[:-1],
-                        values=np.asarray(samples_plus1),
+                TensorBlock(
+                    samples = Labels(
+                        names = b.samples.names[:-1],
+                        values = samples_plus1,
                     ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=torch.stack(values_plus1),
+                    components = b.components,
+                    properties = b.properties,
+                    values = torch.stack(values_plus1),
                 )
             )
             blocks.append(
-                mts_tblock(
-                    samples=mts_labels(
-                        names=b.samples.names[:-1],
-                        values=np.asarray(samples_minus1),
+                TensorBlock(
+                    samples = Labels(
+                        names = b.samples.names[:-1],
+                        values = samples_minus1,
                     ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=torch.stack(values_minus1),
+                    components = b.components,
+                    properties = b.properties,
+                    values = torch.stack(values_minus1),
                 )
             )
         
         elif diff_species:
             # off-site, different species
             keys.append(tuple(k) + (2,))
-            # blocks.append(b.copy())
             blocks.append(TensorBlock(
                 values = b.values, 
                 components = b.components,
                 properties = b.properties,
-                samples = Labels(b.samples.names[:-1], np.asarray(b.samples.values)[:,:-1])
-                )
-                )
+                samples = Labels(b.samples.names[:-1], b.samples.values[:,:-1])))
 
-
-    return mts_tmap(
-        keys=Labels(
-            names=pair.keys.names + ["block_type"],
-            values=np.asarray(keys),
+    return TensorMap(
+        keys = Labels(
+            names = pair.keys.names + ["block_type"],
+            values = torch.tensor(keys),
         ),
-        blocks=blocks,
+        blocks = blocks,
     )
 
 
@@ -486,27 +407,29 @@ def twocenter_hermitian_features(
             if len(list(b.samples.values)) == 0:
                 samples_array = b.samples
             else:
-                samples_array = np.asarray(b.samples.values)
-                samples_array = np.hstack([samples_array, samples_array[:, -1:]])
+                samples_array = b.samples.values
+                samples_array = torch.hstack([samples_array, samples_array[:, -1:]])
             blocks.append(
                 TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names + ["neighbor"],
-                        values=samples_array,
+                    samples = Labels(
+                        names = b.samples.names + ["neighbor"],
+                        values = samples_array,
                     ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=b.values,
+                    components = b.components,
+                    properties = b.properties,
+                    values = b.values,
                 )
             )
 
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
-            idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
+            
+            idx_up = torch.where(b.samples["center"] < b.samples["neighbor"])[0]
             if len(idx_up) == 0:
                 continue
-            idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
+            
+            idx_lo = torch.where(b.samples["center"] > b.samples["neighbor"])[0]
 
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
@@ -515,17 +438,12 @@ def twocenter_hermitian_features(
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
                 ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
                 for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples.view(["neighbor", "center"]).values[
-                        idx_lo[smp_lo]
-                    ]
+                    ij_lo = b.samples.view(["neighbor", "center"]).values[idx_lo[smp_lo]]
                     # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
-                    if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
-                    ):
-                        raise ValueError(
-                            f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
-                        )
+
+                    if (b.samples["structure"][idx_up[smp_up]] != b.samples["structure"][idx_lo[smp_lo]]):
+                        raise ValueError(f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}")
+                    
                     if tuple(ij) == tuple(ij_lo):
                         idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
                         break
@@ -535,39 +453,35 @@ def twocenter_hermitian_features(
 
             blocks.append(
                 TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+                    samples = Labels(names = b.samples.names, values = b.samples.values[idx_up]),
+                    components = b.components,
+                    properties = b.properties,
+                    values = (b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
                 )
             )
+
             blocks.append(
                 TensorBlock(
-                    samples=Labels(
-                        names=b.samples.names,
-                        values=np.asarray(b.samples.values[idx_up]),
+                    samples = Labels(
+                        names = b.samples.names,
+                        values = b.samples.values[idx_up],
                     ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                    components = b.components,
+                    properties = b.properties,
+                    values = (b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
                 )
             )
+
         elif k["species_center"] < k["species_neighbor"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
-            blocks.append(b.copy())
+            blocks.append(b.clone())
+
     keys = np.pad(keys, ((0, 0), (0, 3)))
     return TensorMap(
-        keys=Labels(
-            names=pair.keys.names
-            + ["block_type"]
-            + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
-            values=np.asarray(keys, dtype=np.int32),
-        ),
-        blocks=blocks,
+        keys = Labels(names = pair.keys.names + ["block_type"] + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                      values = torch.tensor(keys, dtype = torch.int32)),
+        blocks = blocks,
     )
 
 def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
@@ -641,172 +555,164 @@ def compute_features(dataset: PySCFPeriodicDataset,
     return hfeat
 
 
-def twocenter_features_periodic_NH_OLD(
-    single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
-) -> TensorMap:
-    print('i am here ')
-    if device is None or device == "cpu":
-        mts_tblock = TensorBlock
-        mts_tmap = TensorMap
-        mts_labels = Labels
-    else:
-        mts_tblock = mtstorch_TensorBlock
-        mts_tmap = mtstorch_TensorMap
-        mts_labels = mtstorch_Labels
+# def twocenter_features_periodic_NH_OLD(
+#     single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
+# ) -> TensorMap:
+#     print('i am here ')
 
-    keys = []
-    blocks = []
-    if "cell_shift_a" not in pair.keys.names:
-        assert "cell_shift_b" not in pair.keys.names
-        assert "cell_shift_c" not in pair.keys.names
-        # return twocenter_hermitian_features(single_center, pair)
+#     keys = []
+#     blocks = []
+#     if "cell_shift_a" not in pair.keys.names:
+#         assert "cell_shift_b" not in pair.keys.names
+#         assert "cell_shift_c" not in pair.keys.names
+#         # return twocenter_hermitian_features(single_center, pair)
 
-    for k, b in single_center.items():
-        keys.append(tuple(k) + (k["species_center"], 0,))
-        # `Try to handle the case of no computed features
-        if len(list(b.samples.values)) == 0:
-            samples_array = b.samples
-        else:
-            samples_array = np.asarray(b.samples.values)
-            samples_array = np.hstack([samples_array, samples_array[:, -1:]])
-        blocks.append(
-            mts_tblock(
-                samples=mts_labels(
-                    names=b.samples.names
-                    + [
-                        "neighbor",
-                        "cell_shift_a",
-                        "cell_shift_b",
-                        "cell_shift_c"
-                    ],
-                    values=np.pad(samples_array, ((0, 0), (0, 3))),
-                ),
-                components=b.components,
-                properties=b.properties,
-                values=b.values,
-            )
-        )
+#     for k, b in single_center.items():
+#         keys.append(tuple(k) + (k["species_center"], 0,))
+#         # `Try to handle the case of no computed features
+#         if len(list(b.samples.values)) == 0:
+#             samples_array = b.samples
+#         else:
+#             samples_array = np.asarray(b.samples.values)
+#             samples_array = np.hstack([samples_array, samples_array[:, -1:]])
+#         blocks.append(
+#             TensorBlock(
+#                 samples=Labels(
+#                     names=b.samples.names
+#                     + [
+#                         "neighbor",
+#                         "cell_shift_a",
+#                         "cell_shift_b",
+#                         "cell_shift_c"
+#                     ],
+#                     values=np.pad(samples_array, ((0, 0), (0, 3))),
+#                 ),
+#                 components=b.components,
+#                 properties=b.properties,
+#                 values=b.values,
+#             )
+#         )
 
-    # TODO: why two loops?
-    # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
-    # for (k, b) in pair.items():
-    #     if k["species_center"] == k["species_neighbor"]:  # self translared pairs
+#     # TODO: why two loops?
+#     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
+#     # for (k, b) in pair.items():
+#     #     if k["species_center"] == k["species_neighbor"]:  # self translared pairs
             
-        #     idx = np.where(
-        #           (b.samples["center"] == b.samples["neighbor"])
-        #         & (b.samples["cell_shift_a"] == 0)
-        #         & (b.samples["cell_shift_b"] == 0)
-        #         & (b.samples["cell_shift_c"] == 0)
-        #     )[0]
-        #     print(len(idx))
-        #     if len(idx) != 0:
-        #         # SHOULD BE ZERO
-        #         raise ValueError("btype0 should be zero for pair", b.samples.values[idx])
-        # else: 
-        #     print("off-site, different species")
+#         #     idx = np.where(
+#         #           (b.samples["center"] == b.samples["neighbor"])
+#         #         & (b.samples["cell_shift_a"] == 0)
+#         #         & (b.samples["cell_shift_b"] == 0)
+#         #         & (b.samples["cell_shift_c"] == 0)
+#         #     )[0]
+#         #     print(len(idx))
+#         #     if len(idx) != 0:
+#         #         # SHOULD BE ZERO
+#         #         raise ValueError("btype0 should be zero for pair", b.samples.values[idx])
+#         # else: 
+#         #     print("off-site, different species")
 
 
-    for k, b in pair.items():
-        if all_pairs:
-            diff_species= k["species_center"] != k["species_neighbor"]
-        else: 
-            diff_species = k["species_center"] < k["species_neighbor"]
+#     for k, b in pair.items():
+#         if all_pairs:
+#             diff_species= k["species_center"] != k["species_neighbor"]
+#         else: 
+#             diff_species = k["species_center"] < k["species_neighbor"]
 
-        if k["species_center"] == k["species_neighbor"]:
-            # off-site, same species
-            atom_i = b.samples["center"]
-            atom_j = b.samples["neighbor"]
-            Tx = b.samples["cell_shift_a"]
-            Ty = b.samples["cell_shift_b"]
-            Tz = b.samples["cell_shift_c"]
-            cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
-            positive_sign = b.samples["sign"] == 1
+#         if k["species_center"] == k["species_neighbor"]:
+#             # off-site, same species
+#             atom_i = b.samples["center"]
+#             atom_j = b.samples["neighbor"]
+#             Tx = b.samples["cell_shift_a"]
+#             Ty = b.samples["cell_shift_b"]
+#             Tz = b.samples["cell_shift_c"]
+#             cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
+#             positive_sign = b.samples["sign"] == 1
 
-            if all_pairs:
-                different_atoms = (atom_i != atom_j)
-                avoid_double_counting_atoms = True
-            else:
-                different_atoms = (atom_i < atom_j)
-                avoid_double_counting_atoms = atom_i <= atom_j
-            idx_ij = np.where(positive_sign & ( (cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
+#             if all_pairs:
+#                 different_atoms = (atom_i != atom_j)
+#                 avoid_double_counting_atoms = True
+#             else:
+#                 different_atoms = (atom_i < atom_j)
+#                 avoid_double_counting_atoms = atom_i <= atom_j
+#             idx_ij = np.where(positive_sign & ( (cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
 
-            if len(idx_ij) == 0:
-                continue
+#             if len(idx_ij) == 0:
+#                 continue
 
-            # if len(np.where(b.samples["center"] > b.samples["neighbor"])[0]) == 0:
-            #     print(
-            #         "Corresponding swapped pair not found",
-            #         np.array(b.samples.values)[idx_ij],
-            #     )
+#             # if len(np.where(b.samples["center"] > b.samples["neighbor"])[0]) == 0:
+#             #     print(
+#             #         "Corresponding swapped pair not found",
+#             #         np.array(b.samples.values)[idx_ij],
+#             #     )
 
-            # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            idx_ji = []
-            samplecopy = np.array(b.samples.values[:, :])
+#             # we need to find the "ji" position that matches each "ij" sample.
+#             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+#             idx_ji = []
+#             samplecopy = np.array(b.samples.values[:, :])
 
-            # for smp_up in range(len(idx_up)):
-            for idx in idx_ij:
-                structure, i, j, Tx, Ty, Tz, sign = b.samples.values[idx]
+#             # for smp_up in range(len(idx_up)):
+#             for idx in idx_ij:
+#                 structure, i, j, Tx, Ty, Tz, sign = b.samples.values[idx]
 
-                if i == j == Tx == Ty == Tz == 0:
-                    continue
+#                 if i == j == Tx == Ty == Tz == 0:
+#                     continue
                
-                # Sample to symmetrize over
-                ji_entry = np.array([structure, j, i, Tx, Ty, Tz, -1])
+#                 # Sample to symmetrize over
+#                 ji_entry = np.array([structure, j, i, Tx, Ty, Tz, -1])
 
-                # Find the index of the corresponding sample index in the block
-                where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis = 1))
+#                 # Find the index of the corresponding sample index in the block
+#                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis = 1))
 
-                # Ensure that there is only one matching sample
-                assert where_ji.shape == (1, 1), (where_ji.shape, where_ji, ji_entry)
-                idx_ji.append(where_ji[0, 0])
-            keys.append(tuple(k) + (1,))
-            keys.append(tuple(k) + (-1,))
+#                 # Ensure that there is only one matching sample
+#                 assert where_ji.shape == (1, 1), (where_ji.shape, where_ji, ji_entry)
+#                 idx_ji.append(where_ji[0, 0])
+#             keys.append(tuple(k) + (1,))
+#             keys.append(tuple(k) + (-1,))
             
-            blocks.append(
-                mts_tblock(
-                    samples=mts_labels(
-                        names=b.samples.names[:-1],
-                        values=np.asarray(
-                            b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
-                        ),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_ij] + b.values[idx_ji]),
-                )
-            )
-            blocks.append(
-                mts_tblock(
-                    samples=mts_labels(
-                        names=b.samples.names[:-1],
-                        values=np.asarray(
-                            b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
-                        ),
-                    ),
-                    components=b.components,
-                    properties=b.properties,
-                    values=(b.values[idx_ij] - b.values[idx_ji]),
-                )
-            )
+#             blocks.append(
+#                 TensorBlock(
+#                     samples=Labels(
+#                         names=b.samples.names[:-1],
+#                         values=np.asarray(
+#                             b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
+#                         ),
+#                     ),
+#                     components=b.components,
+#                     properties=b.properties,
+#                     values=(b.values[idx_ij] + b.values[idx_ji]),
+#                 )
+#             )
+#             blocks.append(
+#                 TensorBlock(
+#                     samples=Labels(
+#                         names=b.samples.names[:-1],
+#                         values=np.asarray(
+#                             b.samples.values[idx_ij][:, :-1]  # We don't keep the "sign" sample dimension since it's always +1
+#                         ),
+#                     ),
+#                     components=b.components,
+#                     properties=b.properties,
+#                     values=(b.values[idx_ij] - b.values[idx_ji]),
+#                 )
+#             )
         
-        elif diff_species:
-            # off-site, different species
-            keys.append(tuple(k) + (2,))
-            # blocks.append(b.copy())
-            blocks.append(TensorBlock(
-                values = b.values, 
-                components = b.components,
-                properties = b.properties,
-                samples = Labels(b.samples.names[:-1], np.asarray(b.samples.values)[:,:-1])
-                )
-                )
+#         elif diff_species:
+#             # off-site, different species
+#             keys.append(tuple(k) + (2,))
+#             # blocks.append(b.copy())
+#             blocks.append(TensorBlock(
+#                 values = b.values, 
+#                 components = b.components,
+#                 properties = b.properties,
+#                 samples = Labels(b.samples.names[:-1], np.asarray(b.samples.values)[:,:-1])
+#                 )
+#                 )
 
 
-    return mts_tmap(
-        keys=Labels(
-            names=pair.keys.names + ["block_type"],
-            values=np.asarray(keys),
-        ),
-        blocks=blocks,
-    )
+#     return TensorMap(
+#         keys=Labels(
+#             names=pair.keys.names + ["block_type"],
+#             values=np.asarray(keys),
+#         ),
+#         blocks=blocks,
+#     )

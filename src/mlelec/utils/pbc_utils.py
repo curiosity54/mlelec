@@ -3,7 +3,7 @@ import warnings
 from scipy.fft import fftn, ifftn
 from torch.fft import fftn as torch_fftn, ifftn as torch_ifftn
 from ase.units import Bohr
-from metatensor import Labels, TensorBlock, TensorMap
+from metatensor.torch import Labels, TensorBlock, TensorMap
 from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.twocenter_utils import (
     _components_idx,
@@ -255,24 +255,21 @@ def move_cell_shifts_to_keys(blocks):
     out_block_keys = []
 
     for key, block in blocks.items():        
-        translations = np.unique(block.samples.values[:, -3:], axis = 0)
+        translations = torch.unique(block.samples.values[:, -3:], dim = 0)
         for T in translations:
             block_view = block.samples.view(["cell_shift_a", "cell_shift_b", "cell_shift_c"]).values
-            idx = np.where(np.all(np.isclose(np.array(block_view),np.array([T[0], T[1], T[2]])), axis = 1))[0]
+            idx = torch.where(torch.all(torch.isclose(block_view, torch.tensor([T[0], T[1], T[2]])), dim = 1))[0]
 
             if len(idx):
-                out_block_keys.append(list(key.values)+[T[0], T[1], T[2]])
+                out_block_keys.append(list(key.values) + [T[0], T[1], T[2]])
                 out_blocks.append(TensorBlock(
-                        samples = Labels(
-                            blocks.sample_names[:-3],
-                            values = np.asarray(block.samples.values[idx])[:, :-3],
-                        ),
+                        samples = Labels(blocks.sample_names[:-3], values = block.samples.values[idx][:, :-3]),
                         values = block.values[idx],
                         components = block.components,
                         properties = block.properties,
                     ))
                 
-    return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], np.asarray(out_block_keys)), out_blocks)
+    return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], torch.tensor(out_block_keys)), out_blocks)
 
 
 
@@ -910,7 +907,7 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
     return phase, indices, kpts_idx
 
 
-dummy_prop = Labels(['dummy'], np.array([[0]]))
+dummy_prop = Labels(['dummy'], torch.tensor([[0]]))
 def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_tensormap = False):
 
     is_coupled = False
@@ -1007,15 +1004,16 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
             #     count += 1
 
             if values != []:
-                samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))                
+                samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], torch.tensor(samples))                
                 values = torch.concatenate(values)
                 
                 if is_coupled:
                     n_M = values.shape[1]
-                    components = [Labels(['M'], np.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
+                    components = [Labels(['M'], torch.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
                 else:
                     n_mi, n_mj = values.shape[1:3]
-                    components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
+                    components = [Labels(['m_i'], torch.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), 
+                                  Labels(['m_j'], torch.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
                 
                 _k_target_blocks.append(
                     TensorBlock(
@@ -1028,7 +1026,7 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
             
                 keys.append(list(kl))
 
-        _k_target_blocks = TensorMap(Labels(target_blocks.keys.names, np.array(keys)), _k_target_blocks)
+        _k_target_blocks = TensorMap(Labels(target_blocks.keys.names, torch.tensor(keys)), _k_target_blocks)
             # ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j']        
         _Hk = None
         del _Hk
@@ -1045,6 +1043,7 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
 
 
 ######--------------- NEW/OLD - to discard or incorporate? --------------------------- ###########################
+# FIXME: if any of these will be restored, remember to move to mts.torch
 def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = None):
     if device is None:
         device = dataset.device
@@ -1169,79 +1168,6 @@ def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg
     return reconstructed_matrices_plus
 
 
-
-def TMap_bloch_sums_OLD(target_blocks, phase, indices):
-
-    _Hk = {}
-    _Hk0 = {}
-    for k, b in target_blocks.items():
-
-        # LabelValues to tuple
-        kl = tuple(k.values.tolist())
-
-        # Block type
-        bt = kl[0]
-
-        # define dummy key pointing to block type 1 when block type is zero
-        if bt == 0:
-            _kl = (1, *kl[1:])
-            if _kl not in _Hk0:
-                _Hk0[_kl] = {}
-        else:
-            _kl = kl
-
-        if _kl not in _Hk:
-            _Hk[_kl] = {}
-
-        # Loop through the unique (ifr, i, j) triplets
-        for I, (ifr, i, j) in enumerate(phase[kl]):
-            # idx = np.where(where_inv[kl] == I)[0]
-            idx = indices[kl][ifr,i,j]
-        
-            if bt != 0:
-                _Hk[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])
-            else:
-                _Hk0[_kl][ifr, i, j] = torch.einsum('Tmnv,kT->kmnv', b.values[idx].to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j])*np.sqrt(2)
-                
-    # Now store in a tensormap
-    _k_target_blocks = []
-    keys = []
-    properties = Labels(['dummy'], np.array([[0]]))
-    for kl in _Hk:
-        
-        values = []
-        samples = []
-        
-        for I in _Hk[kl]:
-
-            # Add bt=0 contributions
-            if kl in _Hk0:
-                if I in _Hk0[kl]:
-                    _Hk[kl][I] += _Hk0[kl][I]
-
-            # Fill values and samples
-            values.append(_Hk[kl][I])
-            samples.extend([list(I) + [ik] for ik in range(_Hk[kl][I].shape[0])])
-            
-        values = torch.concatenate(values)
-        _, n_mi, n_mj, _ = values.shape
-        samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
-        components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
-        
-        _k_target_blocks.append(
-            TensorBlock(
-                samples = samples,
-                components = components,
-                properties = properties,
-                values = values
-            )
-        )
-        
-        keys.append(list(kl))
-
-    _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
-
-    return _k_target_blocks
 def matrix_to_blocks_OLD(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
     from mlelec.utils.metatensor_utils import TensorBuilder
 

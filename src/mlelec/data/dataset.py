@@ -2,12 +2,12 @@ from typing import Dict, List, Optional, Union
 
 import ase
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 from enum import Enum
 from ase.io import read
 import hickle
 from mlelec.targets import ModelTargets
-from metatensor import TensorMap, Labels, TensorBlock
+from metatensor.torch import TensorMap, Labels, TensorBlock
 import metatensor.operations as operations
 import numpy as np
 import os
@@ -263,7 +263,9 @@ class MLDataset(Dataset):
         # self.molecule_data.shuffle(self.indices)
 
     def _get_subset(self, y: TensorMap, indices: torch.tensor):
-        indices = indices.cpu().numpy()
+
+        # indices = indices.cpu().numpy()
+        
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
@@ -271,7 +273,7 @@ class MLDataset(Dataset):
             y,
             axis="samples",
             labels=Labels(
-                names=["structure"], values=np.asarray(indices).reshape(-1, 1)
+                names=["structure"], values = torch.tensor(indices).reshape(-1, 1)
             ),
         )
 
@@ -362,9 +364,9 @@ class MLDataset(Dataset):
         return self.nstructs
 
     def __getitem__(self, idx):
-        if torch.is_tensor(idx):
-            # idx = [i.item() for i in idx]
-            idx = idx.tolist()
+        # if torch.is_tensor(idx):
+        #     # idx = [i.item() for i in idx]
+        #     idx = idx.tolist()
         if not self.model_type == "acdc":
             return self.structures[idx], self.target.tensor[idx]
         else:
@@ -375,15 +377,15 @@ class MLDataset(Dataset):
                 self.features,
                 axis="samples",
                 labels=Labels(
-                    names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                    names=["structure"], values = idx.reshape(-1, 1)
                 ),
             )
             if self.model_return == "blocks":
                 y = operations.slice(
                     self.target.blocks,
                     axis="samples",
-                    labels=Labels(
-                        names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                    labels = Labels(
+                        names=["structure"], values = idx.reshape(-1, 1)
                     ),
                 )
             else:
@@ -1053,7 +1055,7 @@ def split_block_by_Aij_mts(block):
     b_properties = block.properties
     for I, (A, i, j) in enumerate(Aij):
         idx = np.where(where_inv == I)[0]
-        new_blocks[A, i, j] = TensorBlock(samples = Labels(b_samples.names, np.array(b_samples.values[idx].tolist())),
+        new_blocks[A, i, j] = TensorBlock(samples = Labels(b_samples.names, torch.tensor(b_samples.values[idx].tolist())),
                                           components = b_components,
                                           properties = b_properties,
                                           values = b_values[idx])
@@ -1132,7 +1134,7 @@ def split_by_Aij_mts(tensor, features = None):
 
         tmaps = {}
         for Aij in blocks:
-            tmap_keys = Labels(tensor.keys.names, np.array(keys[Aij]))
+            tmap_keys = Labels(tensor.keys.names, torch.tensor(keys[Aij]))
             tmap_blocks = blocks[Aij]
             tmaps[Aij] = TensorMap(tmap_keys, tmap_blocks)
         
@@ -1161,7 +1163,7 @@ def split_by_Aij_mts(tensor, features = None):
         tmaps_feature = {}
         tmaps_target = {}
         for Aij in feature_blocks:
-            tmap_keys = Labels(tensor.keys.names, np.array(keys[Aij]))
+            tmap_keys = Labels(tensor.keys.names, torch.tensor(keys[Aij]))
             tmaps_feature[Aij] = TensorMap(tmap_keys, feature_blocks[Aij])
             tmaps_target[Aij] = TensorMap(tmap_keys, target_blocks[Aij])
         

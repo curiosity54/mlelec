@@ -1,12 +1,13 @@
 import numpy as np
-from metatensor import Labels, TensorBlock, TensorMap
-from itertools import product
 import re
 import torch
-from metatensor import sort_block
+
+import metatensor.torch as mts
+from metatensor.torch import Labels, TensorBlock, TensorMap
+
+from itertools import product
+
 from typing import List, Optional, Union
-import metatensor
-import metatensor.operations as operations
 
 from mlelec.utils.symmetry import ClebschGordanReal
 from tqdm.notebook import tqdm  # <<< change this
@@ -37,38 +38,34 @@ def fix_gij(rho0_ij):
                 neigh_species = key["species_atom_2"] # OLD - rascaline
             except:
                 raise ValueError("Key does not contain 'second_atom_type' or 'species_atom_2'")
-        bprops = np.concatenate(( np.array([[neigh_species]] * len(block.properties.values)),
-                block.properties.values,),
-            axis=1,
-        )
+            
+        # PAOLO: check it's correct
+        bprops = torch.cat([torch.from_numpy(np.asarray([[neigh_species]] * len(block.properties.values))),
+                            block.properties.values], dim = 1)
         properties = Labels(["species_neighbor_1"] + block.properties.names, bprops)
+
         L = key[lname]
         if L != 0:
-            bvalues = np.zeros(
-                (b0samples.values.shape[0], block.values.shape[1], block.values.shape[2])
-            )
-            bsam = block.samples#.tolist()
-            _, m1,m2 = bsam.intersection_and_mapping(b0samples)
+            bvalues = torch.zeros((b0samples.values.shape[0], block.values.shape[1], block.values.shape[2]))
+            # bsam = 
+            _, _, m2 = block.samples.intersection_and_mapping(b0samples)
 
-            # idx = [tot.index(b) for b in bsam]
             bvalues[m2!=-1] = block.values
             block = TensorBlock(
-                values=bvalues,
-                samples=b0samples,
-                components=block.components,
-                properties=properties,
+                values = bvalues,
+                samples = b0samples,
+                components = block.components,
+                properties = properties,
             )
         else:
             block = TensorBlock(
-                values=block.values,
-                samples=block.samples,
-                components=block.components,
-                properties=properties,
+                values = block.values,
+                samples = block.samples,
+                components = block.components,
+                properties = properties,
             )
-        # block = metatensor.sort_block(block)  # sort block samples
         blocks.append(block)
-    # return TensorMap(rho0_ij.keys, blocks)
-    return metatensor.sort(TensorMap(rho0_ij.keys, blocks))
+    return mts.sort(TensorMap(rho0_ij.keys, blocks))
 
 def _remove_suffix(names, new_suffix=""):
     suffix = re.compile("_[0-9]?$")
@@ -146,49 +143,19 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
            "center" if b == "first_atom" or b=="atom"  else("neighbor" if b=="second_atom" else("structure" if b=="system" else b))
             for b in block.samples.names
         ]
-        # converts pair_id to shifted neighbor numbers
-        # if "pair_id" in sample_names and drop_pair_id:
-        #     new_samples = block.samples.values.copy().reshape(-1, len(sample_names))
-        #     # dtype=np.int32
-        #     icent = np.where(np.asarray(sample_names) == "center")[0]
-        #     ineigh = np.where(np.asarray(sample_names) == "neighbor")[0]
-        #     ipid = np.where(np.asarray(sample_names) == "pair_id")[0]
-        #     new_samples[:, ineigh] += new_samples[:, ipid] * new_samples[:, icent].max()
-        #     new_samples = Labels(
-        #         [n for n in sample_names if n != "pair_id"],
-        #         new_samples[
-        #             :,
-        #             [
-        #                 i
-        #                 for i in range(len(block.samples.names))
-        #                 if block.samples.names[i] != "pair_id"
-        #             ],
-        #         ],
-        #     )
-        # else:
-        new_samples = Labels(
-            sample_names,
-            np.asarray(block.samples.values).reshape(-1, len(sample_names)),
-        )
-        # convert values to TORCH TENSOR <<<<
+        new_samples = Labels(sample_names, block.samples.values.reshape(-1, len(sample_names)))
         blocks.append(
             TensorBlock(
-                values=torch.tensor(block.values),
-                # values=np.asarray(block.values),
-                samples=new_samples,
-                components=new_components,
-                properties=Labels(
-                    property_names,
-                    np.asarray(block.properties.values).reshape(
-                        -1, len(property_names)
-                    ),
-                ),
+                values = block.values.clone().detach(),
+                samples = new_samples,
+                components = new_components,
+                properties = Labels(property_names, block.properties.values.reshape(-1, len(property_names))),
             )
         )
 
     return TensorMap(
-        keys=Labels(names=key_names, values=np.asarray(keys)),
-        blocks=blocks,
+        keys = Labels(names = key_names, values = torch.tensor(keys)),
+        blocks = blocks
     )
 
 
@@ -296,13 +263,13 @@ def cg_combine(
     l_sigma_nu = ["spherical_harmonics_l", "inversion_sigma", "order_nu"]
 
     for index_a, block_a in x_a.items():
-        block_a = sort_block(block_a, axes="samples")
+        block_a = mts.sort_block(block_a, axes="samples")
         lam_a, sigma_a, order_a = [index_a[label] for label in l_sigma_nu]
         properties_a = block_a.properties  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
 
         for index_b, block_b in x_b.items():
-            block_b = sort_block(block_b, axes="samples")
+            block_b = mts.sort_block(block_b, axes="samples")
             lam_b, sigma_b, order_b = [index_b[label] for label in l_sigma_nu]
             properties_b = block_b.properties
             samples_b = block_b.samples
@@ -414,16 +381,16 @@ def cg_combine(
             continue  # skips empty blocks
         nz_idx.append(KEY)
         block_data = torch.cat(X_blocks[KEY], dim=-1)
-        sph_components = Labels(["spherical_harmonics_m"], np.asarray(range(-L, L + 1)).reshape(-1, 1))
+        sph_components = Labels(["spherical_harmonics_m"], torch.arange(-L, L + 1).reshape(-1, 1))
         newblock = TensorBlock(
-            values=block_data,
-            samples=X_samples[KEY],
-            components=[sph_components],
-            properties=Labels(feature_names, np.asarray(np.vstack(X_idx[KEY]))))
+            values = block_data,
+            samples = X_samples[KEY],
+            components = [sph_components],
+            properties = Labels(feature_names, torch.from_numpy(np.vstack(X_idx[KEY]))))
 
         nz_blk.append(newblock)
 
-    X = TensorMap(Labels(["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS, np.asarray(nz_idx)), nz_blk)
+    X = TensorMap(Labels(["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS, torch.tensor(nz_idx)), nz_blk)
     return X
 
 def cg_increment(
@@ -493,7 +460,7 @@ def relabel_keys(tensormap, key_name: str = None):
                 "species_center",
                 key_name,
             ),
-            np.asarray(new_tensor_keys),
+            torch.tensor(new_tensor_keys),
         )
     else:
         # Relabel center species as species_contract to be the channel to contract |rho_j>
@@ -504,7 +471,7 @@ def relabel_keys(tensormap, key_name: str = None):
                 "spherical_harmonics_l",
                 key_name,
             ),
-            np.asarray(new_tensor_keys),
+            torch.tensor(new_tensor_keys),
         )
 
     new_tensormap = TensorMap(new_tensor_keys, new_tensor_blocks)
@@ -587,16 +554,16 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
             all_block_values[nzidx, :, :, ib] = contract_blocks[ib]
 
         new_block = TensorBlock(
-            values=all_block_values.reshape(
+            values = all_block_values.reshape(
                 all_block_values.shape[0], all_block_values.shape[1], -1
             ),
-            samples=Labels(
-                ["structure", "center"], np.asarray(all_block_samples, np.int32)
+            samples = Labels(
+                ["structure", "center"], torch.tensor(all_block_samples, dtype = torch.int32)
             ),
-            components=block.components,
-            properties=Labels(
+            components = block.components,
+            properties = Labels(
                 list(property_names),
-                np.asarray(np.vstack(contract_properties), np.int32),
+                torch.vstack(contract_properties).to(torch.int32),
             ),
         )
 
@@ -604,7 +571,7 @@ def contract_rho_ij(rhoijp, elements, property_names=None):
     rhoMPi = TensorMap(
         Labels(
             ["order_nu", "inversion_sigma", "spherical_harmonics_l", "species_center"],
-            np.asarray(rhoMPi_keys),
+            torch.tensor(rhoMPi_keys),
         ),
         rhoMPi_blocks,
     )
@@ -630,18 +597,16 @@ def compute_rhoi_pca(
         # nu, sigma, l, spi = key.values
         if slice_samples is not None:
             # FIXME - doesnt work for cuda tensors
-            block = operations.slice_block(
+            block = mts.slice_block(
                 block,
                 axis="samples",
-                labels=Labels(
+                labels = Labels(
                     block.samples.names, block.samples.values[::slice_samples]
                 ),
             )
 
-        nsamples = len(block.samples)
-        ncomps = len(block.components[0])
         xl = block.values.reshape((len(block.samples) * len(block.components[0]), -1))
-        # print(xl)
+
         # standardize features here <<<<<<<
         std = torch.std(xl, axis=0)
         std[np.isclose(std, 0)] = 1
@@ -677,13 +642,13 @@ def compute_rhoi_pca(
             components=[],
             samples=Labels(
                 ["pca"],
-                np.asarray(
+                torch.tensor(
                     [i for i in range(len(block.properties))]
                 ).reshape(-1, 1),
             ),
             properties=Labels(
                 ["pca"],
-                np.asarray(
+                torch.tensor(
                     [i for i in range(vh[retained].T.shape[1])]
                 ).reshape(-1, 1),
             ),
@@ -704,13 +669,13 @@ def get_pca_tmap(rhoi, pca_vh_all):
             components=[],
             samples=Labels(
                 ["pca"],
-                np.asarray(
+                torch.tensor(
                     [i for i in range(len(block.properties))]
                 ).reshape(-1, 1),
             ),
             properties=Labels(
                 ["pca"],
-                np.asarray([i for i in range(vt.shape[-1])]).reshape(
+                torch.tensor([i for i in range(vt.shape[-1])]).reshape(
                     -1, 1
                 ),
             ),
@@ -738,7 +703,7 @@ def apply_pca(rhoi, pca_tmap):
             samples=block.samples,
             properties=Labels(
                 ["pca"],
-                np.asarray(
+                torch.tensor(
                     [i for i in range(xl_pca.shape[-1])]
                 ).reshape(-1, 1),
             ),
@@ -760,9 +725,8 @@ def _pca(feat, npca: Union[float, None] = 0.95, slice_samples: Optional[int] = N
     feat_pca = apply_pca(feat, feat_projection)
     return feat_pca
 
-
 def drop_blocks_L(tmap, lcut):
-    ls_drop = np.arange(lcut + 1, max(tmap.keys["spherical_harmonics_l"]) + 1)
-    mask = np.isin(tmap.keys["spherical_harmonics_l"], ls_drop)
+    ls_drop = torch.arange(lcut + 1, max(tmap.keys["spherical_harmonics_l"]) + 1)
+    mask = torch.isin(tmap.keys["spherical_harmonics_l"], ls_drop)
     keys = Labels(tmap.keys.names, tmap.keys.values[mask])
-    return operations.drop_blocks(tmap, keys)
+    return mts.drop_blocks(tmap, keys)
