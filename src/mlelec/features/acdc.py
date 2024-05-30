@@ -287,7 +287,6 @@ def twocenter_features_periodic_NH(
     single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
 ) -> TensorMap:
     from collections import defaultdict
-    print('i am here ')
     if device is None or device == "cpu":
         mts_tblock = TensorBlock
         mts_tmap = TensorMap
@@ -625,21 +624,20 @@ def compute_features(dataset: PySCFPeriodicDataset,
         hypers_pair = hypers_atom
     return_rho0ij = kwargs.get("return_rho0ij", False)
     
-    now = time.time()
+    # now = time.time()
     rhoij = pair_features(dataset.structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
                           kmesh = dataset.kmesh, device = device, lcut = lcut, return_rho0ij = return_rho0ij)  
-    print(f'pair in {now-time.time()}')
+    # print(f'pair in {now-time.time()}')
     now = time.time()
     if both_centers and not return_rho0ij:
         NU = 3
     else:
         NU = 2
-    rhonui = single_center_features(dataset.structures, hypers_atom, order_nu = NU, lcut = lcut, device = device,
-                                    feature_names = rhoij.property_names)
-    print(f'atom in {now-time.time()}')
+    rhonui = single_center_features(dataset.structures, hypers_atom, order_nu = NU, lcut = lcut, device = device, feature_names = rhoij.property_names)
+    # print(f'atom in {now-time.time()}')
     now = time.time()
     hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs)
-    print(f'symm in {now-time.time()}')
+    # print(f'symm in {now-time.time()}')
     return hfeat
 
 

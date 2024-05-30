@@ -17,6 +17,17 @@ def fix_gij(rho0_ij):
     - Sort samples
     - Add species_neighbor to properties
     """
+    key_names = rho0_ij.keys.names
+    lname = "spherical_harmonics_l"
+    if lname not in key_names:
+        if "o3_lambda" in key_names:
+            lname = "o3_lambda"
+            key_names[key_names.index(lname)] = "spherical_harmonics_l"
+        else:
+            raise ValueError("Key does not contain 'o3_lambda' or 'spherical_harmonics_l'")
+    l0block = rho0_ij.block({lname:0})
+    b0samples = l0block.samples
+    # tot = b0samples.values.tolist()
     blocks = []
     for key, block in rho0_ij.items():
         try:
@@ -26,40 +37,24 @@ def fix_gij(rho0_ij):
                 neigh_species = key["species_atom_2"] # OLD - rascaline
             except:
                 raise ValueError("Key does not contain 'second_atom_type' or 'species_atom_2'")
-        bprops = np.concatenate(
-            (
-                np.array([[neigh_species]] * len(block.properties.values)),
-                block.properties.values,
-            ),
+        bprops = np.concatenate(( np.array([[neigh_species]] * len(block.properties.values)),
+                block.properties.values,),
             axis=1,
         )
         properties = Labels(["species_neighbor_1"] + block.properties.names, bprops)
-        try:
-            L = key["o3_lambda"]
-            lname = "o3_lambda"
-        except:
-            try:
-                L = key["spherical_harmonics_l"]
-                lname = "spherical_harmonics_l"
-            except:
-                raise ValueError("Key does not contain 'o3_lambda' or 'spherical_harmonics_l'")
+        L = key[lname]
         if L != 0:
-            val = list(key.values)
-            val[key.names.index(lname)] = 0
-            key_copy = Labels(key.names, np.asarray(val).reshape(1, -1))
-
-            bsamples = rho0_ij.block(key_copy).samples
             bvalues = np.zeros(
-                (bsamples.values.shape[0], block.values.shape[1], block.values.shape[2])
+                (b0samples.values.shape[0], block.values.shape[1], block.values.shape[2])
             )
-            tot = [list(l) for l in np.asarray(bsamples.values)]
-            bsam = np.asarray(block.samples.values)
-            idx = [tot.index(list(b)) for b in bsam]
+            bsam = block.samples#.tolist()
+            _, m1,m2 = bsam.intersection_and_mapping(b0samples)
 
-            bvalues[idx] = block.values
+            # idx = [tot.index(b) for b in bsam]
+            bvalues[m2!=-1] = block.values
             block = TensorBlock(
                 values=bvalues,
-                samples=bsamples,
+                samples=b0samples,
                 components=block.components,
                 properties=properties,
             )
@@ -70,9 +65,10 @@ def fix_gij(rho0_ij):
                 components=block.components,
                 properties=properties,
             )
-        block = metatensor.sort_block(block)  # sort block samples
+        # block = metatensor.sort_block(block)  # sort block samples
         blocks.append(block)
-    return TensorMap(rho0_ij.keys, blocks)
+    # return TensorMap(rho0_ij.keys, blocks)
+    return metatensor.sort(TensorMap(rho0_ij.keys, blocks))
 
 def _remove_suffix(names, new_suffix=""):
     suffix = re.compile("_[0-9]?$")
