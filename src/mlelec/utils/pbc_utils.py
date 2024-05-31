@@ -711,8 +711,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
                 i_start += orbs_tot[ai]
 
     tmap = block_builder.build()
-    from metatensor import sort
-    tmap = sort(tmap.to(arrays='numpy')).to(arrays='torch')
+    #tmap = sort(tmap.to(arrays='numpy')).to(arrays='torch')
     return tmap
 
 
@@ -902,7 +901,8 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
             # if bt_is_minus_1 and i == j:
                 # kpts = kpts[kpts_idx[-1][ifr]]
 
-            Ts = torch.from_numpy(b.samples.values[idx, 3:6]).to(kpts)
+            Ts = b.samples.values[idx, 3:6].to(kpts)
+            # Ts = torch.from_numpy(b.samples.values[idx, 3:6]).to(kpts)
             phase[kl][ifr,i,j] = torch.exp(2j*np.pi*torch.einsum('ka,Ta->kT', kpts, Ts))
     return phase, indices, kpts_idx
 

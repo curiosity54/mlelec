@@ -12,7 +12,7 @@ from rascaline.torch import SphericalExpansionByPair as PairExpansion
 
 import metatensor.torch as mts
 from metatensor.torch import TensorMap, TensorBlock, Labels
-
+import metatensor # FIXME: remove once the sort bug is solved 
 
 from mlelec.features.acdc_utils import (
     acdc_standardize_keys,
@@ -51,7 +51,7 @@ def single_center_features(
         from mlelec.utils.symmetry import ClebschGordanReal
 
         L = max(lcut, hypers["max_angular"])
-        cg = ClebschGordanReal(lmax=L, device=device)
+        cg = ClebschGordanReal(lmax = L, device = device)
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
@@ -179,8 +179,9 @@ def pair_features(
 
         sample_labels = torch.tensor(sample_labels)
         
-        blocks.append(
-            mts.sort_block(TensorBlock(
+        # FIXME: hack to sort the block while waiting for the metatensor.torch.sort to be fixed
+
+        torch_block = TensorBlock(
                 values = block.values[value_indices],
                 samples = Labels(
                     block.samples.names + ['sign'],
@@ -188,9 +189,23 @@ def pair_features(
                 ),
                 components = block.components,
                 properties = block.properties,
-            ), axes = 'samples')
-        )
-        # print(blocks[-1].values.shape, '2')
+            )
+        
+        from mlelec.utils.metatensor_utils import sort_block_hack
+        blocks.append(sort_block_hack(torch_block))
+        
+        # blocks.append(
+        #     mts.sort_block(TensorBlock(
+        #         values = block.values[value_indices],
+        #         samples = Labels(
+        #             block.samples.names + ['sign'],
+        #             sample_labels,
+        #         ),
+        #         components = block.components,
+        #         properties = block.properties,
+        #     ), axes = 'samples')
+        # )
+
     rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
     
     if isinstance(order_nu, list):
@@ -199,7 +214,7 @@ def pair_features(
         ), "specify order_nu as [nu_i, nu_j] for correlation orders for i and j respectively"
         order_nu_i, order_nu_j = order_nu
     else:
-        assert isinstance(order_nu, int), "specify order_nu as int or list of 2 ints"
+        assert isinstance(order_nu, int), f"order_nu = {order_nu}. Specify order_nu as int or list of 2 ints"
         order_nu_i = order_nu
 
 ###------ removed only for BENZENE TEST -------------
@@ -325,7 +340,7 @@ def twocenter_features_periodic_NH(
                      -1: defaultdict(lambda: torch.zeros(block_values.shape[1:]))}
 
             for idx, AijTs in enumerate(samplecopy):
-                A, i, j, Tx, Ty, Tz, sign = AijTs
+                A, i, j, Tx, Ty, Tz, sign = AijTs.tolist()
 
                 if sign == 1:   
                     f_ijT[1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
@@ -334,12 +349,16 @@ def twocenter_features_periodic_NH(
                     f_ijT[1][A, j, i, Tx, Ty, Tz] += block_values[idx]     
                     f_ijT[-1][A, j, i, Tx, Ty, Tz] -= block_values[idx]     
 
+            # for I in f_ijT[1]:
+                # print(f_ijT[1][I].norm().item())
+
             samplelist = samplecopy[idx_ij]
-            samples_plus1 = samplelist[:,:-1].clone()
-            samples_minus1 = samplelist[:,:-1].clone()
+            print(list(f_ijT[1].keys())[0], samplelist[0])
+            samples_plus1 = samplelist[:,:-1] #.clone()
+            samples_minus1 = samplelist[:,:-1] #.clone()
             values_plus1 = []
             values_minus1 = []
-            [(values_plus1.append(f_ijT[1][tuple(AijT)]),values_minus1.append(f_ijT[-1][tuple(AijT)]))  for AijT in samplelist[:,:-1]]
+            [(values_plus1.append(f_ijT[1][tuple(AijT)]), values_minus1.append(f_ijT[-1][tuple(AijT)]))  for AijT in samplelist[:,:-1].tolist()]
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
@@ -542,14 +561,14 @@ def compute_features(dataset: PySCFPeriodicDataset,
     rhoij = pair_features(dataset.structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
                           kmesh = dataset.kmesh, device = device, lcut = lcut, return_rho0ij = return_rho0ij)  
     # print(f'pair in {now-time.time()}')
-    now = time.time()
     if both_centers and not return_rho0ij:
         NU = 3
     else:
         NU = 2
     rhonui = single_center_features(dataset.structures, hypers_atom, order_nu = NU, lcut = lcut, device = device, feature_names = rhoij.property_names)
+
+    # return rhonui, rhoij
     # print(f'atom in {now-time.time()}')
-    now = time.time()
     hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs)
     # print(f'symm in {now-time.time()}')
     return hfeat

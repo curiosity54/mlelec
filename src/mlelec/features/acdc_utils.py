@@ -5,12 +5,13 @@ import torch
 import metatensor.torch as mts
 from metatensor.torch import Labels, TensorBlock, TensorMap
 
+from mlelec.utils.metatensor_utils import sort_block_hack, sort_hack
+
 from itertools import product
 
 from typing import List, Optional, Union
 
 from mlelec.utils.symmetry import ClebschGordanReal
-from tqdm.notebook import tqdm  # <<< change this
 
 def fix_gij(rho0_ij):
     """
@@ -65,7 +66,8 @@ def fix_gij(rho0_ij):
                 properties = properties,
             )
         blocks.append(block)
-    return mts.sort(TensorMap(rho0_ij.keys, blocks))
+    return sort_hack(TensorMap(rho0_ij.keys, blocks)) # FIXME
+    # return mts.sort(TensorMap(rho0_ij.keys, blocks))
 
 def _remove_suffix(names, new_suffix=""):
     suffix = re.compile("_[0-9]?$")
@@ -263,13 +265,15 @@ def cg_combine(
     l_sigma_nu = ["spherical_harmonics_l", "inversion_sigma", "order_nu"]
 
     for index_a, block_a in x_a.items():
-        block_a = mts.sort_block(block_a, axes="samples")
+        block_a = sort_block_hack(block_a, axes="samples") # FIXME
+        # block_a = mts.sort_block(block_a, axes="samples") 
         lam_a, sigma_a, order_a = [index_a[label] for label in l_sigma_nu]
         properties_a = block_a.properties  # pre-extract this block as accessing a c property has a non-zero cost
         samples_a = block_a.samples
 
         for index_b, block_b in x_b.items():
-            block_b = mts.sort_block(block_b, axes="samples")
+            block_b = sort_block_hack(block_b, axes="samples") # FIXME
+            # block_b = mts.sort_block(block_b, axes="samples")
             lam_b, sigma_b, order_b = [index_b[label] for label in l_sigma_nu]
             properties_b = block_b.properties
             samples_b = block_b.samples

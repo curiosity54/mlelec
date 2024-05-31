@@ -8,8 +8,9 @@ from mlelec.utils.twocenter_utils import (
     _to_uncoupled_basis,
     _to_matrix,
 )
-from metatensor import Labels, TensorMap, TensorBlock
-import metatensor
+
+import metatensor.torch as mts
+from metatensor.torch import Labels, TensorMap, TensorBlock
 import mlelec.metrics as mlmetrics
 from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
@@ -544,8 +545,8 @@ class LinearModelPeriodic(nn.Module):
                 featnorm = torch.linalg.norm(feat.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
-                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (
+
+                assert torch.all(block.samples.values == feat.samples.values[:, :6]), (
                     k,
                     block.samples.values.shape,
                     feat.samples.values.shape,
@@ -563,7 +564,7 @@ class LinearModelPeriodic(nn.Module):
                 )
             else:
                 # raise NotImplementedError
-                pred_blocks.append(metatensor.zeros_like_block(block))
+                pred_blocks.append(mts.zeros_like_block(block))
         pred_tmap = TensorMap(target_blocks.keys, pred_blocks)
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
@@ -755,8 +756,6 @@ class LinearModelPeriodic(nn.Module):
 
         pred_blocks = []
         for imdl, (key, tkey) in enumerate(zip(self.ridges, target_blocks.keys)):
-            # k = Labels( targetkeynames, values =np.array(eval(key)).reshape(1,-1))
-            # nsamples, ncomp, nprops = target.values.shape
             
             feat = map_targetkeys_to_featkeys(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
