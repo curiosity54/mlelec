@@ -120,6 +120,61 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
     else:
         return sum(losses)
 
+def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1):
+    """L2 loss function"""
+    import metatensor
+    
+    if isinstance(pred, torch.Tensor):
+        assert isinstance(target, torch.Tensor)
+        assert (
+            pred.shape == target.shape
+        ), "Prediction and target must have the same shape"
+        # target = target.to(pred)
+        return torch.sum((pred - target) ** 2)
+    
+    elif isinstance(pred, TensorMap):
+        assert isinstance(
+            target, TensorMap
+        ), "Target must be a TensorMap if prediction is a TensorMap"
+        losses = []
+        for key, block in pred.items():
+            targetblock = target.block(key)
+            # blockval = torch.linalg.norm(targetblock.values)
+            # if blockval > 1e-10::
+            assert (
+                    block.samples == targetblock.samples
+                ), "Prediction and target must have the same samples"
+            blockmean = 0 #lock.values
+            targetmean = 0 #targetblock.values
+
+            if key['block_type']==0 and key['L']==0 and key['n_i'] == key['n_j']:
+                blockmean = torch.mean(block.values)     
+                targetmean = torch.mean(targetblock.values)     
+
+
+            losses.append(torch.norm(block.values - blockmean - targetblock.values +targetmean)**2 / norm)
+                # losses.append(torch.sum((block.values - targetblock.values)*(block.values - targetblock.values).conj()))
+                # losses.append(torch.sum((block.values - targetblock.values) ** 2))
+            # else:
+                # losses.append(torch.tensor(0.0, requires_grad = True).to(block.values))
+
+        # losses_b = []
+        # for b in metatensor.pow(metatensor.subtract(pred, target), 2).blocks():
+        #     losses.append(torch.sum(b.values)/norm)
+        # return losses
+
+       
+    elif isinstance(pred, dict):
+        assert isinstance(target, dict), "Target must be a dictionary"
+        losses = []
+        for key, values in pred.items():
+            losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
+            norm)
+
+    if loss_per_block:
+        return losses, sum(losses)
+    else:
+        return sum(losses)
 
 
 def Eigval_loss(

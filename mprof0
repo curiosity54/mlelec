@@ -1,0 +1,92 @@
+Filename: /media/nigam/b5749eb7-d3f1-4495-adeb-2c318fb7d0de/MAC/mlelec/memscript.py
+
+Line #    Mem usage    Increment  Occurrences   Line Contents
+=============================================================
+     5    576.9 MiB    576.9 MiB           1   def TMap_bloch_sums(target_blocks, phase, indices):
+     6                                         
+     7    576.9 MiB      0.0 MiB           1       _Hk = {}
+     8    576.9 MiB      0.0 MiB           1       _Hk0 = {}
+     9    576.9 MiB      0.0 MiB          28       for k, b in target_blocks.items():
+    10                                         
+    11                                                 # LabelValues to tuple
+    12    576.9 MiB      0.0 MiB          27           kl = tuple(k.values.tolist())
+    13                                         
+    14                                                 # Block type
+    15    576.9 MiB      0.0 MiB          27           bt = kl[0]
+    16                                         
+    17                                                 # define dummy key pointing to block type 1 when block type is zero
+    18    576.9 MiB      0.0 MiB          27           if bt == 0:
+    19    576.9 MiB      0.0 MiB           9               _kl = (1, *kl[1:])
+    20                                                 else:
+    21    576.9 MiB      0.0 MiB          18               _kl = kl
+    22                                         
+    23    576.9 MiB      0.0 MiB          27           if _kl not in _Hk:
+    24    576.9 MiB      0.0 MiB          18               _Hk[_kl] = {}
+    25                                         
+    26                                                 # Loop through the unique (ifr, i, j) triplets
+    27    576.9 MiB      0.0 MiB          27           b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
+    28    576.9 MiB      0.0 MiB         315           for I, (ifr, i, j) in enumerate(phase[kl]):
+    29                                                     
+    30    576.9 MiB      0.0 MiB         288               idx = indices[kl][ifr,i,j]
+    31    576.9 MiB      0.0 MiB         288               values = b_values[idx]
+    32    576.9 MiB      0.0 MiB         288               vshape = values.shape
+    33    576.9 MiB      0.0 MiB         288               pshape = phase[kl][ifr, i, j].shape
+    34                                         
+    35                                                     # equivalent to torch.einsum('Tmnv,kT->kmnv', values.to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j]), but faster
+    36    576.9 MiB      0.0 MiB         288               contraction = (phase[kl][ifr, i, j]@values.reshape(vshape[0], -1)).reshape(pshape[0], *vshape[1:])
+    37                                         
+    38    576.9 MiB      0.0 MiB         288               if bt != 0:
+    39                                                         # block type not zero: create dictionary element
+    40    576.9 MiB      0.0 MiB         216                   if (ifr, i, j) in _Hk[_kl]:
+    41    576.9 MiB      0.0 MiB          72                       _Hk[_kl][ifr, i, j] += contraction
+    42                                                         else:
+    43    576.9 MiB      0.0 MiB         144                       _Hk[_kl][ifr, i, j] = contraction
+    44                                                     else:
+    45                                                         # block type zero
+    46    576.9 MiB      0.0 MiB          72                   if (ifr, i, j) in _Hk[_kl]:
+    47                                                             # if the corresponding bt = +1 element exists, sum to it the bt=0 contribution
+    48                                                             _Hk[_kl][ifr, i, j] += contraction*np.sqrt(2)
+    49                                                         else:
+    50                                                             # The corresponding bt = +1 element does not exist. Create the dictionary element
+    51    576.9 MiB      0.0 MiB          72                       _Hk[_kl][ifr, i, j] = contraction*np.sqrt(2)
+    52                                                             
+    53                                             # Now store in a tensormap
+    54    576.9 MiB      0.0 MiB           1       _k_target_blocks = []
+    55    576.9 MiB      0.0 MiB           1       keys = []
+    56    576.9 MiB      0.0 MiB          19       for kl in _Hk:
+    57                                         
+    58    576.9 MiB      0.0 MiB          18           same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+    59                                         
+    60    576.9 MiB      0.0 MiB          18           values = []
+    61    576.9 MiB      0.0 MiB          18           samples = []
+    62                                                 
+    63    576.9 MiB      0.0 MiB         234           for ifr, i, j in sorted(_Hk[kl]):
+    64                                                     
+    65                                                     # skip when same orbitals, atoms, and block type == -1
+    66                                                     # print(kl[0], '|', kl[2], kl[3], kl[5], kl[6],'|',ifr,i,j)
+    67                                                     # if not (same_orbitals and (i == j) and (kl[0] == -1)):
+    68                                                         # if kl[0] == -1:
+    69                                                         #     print(kl[2], kl[5], kl[3], kl[6],ifr,i,j)
+    70                                                         # Fill values and samples
+    71    576.9 MiB      0.0 MiB         216                   values.append(_Hk[kl][ifr, i, j])
+    72    576.9 MiB      0.0 MiB       14472                   samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+    73                                                     
+    74    576.9 MiB      0.0 MiB          18           values = torch.concatenate(values)
+    75    576.9 MiB      0.0 MiB          18           _, n_mi, n_mj, _ = values.shape
+    76    576.9 MiB      0.0 MiB          18           samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], np.array(samples))
+    77    576.9 MiB      0.0 MiB          18           components = [Labels(['m_i'], np.arange(-n_mi//2+1, n_mi//2+1).reshape(-1,1)), Labels(['m_j'], np.arange(-n_mj//2+1, n_mj//2+1).reshape(-1, 1))]
+    78                                                 
+    79    576.9 MiB      0.0 MiB          36           _k_target_blocks.append(
+    80    576.9 MiB      0.0 MiB          36               TensorBlock(
+    81    576.9 MiB      0.0 MiB          18                   samples = samples,
+    82    576.9 MiB      0.0 MiB          18                   components = components,
+    83    576.9 MiB      0.0 MiB          18                   properties = dummy_prop,
+    84    576.9 MiB      0.0 MiB          18                   values = values
+    85                                                     )
+    86                                                 )
+    87                                                 
+    88    576.9 MiB      0.0 MiB          18           keys.append(list(kl))
+    89                                         
+    90    576.9 MiB      0.0 MiB           1       _k_target_blocks = TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], np.array(keys)), _k_target_blocks)
+    91                                         
+    92    576.9 MiB      0.0 MiB           1       return _k_target_blocks
