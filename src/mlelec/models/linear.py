@@ -692,9 +692,10 @@ class LinearModelPeriodic(nn.Module):
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 nsamples, ncomp, _ = block.values.shape
 
+
                 # print(_match_feature_and_target_samples(block, feat))
                 feat = _match_feature_and_target_samples(block, feat, return_idx=True)
-                assert np.all(block.samples.values == feat.samples.values[:, :6]), (_match_feature_and_target_samples(block, feat))
+                assert torch.all(block.samples.values == feat.samples.values[:, :6]), (_match_feature_and_target_samples(block, feat))
 
                 x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))).cpu().numpy())
                 y = ((block.values.reshape(block.values.shape[0] * block.values.shape[1], -1)).cpu().numpy())
