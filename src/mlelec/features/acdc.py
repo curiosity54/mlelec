@@ -149,9 +149,9 @@ def pair_features(
         sample_labels = []
         value_indices = []
 
-        negative_list = []
+        # negative_list = []
         for isample, sample in enumerate(block.samples):
-            ifr, i, j, x, y, z = [sample[lab] for lab in ['structure', 'center', 'neighbor', 'cell_shift_a', 'cell_shift_b', 'cell_shift_c']]
+            ifr, i, j, x, y, z = sample.values[:6] # [sample[lab] for lab in ['structure', 'center', 'neighbor', 'cell_shift_a', 'cell_shift_b', 'cell_shift_c']]
             same_atoms = i == j
             is_central_cell = x == 0 and y == 0 and z == 0
             
@@ -167,10 +167,11 @@ def pair_features(
                         continue
                     
                     sample_labels.append([ifr, j, i, x, y, z, -1])
-                    negative_list.append([j, i, -x, -y, -z])
+                    # negative_list.append([j, i, -x, -y, -z])
 
-                    neg_label = Labels(["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                                       values = torch.tensor([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                    # neg_label = Labels(["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                                    #    values = torch.tensor([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                    neg_label = torch.tensor([ifr, j, i, -x, -y, -z])
                     mappedidx = block.samples.position(neg_label)
                     
                     assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
@@ -339,26 +340,24 @@ def twocenter_features_periodic_NH(
             f_ijT = {1: defaultdict(lambda: torch.zeros(block_values.shape[1:])), 
                      -1: defaultdict(lambda: torch.zeros(block_values.shape[1:]))}
 
-            for idx, AijTs in enumerate(samplecopy):
-                A, i, j, Tx, Ty, Tz, sign = AijTs.tolist()
+            for idx, AijTs in enumerate(samplecopy.tolist()):
+                A, i, j, Tx, Ty, Tz, sign = AijTs
 
+                bv = block_values[idx]
                 if sign == 1:   
-                    f_ijT[1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
-                    f_ijT[-1][A, i, j, Tx, Ty, Tz] += block_values[idx] 
+                    f_ijT[1][A, i, j, Tx, Ty, Tz] += bv
+                    f_ijT[-1][A, i, j, Tx, Ty, Tz] += bv
                 else:
-                    f_ijT[1][A, j, i, Tx, Ty, Tz] += block_values[idx]     
-                    f_ijT[-1][A, j, i, Tx, Ty, Tz] -= block_values[idx]     
+                    f_ijT[1][A, j, i, Tx, Ty, Tz] += bv
+                    f_ijT[-1][A, j, i, Tx, Ty, Tz] -= bv
 
             # for I in f_ijT[1]:
                 # print(f_ijT[1][I].norm().item())
 
-            samplelist = samplecopy[idx_ij]
-            print(list(f_ijT[1].keys())[0], samplelist[0])
-            samples_plus1 = samplelist[:,:-1] #.clone()
-            samples_minus1 = samplelist[:,:-1] #.clone()
+            samplelist = samplecopy[idx_ij][:,:-1]
             values_plus1 = []
             values_minus1 = []
-            [(values_plus1.append(f_ijT[1][tuple(AijT)]), values_minus1.append(f_ijT[-1][tuple(AijT)]))  for AijT in samplelist[:,:-1].tolist()]
+            [(values_plus1.append(f_ijT[1][tuple(AijT)]), values_minus1.append(f_ijT[-1][tuple(AijT)]))  for AijT in samplelist.tolist()]
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
@@ -367,7 +366,7 @@ def twocenter_features_periodic_NH(
                 TensorBlock(
                     samples = Labels(
                         names = b.samples.names[:-1],
-                        values = samples_plus1,
+                        values = samplelist,
                     ),
                     components = b.components,
                     properties = b.properties,
@@ -378,7 +377,7 @@ def twocenter_features_periodic_NH(
                 TensorBlock(
                     samples = Labels(
                         names = b.samples.names[:-1],
-                        values = samples_minus1,
+                        values = samplelist,
                     ),
                     components = b.components,
                     properties = b.properties,
