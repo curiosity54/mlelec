@@ -582,11 +582,12 @@ class LinearModelPeriodic(nn.Module):
             # blockval = torch.linalg.norm(block.values)
             if True:
                 # if blockval > 1e-10:
-                feat = map_targetkeys_to_featkeys(features, k)
+                # feat = map_targetkeys_to_featkeys(features, k)
 
                 # sample_names = block.samples.names
 
-                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
+                # TODO: why is this necessary sometimes?
+                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
 
                 # featnorm = torch.linalg.norm(feat.values)
                 nsamples, ncomp, _ = feat.values.shape
