@@ -202,7 +202,7 @@ def Eigval_loss(
     pred: torch.tensor, target: torch.tensor, overlap: Optional[torch.tensor] = None
 ):
     """Loss function for eigenvalues"""
-    return torch.sum((pred - target) ** 2)
+    return torch.sum((pred - target - (pred.mean() - target.mean())) ** 2)
 
 
 def Custom_loss():
