@@ -873,9 +873,10 @@ class PySCFPeriodicDataset(Dataset):
         elif (fock_kspace is None) and (fock_realspace is not None):
             self.fock_realspace = self._set_matrices_realspace(fock_realspace)
             if not self._ismolecule:
-                self.fock_kspace = self.bloch_sum(fock_realspace)
+                self.fock_kspace = self.bloch_sum(fock_realspace, is_tensor = False)
         elif (fock_kspace is None) and (fock_realspace is None):
-            raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
+            warnings.warn("Target not provided. ARE YOU DUMB OR WHAT???????? Get your life together you complete piece of crap. ")
+            # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
         elif (fock_kspace is not None) and (fock_realspace is not None):
             raise NotImplementedError("TBI: check consistency.")
         else:
@@ -888,7 +889,7 @@ class PySCFPeriodicDataset(Dataset):
          # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
         elif (overlap_kspace is None) and (overlap_realspace is not None):
             self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
-            self.overlap_kspace = self.bloch_sum(overlap_realspace)
+            self.overlap_kspace = self.bloch_sum(overlap_realspace, is_tensor = False)
         elif (overlap_kspace is None) and (overlap_realspace is None):
             warnings.warn("Overlap matrices not provided")
             self.overlap_realspace = None
@@ -981,28 +982,37 @@ class PySCFPeriodicDataset(Dataset):
         # Here, only the genuine data given by the DFT code should be used 
         raise NotImplementedError("This must happen when the targets are computed!")
 
-    def bloch_sum(self, matrices_realspace):
+    def bloch_sum(self, matrices_realspace, is_tensor = True):
         # TODO: make sense of the 1/sqrt(N) factor multiplying the sum. Is it really necessary?
         #       how do calculations with different kmesh compare with one another (same unit cell)
         from mlelec.utils.pbc_utils import inverse_fourier_transform
 
         matrices_kspace = []
 
-        if isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
+        if is_tensor:
+        # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
+            for ifr, H in enumerate(matrices_realspace):
+                if H != {}:
+                    H_T = torch.stack(list(H.values()))
+                    T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
+                    k = torch.from_numpy(self.kpts_rel[ifr])
+                    matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
+                else:
+                    matrices_kspace.append(None) # FIXME: not the best way to handle this situation
+
+        elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
             for ifr, H in enumerate(matrices_realspace):
                 H_T = torch.from_numpy(np.array(list(H.values())))
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
                 k = torch.from_numpy(self.kpts_rel[ifr])
                 matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
                 
-        elif isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
-            for ifr, H in enumerate(matrices_realspace):
-                H_T = torch.stack(list(H.values()))
-                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
-                k = torch.from_numpy(self.kpts_rel[ifr])
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
-
+        
         return matrices_kspace
+
+    # def baseline_with_nsc_fock(self):
+    #     for cell in self.cells:
+
 
     def __len__(self):
         return self.nstructs
