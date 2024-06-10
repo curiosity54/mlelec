@@ -25,8 +25,8 @@ def get_targets(dataset: PySCFPeriodicDataset,
     # coupled_blocks = mts.sort(coupled_blocks)
 
     # TODO: for now, HACK
-    blocks = sort_hack(blocks)
-    coupled_blocks = sort_hack(coupled_blocks)
+    blocks = sort_hack(blocks).to(device)
+    coupled_blocks = sort_hack(coupled_blocks).to(device)
 
     # for k, b in blocks.items():
 

@@ -188,7 +188,7 @@ def sample_atom_pair(block_a, block_b, is_mp = False):
             idx = [idx for idx, tup in enumerate(samples_a) if tup[0] == samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["neighbor"]][0]
             center_slice.append(idx)
             smp_b += 1
-        center_slice = np.asarray(center_slice)
+        center_slice = torch.tensor(center_slice)
         return center_slice
     
     else:
@@ -201,7 +201,7 @@ def sample_atom_pair(block_a, block_b, is_mp = False):
                     smp_a += 1
             neighbor_slice.append(smp_a)
             smp_b += 1
-        neighbor_slice = np.asarray(neighbor_slice)
+        neighbor_slice = torch.tensor(neighbor_slice)
         return neighbor_slice    
 
 # Serious TODO: Cleanup please FIXME
@@ -215,10 +215,14 @@ def cg_combine(
     other_keys_match=None,
     mp=False,
     device=None,
+    diagonal_radial_tensor=False
 ):
     """
     modified cg_combine from acdc_mini.py to add the MP contraction, that contracts over NOT the center but the neighbor yielding |rho_j> |g_ij>, can be merged
     """
+
+    x_a = x_a.to(device = device)
+    x_b = x_b.to(device = device)
 
     # determines the cutoff in the new features
     lmax_a = max(x_a.keys["spherical_harmonics_l"])
@@ -316,19 +320,19 @@ def cg_combine(
             # determines the properties that are in the select list
             sel_feats = []
             sel_idx = []
-            sel_feats = np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
+            sel_feats = torch.cartesian_prod(torch.arange(len(properties_a)), torch.arange(len(properties_b))) #np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
 
             prop_ids_a = []
             prop_ids_b = []
 
             for f_a in properties_a:
-                prop_ids_a.append(tuple(f_a) + (lam_a,))
+                prop_ids_a.append(list(f_a) + [lam_a])
             for f_b in properties_b:
-                prop_ids_b.append(tuple(f_b) + (lam_b,))
+                prop_ids_b.append(list(f_b) + [lam_b])
             
-            prop_ids_a = np.asarray(prop_ids_a)
-            prop_ids_b = np.asarray(prop_ids_b)
-            sel_idx = np.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
+            prop_ids_a = torch.tensor(prop_ids_a)
+            prop_ids_b = torch.tensor(prop_ids_b)
+            sel_idx = torch.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
             
             if len(sel_feats) == 0:
                 continue
@@ -385,16 +389,16 @@ def cg_combine(
             continue  # skips empty blocks
         nz_idx.append(KEY)
         block_data = torch.cat(X_blocks[KEY], dim=-1)
-        sph_components = Labels(["spherical_harmonics_m"], torch.arange(-L, L + 1).reshape(-1, 1))
+        sph_components = Labels(["spherical_harmonics_m"], torch.arange(-L, L + 1).reshape(-1, 1)).to(device = device)
         newblock = TensorBlock(
             values = block_data,
-            samples = X_samples[KEY],
+            samples = X_samples[KEY].to(device = device),
             components = [sph_components],
-            properties = Labels(feature_names, torch.from_numpy(np.vstack(X_idx[KEY]))))
-
+            properties = Labels(feature_names, torch.vstack(X_idx[KEY])).to(device = device) #torch.from_numpy(np.vstack(X_idx[KEY]))))
+        )
         nz_blk.append(newblock)
 
-    X = TensorMap(Labels(["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS, torch.tensor(nz_idx)), nz_blk)
+    X = TensorMap(Labels(["order_nu", "inversion_sigma", "spherical_harmonics_l"] + OTHER_KEYS, torch.tensor(nz_idx)).to(device = device), nz_blk)
     return X
 
 def cg_increment(

@@ -10,13 +10,15 @@ from typing import Dict
 
 
 class TensorBuilder:
-    def __init__(self, key_names, sample_names, component_names, property_names):
+    def __init__(self, key_names, sample_names, component_names, property_names, device = 'cpu'):
         self._key_names = key_names
         self.blocks = {}
 
         self._sample_names = sample_names
         self._component_names = component_names
         self._property_names = property_names
+
+        self.device = device
 
     def add_block(
         self, key, gradient_samples=None, *, samples=None, components, properties=None
@@ -51,26 +53,26 @@ class TensorBuilder:
         if properties is not None:
             if isinstance(properties, torch.ScriptObject):
                 if properties._type().name() == "Labels":
-                    properties = properties.view(dtype = torch.int32).reshape(properties.shape[0], -1)
+                    properties = properties.view(dtype = torch.int32).reshape(properties.shape[0], -1)    
             elif isinstance(properties, np.ndarray):
                 properties = torch.from_numpy(properties)
-            elif isinstance(properties, properties):
+            elif isinstance(properties, list):
                 properties = torch.tensor(list)
 
             properties = Labels(self._property_names, properties)
 
         if properties is not None:
-            block = TensorBuilderPerSamples(properties, components, self._sample_names, gradient_samples)
+            block = TensorBuilderPerSamples(properties, components, self._sample_names, gradient_samples, device = self.device)
 
         if samples is not None:
-            block = TensorBuilderPerProperties(samples, components, self._property_names, gradient_samples)
+            block = TensorBuilderPerProperties(samples, components, self._property_names, gradient_samples, device = self.device)
 
         self.blocks[key] = block
         return block
 
     def build(self):
 
-        keys = Labels(self._key_names, torch.tensor(list(self.blocks.keys()), dtype = torch.int32))
+        keys = Labels(self._key_names, torch.tensor(list(self.blocks.keys()), dtype = torch.int32)).to(device = self.device)
 
         blocks = []
         for block in self.blocks.values():
@@ -89,7 +91,7 @@ class TensorBuilder:
 
 
 class TensorBuilderPerSamples:
-    def __init__(self, properties, components, sample_names, gradient_samples=None):
+    def __init__(self, properties, components, sample_names, gradient_samples=None, device = 'cpu'):
 
         assert isinstance(properties, torch.ScriptObject) and properties._type().name() == "Labels"
         assert all([(isinstance(component, torch.ScriptObject) and component._type().name() == "Labels") for component in components])
@@ -104,12 +106,13 @@ class TensorBuilderPerSamples:
 
         self._data = []
         self._gradient_data = []
+        self.device = device
 
     def add_samples(self, labels, data, gradient=None):
 
         if not isinstance(data, torch.Tensor):
             if isinstance(data, np.ndarray):
-                data = torch.from_numpy(data)
+                data = torch.from_numpy(data).to(device=self.device)
             assert isinstance(data, torch.Tensor), "Data must be numpy.ndarray or torch.tensor."
         assert data.shape[-1] == self._properties.values.shape[0], "The property dimension of data does not match."
         
@@ -117,16 +120,16 @@ class TensorBuilderPerSamples:
             assert data.shape[i + 1] == self._components[i].values.shape[0], f"The {i}-th component dimension of data does not match."
 
         if isinstance(labels, np.ndarray):
-            labels = torch.from_numpy(labels).to(dtype = torch.int32)
+            labels = torch.from_numpy(labels).to(dtype = torch.int32, device = self.device)
         elif isinstance(labels, list):
-            labels = torch.tensor(labels, dtype = torch.int32)
+            labels = torch.tensor(labels, dtype = torch.int32, device = self.device)
 
         if len(data.shape) == 2:
             data = data.reshape(1, data.shape[0], data.shape[1])
         assert data.shape[0] == labels.shape[0], ("data.shape[0]", data.shape[0], "labelsshape", labels.shape[0])
 
         self._samples.append(labels)
-        self._data.append(data)
+        self._data.append(data.to(device = self.device))
 
         if gradient is not None:
             raise (Exception("Gradient data not implemented for BlockBuilderSamples"))
@@ -134,10 +137,10 @@ class TensorBuilderPerSamples:
     def build(self):
         samples = Labels(self._sample_names, torch.vstack(self._samples))
         block = TensorBlock(
-            values = torch.cat(self._data, axis=0),
-            samples = samples,
-            components = self._components,
-            properties = self._properties,
+            values = torch.cat(self._data, axis=0).to(device = self.device),
+            samples = samples.to(device = self.device),
+            components = [c.to(device = self.device) for c in self._components],
+            properties = self._properties.to(device = self.device),
         )
 
         if self._gradient_samples is not None:
@@ -151,7 +154,7 @@ class TensorBuilderPerSamples:
 
 
 class TensorBuilderPerProperties:
-    def __init__(self, samples, components, property_names, gradient_samples=None):
+    def __init__(self, samples, components, property_names, gradient_samples=None, device='cpu'):
         assert isinstance(samples, torch.ScriptObject)
         # assert isinstance(samples, Labels)
         assert all([isinstance(component, torch.ScriptObject) for component in components])
@@ -167,6 +170,8 @@ class TensorBuilderPerProperties:
 
         self._data = []
         self._gradient_data = []
+
+        self.device = device
 
     def add_properties(self, labels, data, gradient = None):
 
@@ -199,10 +204,10 @@ class TensorBuilderPerProperties:
     def build(self):
         properties = Labels(self._property_names, torch.vstack(self._properties))
         block = TensorBlock(
-            values = torch.cat(self._data, dim = 2),
-            samples = self._samples,
-            components = self._components,
-            properties = properties,
+            values = torch.cat(self._data, dim = 2).to(device = self.device),
+            samples = self._samples.to(device = self.device),
+            components = [c.to(device = self.device) for c in self._components],
+            properties = properties.to(device = self.device),
         )
 
         if self._gradient_samples is not None:
@@ -246,10 +251,10 @@ def sort_block_hack(block, axes = 'samples'):
     device = block.device.type
     nontorch_blocks = metatensor.sort_block(
         metatensor.TensorBlock(
-                values = block.values.numpy(),
-                samples = metatensor.Labels(block.samples.names, block.samples.values.numpy()),
-                components = [metatensor.Labels(c.names, c.values.numpy()) for c in block.components],
-                properties = metatensor.Labels(block.properties.names, block.properties.values.numpy())), 
+                values = block.values.cpu().numpy(),
+                samples = metatensor.Labels(block.samples.names, block.samples.values.cpu().numpy()),
+                components = [metatensor.Labels(c.names, c.values.cpu().numpy()) for c in block.components],
+                properties = metatensor.Labels(block.properties.names, block.properties.values.cpu().numpy())), 
                 axes = axes)
         
     
@@ -269,11 +274,11 @@ def sort_hack(tensormap, axes = 'all'):
     blocks = []
     for k, block in tensormap.items():
         blocks.append(metatensor.TensorBlock(
-                values = block.values.numpy(),
-                samples = metatensor.Labels(block.samples.names, block.samples.values.numpy()),
-                components = [metatensor.Labels(c.names, c.values.numpy()) for c in block.components],
-                properties = metatensor.Labels(block.properties.names, block.properties.values.numpy())))
-    new_keys = metatensor.Labels(tensormap.keys.names, tensormap.keys.values.numpy())
+                values = block.values.cpu().numpy(),
+                samples = metatensor.Labels(block.samples.names, block.samples.values.cpu().numpy()),
+                components = [metatensor.Labels(c.names, c.values.cpu().numpy()) for c in block.components],
+                properties = metatensor.Labels(block.properties.names, block.properties.values.cpu().numpy())))
+    new_keys = metatensor.Labels(tensormap.keys.names, tensormap.keys.values.cpu().numpy())
     new_map = metatensor.TensorMap(new_keys, blocks)
     
     new_map = metatensor.sort(new_map, axes = axes)

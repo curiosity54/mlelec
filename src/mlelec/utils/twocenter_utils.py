@@ -809,15 +809,13 @@ def _to_coupled_basis(
 
             new_block = block_builder.add_block(
                 key=block_idx,
-                properties=np.asarray([[0]], dtype=np.int32),
+                properties=torch.tensor([[0]], dtype=torch.int32),
                 components=[_components_idx(L).reshape(-1, 1)],
             )
 
             new_block.add_samples(
-                labels=np.asarray(block.samples.values).reshape(
-                    block.samples.values.shape[0], -1
-                ),
-                data=torch.moveaxis(coupled[L], -1, -2),
+                labels = block.samples.values.reshape(block.samples.values.shape[0], -1),
+                data = torch.moveaxis(coupled[L], -1, -2),
             )
 
     return block_builder.build()
@@ -845,6 +843,7 @@ def _to_uncoupled_basis(
         blocks.sample_names,
         [["m_i"], ["m_j"]],
         ["dummy"],
+        device = device
     )
     for idx, block in blocks.items():
         block_type = idx["block_type"]
@@ -884,11 +883,11 @@ def _to_uncoupled_basis(
 
         new_block = block_builder.add_block(
             key=block_idx,
-            properties=np.asarray([[0]], dtype=np.int32),
+            properties=torch.tensor([[0]], dtype = torch.int32),
             components=[_components_idx(li), _components_idx(lj)],
         )
         new_block.add_samples(
-            labels=np.asarray(block.samples.values).reshape(
+            labels = block.samples.values.reshape(
                 block.samples.values.shape[0], -1
             ),
             data=torch.moveaxis(decoupled, 1, -1),

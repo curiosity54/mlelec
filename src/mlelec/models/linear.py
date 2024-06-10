@@ -536,8 +536,8 @@ class LinearModelPeriodic(nn.Module):
         for k, block in target_blocks.items():
             # print(k)
             blockval = torch.linalg.norm(block.values)
-            # if True:
-            if blockval > 1e-10:
+            if True:
+            # if blockval > 1e-10:
                 sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
                 # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
@@ -788,17 +788,17 @@ def _match_feature_and_target_samples(target_block, feat_block, return_idx = Fal
     intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
     
     if not return_idx:
-        idx1 = np.where(idx1 == -1)
-        idx2 = np.where(idx2 == -1)
-        if np.prod(np.shape(idx1)) > 0 and np.prod(np.shape(idx2)) == 0:
+        idx1 = torch.where(idx1 == -1)
+        idx2 = torch.where(idx2 == -1)
+        if np.prod(idx1.shape) > 0 and np.prod(idx2.shape) == 0:
             return feat_block.samples.values[idx1]
-        elif np.prod(np.shape(idx2)) > 0 and np.prod(np.shape(idx1)) == 0:
+        elif np.prod(idx2.shape) > 0 and np.prod(idx1.shape) == 0:
             return target_block.samples.values[idx2]
         else:
             return feat_block.samples.values[idx1], target_block.samples.values[idx2]
     else:
-        idx1 = np.where(idx1 != -1)
-        idx2 = np.where(idx2 != -1)
+        idx1 = torch.where(idx1 != -1)
+        idx2 = torch.where(idx2 != -1)
         assert len(idx1) == len(idx2)
         return TensorBlock(values = feat_block.values[idx1],
                            samples = intersection,

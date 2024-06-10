@@ -89,6 +89,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
         sample_names,
         component_names,
         property_names,
+        device = device
     )
 
     if cutoff is None:

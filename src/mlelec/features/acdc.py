@@ -276,7 +276,7 @@ def pair_features(
         return rhonu_nupij
 
 def twocenter_features_periodic_NH(
-    single_center: TensorMap, pair: TensorMap, all_pairs = False, device= None
+    single_center: TensorMap, pair: TensorMap, all_pairs = False, device = 'cpu'
 ) -> TensorMap:
     from collections import defaultdict
 
@@ -293,17 +293,17 @@ def twocenter_features_periodic_NH(
             samples_array = b.samples
         else:
             samples_array = b.samples.values
-            samples_array = np.hstack([samples_array, samples_array[:, -1:]])
+            samples_array = torch.hstack([samples_array, samples_array[:, -1:]])
         blocks.append(
             TensorBlock(
                 samples = Labels(
                     names = b.samples.names + ["neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                    values = torch.from_numpy(np.pad(samples_array, ((0, 0), (0, 3)))),
+                    values = torch.nn.functional.pad(samples_array, (0, 3, 0, 0)),
                 ),
                 components = b.components,
                 properties = b.properties,
                 values = b.values,
-            )
+            ).to(device = device)
         )
 
     for k, b in pair.items():
@@ -329,7 +329,7 @@ def twocenter_features_periodic_NH(
                 different_atoms = (atom_i < atom_j)
                 avoid_double_counting_atoms = atom_i <= atom_j
 
-            idx_ij = np.where(positive_sign & ((cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
+            idx_ij = torch.where(positive_sign & ((cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
 
             if len(idx_ij) == 0:
                 continue
@@ -337,8 +337,8 @@ def twocenter_features_periodic_NH(
             samplecopy = b.samples.values[:, :]
             block_values = b.values
 
-            f_ijT = {1: defaultdict(lambda: torch.zeros(block_values.shape[1:])), 
-                     -1: defaultdict(lambda: torch.zeros(block_values.shape[1:]))}
+            f_ijT = {1: defaultdict(lambda: torch.zeros(block_values.shape[1:], device = device)), 
+                     -1: defaultdict(lambda: torch.zeros(block_values.shape[1:], device = device))}
 
             for idx, AijTs in enumerate(samplecopy.tolist()):
                 A, i, j, Tx, Ty, Tz, sign = AijTs
@@ -392,13 +392,13 @@ def twocenter_features_periodic_NH(
                 values = b.values, 
                 components = b.components,
                 properties = b.properties,
-                samples = Labels(b.samples.names[:-1], b.samples.values[:,:-1])))
+                samples = Labels(b.samples.names[:-1], b.samples.values[:,:-1])).to(device = device))
 
     return TensorMap(
         keys = Labels(
             names = pair.keys.names + ["block_type"],
             values = torch.tensor(keys),
-        ),
+        ).to(device = device),
         blocks = blocks,
     )
 
@@ -568,7 +568,7 @@ def compute_features(dataset: PySCFPeriodicDataset,
 
     # return rhonui, rhoij
     # print(f'atom in {now-time.time()}')
-    hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs)
+    hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs, device = device)
     # print(f'symm in {now-time.time()}')
     return hfeat
 

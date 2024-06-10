@@ -993,9 +993,9 @@ class PySCFPeriodicDataset(Dataset):
         # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
             for ifr, H in enumerate(matrices_realspace):
                 if H != {}:
-                    H_T = torch.stack(list(H.values()))
-                    T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
-                    k = torch.from_numpy(self.kpts_rel[ifr])
+                    H_T = torch.stack(list(H.values())).to(device = self.device)
+                    T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64)).to(device = self.device)
+                    k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
                     matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
                 else:
                     matrices_kspace.append(None) # FIXME: not the best way to handle this situation
