@@ -18,7 +18,7 @@ dependencies = [
     "scikit-learn",
     "numpy",
     "hickle",
-    "tqdm"
+    "tqdm",
     "ase == 3.22.1"
 ]
 
