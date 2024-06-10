@@ -27,8 +27,7 @@ def fix_gij(rho0_ij):
             key_names[key_names.index(lname)] = "spherical_harmonics_l"
         else:
             raise ValueError("Key does not contain 'o3_lambda' or 'spherical_harmonics_l'")
-    l0block = rho0_ij.block({lname:0})
-    b0samples = l0block.samples
+    
     # tot = b0samples.values.tolist()
     blocks = []
     for key, block in rho0_ij.items():
@@ -47,6 +46,11 @@ def fix_gij(rho0_ij):
 
         L = key[lname]
         if L != 0:
+            keyvaluesl0 = list(key.values)
+            keyvaluesl0[key.names.index(lname)] = 0
+            key_l0 = Labels(key.names, torch.tensor(keyvaluesl0).reshape(1, -1))
+            l0block = rho0_ij.block(key_l0)
+            b0samples = l0block.samples
             bvalues = torch.zeros((b0samples.values.shape[0], block.values.shape[1], block.values.shape[2]))
             # bsam = 
             _, _, m2 = block.samples.intersection_and_mapping(b0samples)
