@@ -228,8 +228,9 @@ def pair_features(
 #################################################
 
     if rhonu_i is None:
+        lmax = hypers["max_angular"]
         rhonu_i = single_center_features(
-            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, device = device, kwargs=kwargs
+            frames, order_nu=order_nu_i, hypers=hypers, lcut=lmax, cg=cg, device = device, kwargs=kwargs
         )
     rhonu_ij = cg_combine(
         rhonu_i,

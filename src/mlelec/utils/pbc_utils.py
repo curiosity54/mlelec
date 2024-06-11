@@ -747,7 +747,15 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = T
 
     recon_Hk = {}
     for k, block in k_target_blocks.items():
-        bt, ai, ni, li, aj, nj, lj = k.values
+        # bt, ai, ni, li, aj, nj, lj = k.values
+        bt = k["block_type"]
+        ai = k["species_i"]
+        ni = k["n_i"]
+        li = k["l_i"]
+        aj = k["species_j"]
+        nj = k["n_j"]
+        lj = k["l_j"]
+
         different_orbitals = not (ni == nj and li == lj)
         orbs_i = orbs_mult[ai]
         orbs_j = orbs_mult[aj]
@@ -860,7 +868,7 @@ def tmap_to_dict(tmap):
     return temp
 
 #------------------------------------------------------
-
+#SHOULD WE BE DOING THIS WITH TORCH?  FIXME 
 def unique_Aij_block(block):
     Aij, inv = np.unique(block.samples.values[:, :3].tolist(), axis = 0, return_inverse = True)
     return Aij, inv
@@ -1043,6 +1051,107 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
         return Hk
 #------------------------------------------------------
 
+def TMap_bloch_sums_feat(target_blocks, phase, indices=None, kpts_idx=None, return_tensormap = False):
+    # from mlelec.utils.pbc_utils import unique_Aij_block
+    is_coupled = True
+    _Hk = {}
+    props = {}
+    for k, b in target_blocks.items():
+        # LabelValues to tuple
+        
+        kl = tuple(k.values.tolist())
+
+        # Block type
+        bt = kl[-1]
+        
+        # define dummy key pointing to block type 1 when block type is zero
+        factor = 1
+        if bt == 0:
+            _kl = (*kl[:-1], 1)
+            factor = np.sqrt(2)
+        else:
+            _kl = kl
+
+        if _kl not in _Hk:
+            _Hk[_kl] = {}
+            props[_kl] = b.properties
+        # Loop through the unique (ifr, i, j) triplets
+        b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
+
+        # If batching, we can't loop over phase keys anymore
+        ifrij, where_inv = unique_Aij_block(b)
+
+        for I, (ifr, i, j) in enumerate(ifrij): #enumerate(phase[kl]):
+            if (ifr, i, j) not in phase[kl]:
+                continue
+
+            idx = np.where(where_inv == I)[0]
+            values = b_values[idx]
+            vshape = values.shape
+            pshape = phase[kl][ifr, i, j].shape
+
+            # equivalent to torch.einsum('Tmnv,kT->kmnv', values.to(phase[kl][ifr, i, j]), phase[kl][ifr, i, j]), but faster
+            contraction = (phase[kl][ifr, i, j]@values.reshape(vshape[0], -1)).reshape(pshape[0], *vshape[1:])*factor
+
+            if bt != -1 or (bt == -1 and i != j): 
+
+                if (ifr, i, j) in _Hk[_kl]:
+                    _Hk[_kl][ifr, i, j] += contraction
+                else:
+                    _Hk[_kl][ifr, i, j] = contraction
+    if return_tensormap:
+        # Now store in a tensormap
+        _k_target_blocks = []
+        keys = []
+        count = 0
+        for kl in _Hk:
+
+            # same_orbitals = kl[2] == kl[5] and kl[3] == kl[6]
+            bt_is_minus_1 = kl[0] == -1
+
+            values = []
+            samples = []
+           
+            for ifr, i, j in sorted(_Hk[kl]):
+                    values.append(_Hk[kl][ifr, i, j])
+                    samples.extend([[ifr, i, j] + [ik] for ik in range(_Hk[kl][ifr, i, j].shape[0])])
+            
+            # if bt_is_minus_1:
+            #     count += 1
+
+            if values != []:
+                samples = Labels(['structure', 'center', 'neighbor', 'kpoint'], torch.tensor(samples))                
+                values = torch.concatenate(values)
+                
+                if is_coupled:
+                    n_M = values.shape[1]
+                    components = [Labels(['spherical_harmonics_m'], torch.arange(-n_M//2+1, n_M//2+1).reshape(-1,1))]
+               
+                
+                _k_target_blocks.append(
+                    TensorBlock(
+                        samples = samples,
+                        components = components,
+                        properties = props[kl],
+                        values = values
+                    )
+                )
+            
+                keys.append(list(kl))
+
+        _k_target_blocks = TensorMap(Labels(target_blocks.keys.names, torch.tensor(keys)), _k_target_blocks)
+            # ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j']        
+        _Hk = None
+        del _Hk
+
+        return _k_target_blocks
+    else:
+        Hk = {}
+        for k in _Hk:
+            Hk[k] = {}
+            for ifr, i, j in sorted(_Hk[k]):
+                Hk[k][ifr, i, j] = _Hk[k][ifr, i, j]
+        return Hk
 
 ######--------------- NEW/OLD - to discard or incorporate? --------------------------- ###########################
 

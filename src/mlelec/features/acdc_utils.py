@@ -52,7 +52,7 @@ def fix_gij(rho0_ij):
             l0block = rho0_ij.block(key_l0)
             b0samples = l0block.samples
             bvalues = torch.zeros((b0samples.values.shape[0], block.values.shape[1], block.values.shape[2]))
-            # bsam = 
+            # bsam = 8
             _, _, m2 = block.samples.intersection_and_mapping(b0samples)
 
             bvalues[m2!=-1] = block.values
