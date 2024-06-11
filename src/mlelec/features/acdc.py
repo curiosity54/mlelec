@@ -55,7 +55,8 @@ def single_center_features(
     rho_prev = rho1i
     # compute nu order feature recursively
     for _ in range(order_nu - 2):
-        rho_x = cg_increment(
+        # rho_x = cg_increment(
+        rho_x = cg_combine(
             rho_prev,
             rho1i,
             clebsch_gordan=cg,
@@ -67,7 +68,8 @@ def single_center_features(
             rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
         )
 
-    rho_x = cg_increment(
+    # rho_x = cg_increment(
+    rho_x = cg_combine(
         rho_prev,
         rho1i,
         clebsch_gordan=cg,
