@@ -740,6 +740,7 @@ class LinearModelPeriodic(nn.Module):
                 self.ridges.append(ridge)
                 if is_complex: 
                     pred2 = ridge_c.predict(x2)
+                    self.ridges.append(ridge_c)
                     pred_real = pred #pred[:nsamples * ncomp].reshape((nsamples, ncomp, 1))
                     pred_imag = pred2 #pred[nsamples * ncomp :].reshape((nsamples, ncomp, 1))
                     pred = pred_real + 1j * pred_imag
