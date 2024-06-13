@@ -56,6 +56,7 @@ class MoleculeDataset(Dataset):
         mol_name: Name of the molecule to load(chosen from the`precomputed_molecules`).
         frame_slice: Slice object to select a subset of frames.
         target: List of target names.
+        lb_target: List of large basis target names.
         use_precomputed: Flag to use precomputed data.
         aux: List of auxiliary data names.
         data_path: Path to the data directory.
@@ -75,9 +76,11 @@ class MoleculeDataset(Dataset):
         path: Optional[str] = None,
         mol_name: Union[precomputed_molecules, str] = "water_1000",
         frame_slice: slice = slice(None),
-        target: List[str] = ["fock"],  # TODO: list of targets
+        target: List[str] = ["fock"], 
+        lb_target: List[str] = None, 
         use_precomputed: bool = True,
         aux: Optional[List] = None,
+        # lb_aux: Optional[List] = None,
         data_path: Optional[str] = None,
         aux_path: Optional[str] = None,
         frames: Optional[List[ase.Atoms]] = None,
@@ -85,6 +88,7 @@ class MoleculeDataset(Dataset):
         aux_data: Optional[dict] = None,
         device: str = "cpu",
         basis: str = "sto-3g",
+        large_basis: str = "aug-cc-pvtz"
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
@@ -95,13 +99,16 @@ class MoleculeDataset(Dataset):
         self.frame_slice = frame_slice
         self.target_names = target
         self.basis = basis
+        self.large_target_names = lb_target
 
         self.target = {t: [] for t in self.target_names}
+        self.lb_target = {t: [] for t in self.large_target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
         if target_data is None:
             self.data_path = os.path.join(self.path, basis)
             self.aux_path = os.path.join(self.path, basis)
+            self.large_data_path = os.path.join(self.path, large_basis)
             # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
@@ -159,7 +166,6 @@ class MoleculeDataset(Dataset):
             )
 
     def load_target(self, target_data: Optional[dict] = None):
-        # TODO: ensure that all keys of self.target names are filled even if they are not provided in target_data
         if target_data is not None:
             for t in self.target_names:
                 self.target[t] = target_data[t].to(device=self.device)
@@ -170,22 +176,10 @@ class MoleculeDataset(Dataset):
                 self.target[t] = hickle.load(self.data_path + "/{}.hickle".format(t))[
                     self.frame_slice
                 ]
-                # os.join(self.aux_path, "{}.hickle".format(t))
-            # except Exception as e:
-            #     print(e)
-            #     print("Generating data")
-            #     from mlelec.data.pyscf_calculator import calculator
-
-            #     calc = calculator(
-            #         path=self.path,
-            #         mol_name=self.mol_name,
-            #         frame_slice=":",
-            #         target=self.target_names,
-            #     )
-            #     calc.calculate(basis_set=self.basis, verbose=1)
-            #     calc.save_results()
-            #     # raise FileNotFoundError("Required target not found at the given path")
-            #     # TODO: generate data instead?
+                
+    def load_lb_target(self):
+        for t in self.large_target_names:
+            self.lb_target[t] = hickle.load(self.large_data_path + "/{}.hickle".format(t))[self.frame_slice]
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:

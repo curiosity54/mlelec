@@ -35,7 +35,7 @@ def L2_loss(
             raise ValueError("All targets and predictions must be tensors.")
         loss_fn = torch.nn.functional.mse_loss
         loss = [loss_fn(targ, predic) for targ, predic in zip(target, pred)]
-        return torch.mean(torch.stack(loss))
+        return torch.sum(torch.stack(loss))
             
 
 
@@ -48,3 +48,10 @@ def Eigval_loss(
 
 def Custom_loss():
     pass
+
+def mse_qm7(frames, pred, target):
+    evanorm = []
+    for i in range(len(pred)):
+        evanorm.append((torch.linalg.norm(pred[i] - target[i]))**2/(frames[i].get_global_number_of_atoms()**2))
+    return torch.mean(torch.stack(evanorm))
+

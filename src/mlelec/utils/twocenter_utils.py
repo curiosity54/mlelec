@@ -170,7 +170,7 @@ def _orbs_offsets(orbs):
     return orbs_tot, orbs_offset
 
 
-def _atom_blocks_idx(index, frames, orbs_tot):
+def _atom_blocks_idx(index,frames, orbs_tot):
     """position of the hamiltonian subblocks for each atom in each frame"""
     if isinstance(frames, ase.Atoms):
         frames = [frames]

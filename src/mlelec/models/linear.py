@@ -302,7 +302,7 @@ class LinearTargetModel(nn.Module):
         self.recon = {}
 
         pred_blocks = []
-        self.ridges = []
+        self.ridges = {}
         # kernels = []
         for k, block in self.dataset.target_train.items():
             
@@ -347,7 +347,7 @@ class LinearTargetModel(nn.Module):
 
                 pred = ridge.predict(x)
 
-                self.ridges.append(ridge)
+                self.ridges[tuple(k)] = ridge
 
                 pred_blocks.append(
                     TensorBlock(
@@ -369,8 +369,8 @@ class LinearTargetModel(nn.Module):
                     )
                 )
         self.ridge_weights = {}  # Store weights after fit
-        for i, ridge in enumerate(self.ridges):
-            self.ridge_weights[str(tuple(self.dataset.target.block_keys[i]))] = ridge.coef_
+        for idx_key, ridge in self.ridges.items():
+            self.ridge_weights[str(idx_key)] = ridge.coef_
 
         pred_tmap = TensorMap(self.dataset.target_train.keys, pred_blocks)
         self.recon_blocks = pred_tmap  # return_matrix=return_matrix)
@@ -387,7 +387,7 @@ class LinearTargetModel(nn.Module):
         for imdl, tkey in enumerate(test_target.keys):
             target = test_target.block(tkey)
             nsamples, ncomp, nprops = target.values.shape
-
+            
             feat = map_targetkeys_to_featkeys(test_features, tkey)
             x = (
                 (
@@ -399,7 +399,7 @@ class LinearTargetModel(nn.Module):
                 .cpu()
                 .numpy()
             )
-            pred = self.ridges[imdl].predict(x)
+            pred = self.ridges[tuple(tkey.values)].predict(x)
             pred_blocks_test.append(
                 TensorBlock(
                     values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
