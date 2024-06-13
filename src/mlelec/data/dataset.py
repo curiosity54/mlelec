@@ -732,7 +732,7 @@ class PeriodicDataset(Dataset):
         return self.nstructs
 
 
-class PySCFPeriodicDataset(Dataset):
+class QMDataset(Dataset):
     # TODO: wrap with generic PeriodicDataset class (or lose PySCF in the class name)
     '''
     Class containing information about the quantum chemistry calculation and its results.

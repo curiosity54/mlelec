@@ -543,8 +543,8 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features
 
-from mlelec.data.dataset import PySCFPeriodicDataset
-def compute_features(dataset: PySCFPeriodicDataset,
+from mlelec.data.dataset import QMDataset
+def compute_features(dataset: QMDataset,
                      hypers_atom: dict,
                      lcut: int,
                      hypers_pair: Optional[dict] = None,

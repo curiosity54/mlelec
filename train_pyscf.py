@@ -12,7 +12,7 @@ torch.set_default_dtype(torch.float64) # <<< FIXME: a bug of torch requires it. 
 import metatensor 
 from metatensor import Labels, TensorBlock, TensorMap, load, slice as mts_slice 
 
-from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.data.dataset import QMDataset
 from mlelec.features.acdc import pair_features, single_center_features, twocenter_features_periodic_NH
 from mlelec.models.linear import LinearModelPeriodic
 from mlelec.metrics import L2_kspace_loss
@@ -133,7 +133,7 @@ for ifr in range(len(frames)):
         kfock[ifr][ik] = fix_orbital_order(k, frames[ifr], orbitals[ORBS]) #### TODO <<
         kover[ifr][ik] = fix_orbital_order(kover[ifr][ik], frames[ifr], orbitals[ORBS]) #### TODO <<
 
-dataset = PySCFPeriodicDataset(frames = frames, kmesh = kmesh, 
+dataset = QMDataset(frames = frames, kmesh = kmesh, 
                                fock_kspace = [kfock[ifr][:] for ifr in range(len(frames))], 
                                overlap_kspace = [kover[ifr][:] for ifr in range(len(frames))],
                                device = device, orbs = orbitals[ORBS], orbs_name = ORBS)

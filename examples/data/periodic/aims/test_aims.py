@@ -23,7 +23,7 @@ import numpy as np
 import torch 
 import metatensor 
 from metatensor import Labels, TensorBlock, TensorMap
-from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.data.dataset import QMDataset
 from mlelec.features.acdc import *
 from mlelec.features.acdc_utils import *    
 from ase.io import read
@@ -54,7 +54,7 @@ for f in frames:
     f.pbc = [True, True, True]
 
 
-dataset = PySCFPeriodicDataset(frames = frames[:5], kgrid=kmesh, matrices_kpoint = kfock[:5], target=["real_translation"] ,device = "cpu", orbs = orbitals[ORBS], orbs_name = ORBS) 
+dataset = QMDataset(frames = frames[:5], kgrid=kmesh, matrices_kpoint = kfock[:5], target=["real_translation"] ,device = "cpu", orbs = orbitals[ORBS], orbs_name = ORBS) 
 
 
 # +

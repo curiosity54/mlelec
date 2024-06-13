@@ -2,13 +2,13 @@ from typing import Optional, Union
 
 import metatensor.torch as mts
 
-from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.data.dataset import QMDataset
 from mlelec.utils.pbc_utils import matrix_to_blocks
 from mlelec.utils.twocenter_utils import _to_coupled_basis
 
 from mlelec.utils.metatensor_utils import sort_hack
 
-def get_targets(dataset: PySCFPeriodicDataset,
+def get_targets(dataset: QMDataset,
                 cutoff: Optional[Union[int,float,None]] = None, 
                 target: Optional[str] = 'fock', 
                 all_pairs: Optional[bool] = False, 

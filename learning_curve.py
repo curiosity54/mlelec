@@ -8,7 +8,7 @@ torch.set_default_dtype(torch.float64)
 import hickle
 
 from metatensor import Labels, TensorBlock, TensorMap
-from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.data.dataset import QMDataset
 from mlelec.utils.twocenter_utils import fix_orbital_order
 from pathlib import Path
 from mlelec.features.acdc import pair_features, single_center_features, twocenter_features_periodic_NH
@@ -94,7 +94,7 @@ for ifr in range(len(frames)):
         kfock[ifr][ik] = fix_orbital_order(k, frames[ifr], orbitals[ORBS]) 
         # kover[ifr][ik] = fix_orbital_order(kover[ifr][ik], frames[ifr], orbitals[ORBS]) 
 
-dataset = PySCFPeriodicDataset(frames = frames, kmesh = kmesh, fock_kspace = kfock, device = device, orbs = orbitals[ORBS])
+dataset = QMDataset(frames = frames, kmesh = kmesh, fock_kspace = kfock, device = device, orbs = orbitals[ORBS])
 
 
 cutoff = 6

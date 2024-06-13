@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 torch.set_default_dtype(torch.float64)
 
 from metatensor import Labels, TensorBlock, TensorMap
-from mlelec.data.dataset import PySCFPeriodicDataset
+from mlelec.data.dataset import QMDataset
 
 from mlelec.utils.plot_utils import print_matrix, matrix_norm, block_matrix_norm
 
@@ -114,7 +114,7 @@ frames = read(f'{data_dir}/wrapped_deepH_graphene.xyz', slice(START, STOP))
 rfock = [np.load(f"{data_dir}/{data_prefix}_{i}/realfock_{i}.npy", allow_pickle = True).item() for i in range(START, STOP)]
 rover = [np.load(f"{data_dir}/{data_prefix}_{i}/realoverlap_{i}.npy", allow_pickle = True).item() for i in range(START, STOP)]
 
-dataset = PySCFPeriodicDataset(frames = frames, 
+dataset = QMDataset(frames = frames, 
                                kmesh = kmesh, 
                                dimension = 2,
                                fock_realspace = rfock, 
