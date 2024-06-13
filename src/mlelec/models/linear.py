@@ -473,7 +473,7 @@ class LinearModelPeriodic(nn.Module):
             self.device = device
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
-
+        self.ridges = None
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
         for k in self.target_blocks.keys:

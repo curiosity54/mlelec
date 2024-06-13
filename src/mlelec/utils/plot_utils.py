@@ -127,7 +127,8 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
     target_ = np.array([torch.linalg.norm(b.values).item() for b in target_blocks])
     loss_ = np.array(
         [
-            (torch.linalg.norm(b.values - b1.values) ** 2).item()
+            (torch.linalg.norm(b.values - b1.values)).item()
+            # (torch.linalg.norm(b.values - b1.values) ** 2).item()
             for b, b1 in zip(target_blocks, pred_blocks)
         ]
     )
