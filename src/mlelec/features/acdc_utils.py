@@ -52,7 +52,7 @@ def fix_gij(rho0_ij):
             l0block = rho0_ij.block(key_l0)
             b0samples = l0block.samples
             bvalues = torch.zeros((b0samples.values.shape[0], block.values.shape[1], block.values.shape[2]))
-            # bsam = 
+            # bsam = 8
             _, _, m2 = block.samples.intersection_and_mapping(b0samples)
 
             bvalues[m2!=-1] = block.values
@@ -264,8 +264,14 @@ def cg_combine(
     # "x1 x2 x3 ; x1 x2 -> x1_a x2_a x3_a k_nu x1_b x2_b l_nu"
     if feature_names is None:
         NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
-        feature_names = (tuple(n + "_a" for n in x_a.property_names) + ("k_" + str(NU),) + tuple(n + "_b" for n in x_b.property_names) + ("l_" + str(NU),))
+        feature_names = ['species_neighbor_1', 'n_1']
+        for i in range(2, NU+1):
+            ## full tensor product of properties
+            feature_names.extend([f'k_{i}', f'species_neighbor_{i}', f'n_{i}', f'l_{i}'])
 
+        # NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
+        # feature_names = (tuple(n + "_a" for n in x_a.property_names) + ("k_" + str(NU),) + tuple(n + "_b" for n in x_b.property_names) + ("l_" + str(NU),))
+    # print(feature_names)
     X_idx = {}
     X_blocks = {}
     X_samples = {}
@@ -328,7 +334,7 @@ def cg_combine(
 
             prop_ids_a = []
             prop_ids_b = []
-
+            # prop_ids_a = 
             for f_a in properties_a:
                 prop_ids_a.append(list(f_a) + [lam_a])
             for f_b in properties_b:
@@ -384,6 +390,7 @@ def cg_combine(
                     X_blocks[KEY].append(one_shot_blocks)
 
     # turns data into sparse storage format (and dumps any empty block in the process)
+    # print("X_idx", X_idx)
     nz_idx = []
     nz_blk = []
     for KEY in X_blocks:
@@ -418,8 +425,7 @@ def cg_increment(
 ):
     """Specialized version of the CG product to perform iterations with nu=1 features"""
 
-    nu = x_nu.keys["order_nu"][0]
-
+    nu = x_nu.keys["order_nu"][0].item()
     feature_roots = _remove_suffix(x_1.block(0).properties.names)
     # if nu == 1:
     #     feature_names = (
@@ -429,14 +435,19 @@ def cg_increment(
     #         + ("l_2",)
     #     )
     # else:
-    feature_names = feature_names
+    # feature_names = feature_names
     if feature_names is None:
-        feature_names = (
-            tuple(x_nu.block(0).properties.names)
-            + ("k_" + str(nu + 1),)
-            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-            + ("l_" + str(nu + 1),)
-        )
+        feature_names = (tuple(x_nu.property_names)+
+                            ("k_" + str(nu + 1),)
+                            + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+                            + ("l_" + str(nu + 1),)
+                            )
+        # feature_names = (
+        #     tuple(x_nu.block(0).properties.names)
+        #     + ("k_" + str(nu + 1),)
+        #     + tuple(root + "_" + str(nu + 1) for root in feature_roots)
+        #     + ("l_" + str(nu + 1),)
+        # )
     return cg_combine(
         x_nu,
         x_1,

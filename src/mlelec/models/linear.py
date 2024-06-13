@@ -673,6 +673,7 @@ class LinearModelPeriodic(nn.Module):
         alpha=5e-9,
         cv=3,
     ) -> None:
+        is_complex = False
         if alphas is None:
             alphas = np.logspace(-18, 1, 35)
         from sklearn.linear_model import RidgeCV
@@ -696,10 +697,27 @@ class LinearModelPeriodic(nn.Module):
 
                 # print(_match_feature_and_target_samples(block, feat))
                 feat = _match_feature_and_target_samples(block, feat, return_idx=True)
-                assert torch.all(block.samples.values == feat.samples.values[:, :6]), (_match_feature_and_target_samples(block, feat))
+                assert torch.all(block.samples.values == feat.samples.values[:, :]), (_match_feature_and_target_samples(block, feat))
+                if feat.values.is_complex():
+                    is_complex = True
+                    x_real = feat.values.real
+                    x_imag = feat.values.imag
+                    y_real = block.values.real
+                    y_imag = block.values.imag
+                    # feat_ = torch.cat([feat.values.real, feat.values.imag]).type(torch.float64)
+                    # bval = torch.cat([block.values.real, block.values.imag]).type(torch.float64)
+                    feat_ = x_real
+                    bval = y_real
+                    feat__ = x_imag
+                    bval_ = y_imag
+                    x = feat_.reshape((feat_.shape[0] * feat_.shape[1], -1)).cpu().numpy()
+                    y = ((bval.reshape(bval.shape[0] * bval.shape[1], -1)).cpu().numpy())
+                    x2 = feat__.reshape((feat__.shape[0] * feat__.shape[1], -1)).cpu().numpy()
+                    y2 =((bval_.reshape(bval_.shape[0] * bval_.shape[1], -1)).cpu().numpy())
 
-                x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))).cpu().numpy())
-                y = ((block.values.reshape(block.values.shape[0] * block.values.shape[1], -1)).cpu().numpy())
+                else:
+                    x = feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1)).cpu().numpy()
+                    y = block.values.reshape(block.values.shape[0] * block.values.shape[1], -1).cpu().numpy()
 
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
@@ -707,17 +725,25 @@ class LinearModelPeriodic(nn.Module):
                     if nsamples > 2:
                         gscv = GridSearchCV(ridge, dict(alpha=alphas), cv=cv).fit(x, y)
                         alpha = gscv.best_params_["alpha"]
+                       
                     else:
                         alpha = alpha
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
                 else:
                     # warnings.warn("Using RidgeCV")
                     ridge = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x, y)
+                    if is_complex:
+                        ridge_c = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x2, y2)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
 
                 pred = ridge.predict(x)
                 self.ridges.append(ridge)
-
+                if is_complex: 
+                    pred2 = ridge_c.predict(x2)
+                    self.ridges.append(ridge_c)
+                    pred_real = pred #pred[:nsamples * ncomp].reshape((nsamples, ncomp, 1))
+                    pred_imag = pred2 #pred[nsamples * ncomp :].reshape((nsamples, ncomp, 1))
+                    pred = pred_real + 1j * pred_imag
                 pred_blocks.append(
                     TensorBlock(
                         values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
@@ -788,8 +814,8 @@ def _match_feature_and_target_samples(target_block, feat_block, return_idx = Fal
     intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
     
     if not return_idx:
-        idx1 = torch.where(idx1 == -1)
-        idx2 = torch.where(idx2 == -1)
+        idx1 = torch.where(idx1 == -1)[0]
+        idx2 = torch.where(idx2 == -1)[0]
         if np.prod(idx1.shape) > 0 and np.prod(idx2.shape) == 0:
             return feat_block.samples.values[idx1]
         elif np.prod(idx2.shape) > 0 and np.prod(idx1.shape) == 0:
