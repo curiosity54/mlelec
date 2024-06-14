@@ -121,7 +121,7 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
     else:
         return sum(losses)
 
-def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1, overlap = None):
+def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = None, overlap = None, return_delta = False):
     """L2 loss function"""
     
     if isinstance(pred, torch.Tensor):
@@ -137,11 +137,18 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
             assert isinstance(target, torch.ScriptObject) and target._type().name() == "TensorMap", "Target must be a TensorMap if prediction is a TensorMap"
 
         losses = []
+
+        if norm is None:
+            norm = 1/sum([o.values.norm().item()**2 for o in overlap.blocks()])
+        delta = torch.stack([torch.sum(norm*(t.values - p.values)*o.values) for p, t, o in zip(pred.blocks(), target.blocks(), overlap.blocks())]).sum().item()
+        # delta = 1
+
         for (k, p), t, o in zip(pred.items(), target.blocks(), overlap.blocks()):
 
-            assert p.samples == t.samples == o.samples, "Prediction and target must have the same samples"
+            # assert p.samples == t.samples == o.samples, "Prediction and target must have the same samples"
 
-            delta = torch.sum(0.5/norm*(t.values - p.values)*o.values)
+            # delta = torch.sum(norm*(t.values - p.values)*o.values)
+            # print(delta.item(), t.values.norm().item())
             losses.append(torch.norm(t.values - p.values - delta*o.values)**2)
        
     elif isinstance(pred, dict):
@@ -152,9 +159,15 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
             norm)
 
     if loss_per_block:
-        return losses, sum(losses)
+        if return_delta:
+            return losses, sum(losses).item(), delta
+        else:
+            return losses, sum(losses).item()
     else:
-        return sum(losses)
+        if return_delta:
+            return sum(losses), delta
+        else:
+            return sum(losses)
 
 # def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1, overlap = None):
 #     """L2 loss function"""
