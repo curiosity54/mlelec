@@ -988,6 +988,99 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
         )
         return block
 
+def map_targetkeys_to_featkeys_integrated(features, key, cell_shift=None, return_key=False):
+    try:
+        block_type = key["block_type"]
+        species_center = key["species_i"]
+        species_neighbor = key["species_j"]
+        L = key["L"]
+        inversion_sigma = key["inversion_sigma"]
+        # li = key["l_i"]
+        # lj = key["l_j"]
+        # ni = key["n_i"]
+        # nj = key["n_j"]
+    except Exception as e:
+        print(e)
+
+        # block_type, ai, ni, li, aj, nj, lj = key
+    # inversion_sigma = (-1) ** (li + lj + L)
+    if cell_shift is None:
+        if return_key:
+            return labels_where(
+                features.keys,
+                Labels(
+                    [
+                        "block_type",
+                        "spherical_harmonics_l",
+                        "inversion_sigma",
+                        "species_center",
+                        "species_neighbor",
+                    ],
+                    values = torch.tensor(
+                        [
+                            block_type,
+                            L,
+                            inversion_sigma,
+                            species_center,
+                            species_neighbor,
+                        ]
+                    ).reshape(1, -1),
+                ),
+            )
+        block = features.block(
+            dict(
+            block_type=block_type,
+            spherical_harmonics_l=L,
+            inversion_sigma=inversion_sigma,
+            species_center=species_center,
+            species_neighbor=species_neighbor,
+            )
+        )
+        return block
+    else:
+        assert isinstance(cell_shift, List)
+        assert len(cell_shift) == 3
+        cell_shift_a, cell_shift_b, cell_shift_c = cell_shift
+        if return_key:
+            return labels_where(
+                features.keys,
+                Labels(
+                    [
+                        "block_type",
+                        "spherical_harmonics_l",
+                        "inversion_sigma",
+                        "species_center",
+                        "species_neighbor",
+                        "cell_shift_a",
+                        "cell_shift_b",
+                        "cell_shift_c",
+                    ],
+                    values = torch.tensor(
+                        [
+                            block_type,
+                            L,
+                            inversion_sigma,
+                            species_center,
+                            species_neighbor,
+                            cell_shift_a,
+                            cell_shift_b,
+                            cell_shift_c,
+                        ]
+                    ).reshape(1, -1),
+                ),
+            )
+        block = features.block(
+            block_type=block_type,
+            spherical_harmonics_l=L,
+            inversion_sigma=inversion_sigma,
+            species_center=species_center,
+            species_neighbor=species_neighbor,
+            cell_shift_a=cell_shift_a,
+            cell_shift_b=cell_shift_b,
+            cell_shift_c=cell_shift_c,
+        )
+        return block
+
 
 def rotate_matrix(
     matrix, rotation_angles: Union[List, np.array, torch.tensor], frame, orbitals
