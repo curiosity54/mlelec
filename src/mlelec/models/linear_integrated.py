@@ -483,7 +483,7 @@ class LinearModelPeriodic(nn.Module):
                 bias = True
             blockval = torch.linalg.norm(b.values)
             nprop = b.values.shape[-1]
-            self.block_properties[k.values] = b.properties
+            self.block_properties[tuple(k.values.tolist())] = b.properties
             # if  blockval > 1e-10:
             if True:  # <<<<<<<<<<<<<<<<<<<<<
                 # feat = []
@@ -530,7 +530,7 @@ class LinearModelPeriodic(nn.Module):
                         values=pred,#.reshape((nsamples, ncomp, 1)),
                         samples=feat.samples,
                         components= block.components,
-                        properties=self.block_properties[k.values]#self.dummy_property,
+                        properties=self.block_properties[tuple(k.values.tolist())]#self.dummy_property,
                     )
                 )
             else:
