@@ -763,6 +763,17 @@ class QMDataset(Dataset):
         ismolecule=False,
     ):
     
+        for f in frames:
+            if dimension == 2:
+                f.pbc = [True, True, False]
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif dimension == 3:
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            else:
+                raise NotImplementedError('dimension must be 2 or 3')
+
         self.structures = frames
         self.frame_slice = frame_slice
         self.nstructs = len(frames)
