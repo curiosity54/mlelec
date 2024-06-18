@@ -1,8 +1,10 @@
 import numpy as np
+import torch
 import warnings
 from scipy.fft import fftn, ifftn
 from torch.fft import fftn as torch_fftn, ifftn as torch_ifftn
 from ase.units import Bohr
+import metatensor.torch as mts
 from metatensor.torch import Labels, TensorBlock, TensorMap
 from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.twocenter_utils import (
@@ -11,7 +13,6 @@ from mlelec.utils.twocenter_utils import (
     _orbs_offsets,
     _atom_blocks_idx,
 )
-import torch
 
 def inverse_bloch_sum(dataset, matrix, A, cutoff):
     dimension = dataset.dimension
@@ -272,7 +273,32 @@ def move_cell_shifts_to_keys(blocks):
                 
     return TensorMap(Labels(blocks.keys.names + ["cell_shift_a", "cell_shift_b", "cell_shift_c"], torch.tensor(out_block_keys)), out_blocks)
 
+def move_orbitals_to_keys(in_blocks, dummy_property = None):
+    if dummy_property is None: 
+        dummy_property = Labels(["dummy"], torch.tensor([[0]]))
 
+    blocks = []
+    keys = []
+    for k,b in in_blocks.items():
+        n1l1n2l2 = torch.unique(b.properties.values[:,:4], dim=0)#
+        block_view = b.properties.view(['n_i', 'l_i', 'n_j', 'l_j']).values
+        
+        for nlinlj in n1l1n2l2:
+            idx = torch.where(torch.all(torch.isclose(block_view, nlinlj), dim = 1))[0]
+            
+            keys.append(torch.hstack((k.values, torch.tensor(nlinlj))))
+            if len(idx):
+                blocks.append( TensorBlock(
+                            samples = b.samples,
+                            values = b.values[...,idx],
+                            components = b.components,
+                            properties = dummy_property
+                        )
+                )
+    keys = Labels(in_blocks.keys.names+['n_i', 'l_i', 'n_j', 'l_j'], torch.stack(keys))
+    # keys = block_type, species_i, species_j, L, sigma, n_i, l_i, n_j, l_j
+    tmap = TensorMap(keys, blocks)
+    return mts.permute_dimensions(tmap, axis='keys', dimensions_indexes = [0,1,5,6,2,7,8,3,4])
 
 def OLD_blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True):
     ## WARNING: currently 'detaching' values before filling in matrices, so DONT train on reconstructed matrices
@@ -676,9 +702,6 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
                         # add samples to the blocks when present
                         block = block_builder.blocks[key]
 
-                        # if block_type == 1:
-                        #     block_asym = block_builder.blocks[(-1,) + key[1:]]
-
                         if block_type == 1:
                             bplus = (value + value_ji) * ISQRT_2
                             bminus = (value - value_ji) * ISQRT_2
@@ -688,19 +711,13 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
                                 data=bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
                             )
 
-                            # Skip the Gamma point, bt=-1, i==j sample because 
-                            # it's zero [H(Gamma)_{i,i,phi,psi,-1}=0]
-                            if not same_atom_in_unit_cell: #(not (is_gamma_point and i == j)):
-                                block_asym = block_builder.blocks[(-1,) + key[1:]]
-                                block_asym.add_samples(
-                                    labels=[(A, i, j, ik)],
-                                    data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
-                                )
+                            block_asym = block_builder.blocks[(-1,) + key[1:]]
+                            block_asym.add_samples(
+                                labels=[(A, i, j, ik)],
+                                data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
+                            )
 
                         elif block_type == 2:
-                            # if i == 0 and j == 1 and ik == 0 and ni == 1 and li == 0 and nj == 2 and lj == 0:
-
-                            #     print(A, i, j, ik, value)
                             block.add_samples(
                                 labels=[(A, i, j, ik)],
                                 data=value.reshape(1, 2 * li + 1, 2 * lj + 1, 1),
@@ -717,7 +734,7 @@ def kmatrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, ta
     return tmap
 
 
-def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = True):
+def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = True, detach = False,):
     """
     k_target_blocks: UNCOUPLED blocks of H(k)
    
@@ -725,6 +742,12 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = T
     from mlelec.utils.pbc_utils import _orbs_offsets, _atom_blocks_idx
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    if "L" in k_target_blocks.keys.names:
+        from mlelec.utils.twocenter_utils import _to_uncoupled_basis
+        k_target_blocks = _to_uncoupled_basis(k_target_blocks)
+    if "l_i" not in k_target_blocks.keys.names:
+        k_target_blocks = move_orbitals_to_keys(k_target_blocks)
+    
     orbs_mult = {
         species: 
                 {tuple(k): v
@@ -769,7 +792,11 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = T
         phioffset = orbs_offset[(ai, ni, li)] 
         psioffset = orbs_offset[(aj, nj, lj)]
 
-        blockval_ = block.values[..., 0].clone()
+        if detach:
+            blockval_ = block.values[..., 0].clone().detach()
+        else:
+            blockval_ = block.values[..., 0].clone()
+
         for sample, blockval in zip(block.samples, blockval_):
 
             # blockval = blockval_[...,0].clone()
@@ -824,7 +851,7 @@ def kblocks_to_matrix(k_target_blocks, dataset, all_pairs = False, sort_orbs = T
                 #         bt0factor = 0.5
                 #----sorting ni,li,nj,lj---
 
-                blockval *= bt1factor*bt0factor
+                blockval = blockval * bt1factor*bt0factor
             
                 if bt == 1:
                     recon_Hk[A][ik][iphi_jpsi] += blockval
@@ -918,12 +945,12 @@ def precompute_phase(target_blocks, dataset, cutoff = np.inf):
 
 
 dummy_prop = Labels(['dummy'], torch.tensor([[0]]))
-def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_tensormap = False):
+def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_tensormap = True, use_dummy_prop = True):
 
     is_coupled = False
     if 'L' in target_blocks.keys.names:
         is_coupled = True
-
+    blockproperty = {}
     _Hk = {}
     for k, b in target_blocks.items():
         # LabelValues to tuple
@@ -939,10 +966,11 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
             factor = np.sqrt(2)
         else:
             _kl = kl
-
+        
+        blockproperty[_kl] = b.properties 
         if _kl not in _Hk:
             _Hk[_kl] = {}
-        
+            
         # Loop through the unique (ifr, i, j) triplets
         b_values = b.values.to(next(iter(next(iter(phase.values())).values())))
 
@@ -965,12 +993,12 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
 
             # if bt == 1 or bt == 2 or (bt == -1 and i != j):
 
-            if bt != -1 or (bt == -1 and i != j): 
+            # if bt != -1 or (bt == -1 and i != j): 
 
-                if (ifr, i, j) in _Hk[_kl]:
-                    _Hk[_kl][ifr, i, j] += contraction
-                else:
-                    _Hk[_kl][ifr, i, j] = contraction
+            if (ifr, i, j) in _Hk[_kl]:
+                _Hk[_kl][ifr, i, j] += contraction
+            else:
+                _Hk[_kl][ifr, i, j] = contraction
 
             # elif bt == 0:
             #     # block type zero
@@ -1029,7 +1057,7 @@ def TMap_bloch_sums(target_blocks, phase, indices=None, kpts_idx=None, return_te
                     TensorBlock(
                         samples = samples,
                         components = components,
-                        properties = dummy_prop,
+                        properties = blockproperty[kl],
                         values = values
                     )
                 )
@@ -1199,7 +1227,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
         #----sorting ni,li,nj,lj---
         if sort_orbs:
             fac=1 # sorted orbs - we only count everything once
-            if ai == aj and (ni ==nj and li == lj): #except these diag blocks
+            if ai == aj and (ni == nj and li == lj): #except these diag blocks
                 fac=2 #so we need to divide by 2 to avoic double count
         else: 
             # no sorting -->  we count everything twice

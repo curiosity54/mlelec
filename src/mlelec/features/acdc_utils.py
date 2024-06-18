@@ -40,8 +40,7 @@ def fix_gij(rho0_ij):
                 raise ValueError("Key does not contain 'second_atom_type' or 'species_atom_2'")
             
         # PAOLO: check it's correct
-        bprops = torch.cat([torch.from_numpy(np.asarray([[neigh_species]] * len(block.properties.values))),
-                            block.properties.values], dim = 1)
+        bprops = torch.cat([torch.from_numpy(np.asarray([[neigh_species]] * len(block.properties.values))), block.properties.values], dim = 1)
         properties = Labels(["species_neighbor_1"] + block.properties.names, bprops)
 
         L = key[lname]

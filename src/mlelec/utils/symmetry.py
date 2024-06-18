@@ -488,16 +488,20 @@ class ClebschGordanReal:
             # the L entries
             l1, l2 = ltuple[:2]
             # shape of the coupled matrix (last entry is the 2L+1 M terms)
+            # if lcomponents == {}:
+            #     print(f'here,{ltuple}')
+            #     continue
             shape = next(iter(lcomponents.values())).shape[:-1]
+            dtype_ = next(iter(lcomponents.values())).dtype
 
-            dec_term = torch.zeros(shape+ ( 2 * l1 + 1, 2 * l2 + 1),device=self.device)
+            dec_term = torch.zeros(shape+ ( 2 * l1 + 1, 2 * l2 + 1),device=self.device, dtype = dtype_)
             for L in range(max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1):
                 # supports missing L components, e.g. if they are zero because of symmetry
                 if L not in lcomponents:
                     continue
                 # decouples the L term into m1, m2 components
                 # a = torch.einsum('spM,mnM->spmn', lcomponents[L], self._cg[(l1, l2, L)])
-                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)], dims=([2],[2]))
+                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([2],[2]))
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}
             decoupled[ltuple[2:]][l2] = dec_term
@@ -505,7 +509,6 @@ class ClebschGordanReal:
         # rinse, repeat
         if iterate > 0:
             decoupled = self.decouple(decoupled, iterate - 1)
-
         # if we got a fully decoupled state, just return an array
         if ltuple[2:] == ():
             decoupled = next(iter(decoupled[()].values()))
