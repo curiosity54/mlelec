@@ -565,10 +565,10 @@ class LinearModelPeriodic(nn.Module):
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=pred.reshape((nsamples, ncomp, 1)),
+                        values=pred,#.reshape((nsamples, ncomp, 1)),
                         samples=block.samples,
                         components=block.components,
-                        properties=self.dummy_property,
+                        properties=self.block_properties[tuple(k.values.tolist())]#self.dummy_property,
                     )
                 )
             else:
