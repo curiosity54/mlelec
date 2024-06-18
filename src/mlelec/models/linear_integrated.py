@@ -590,37 +590,19 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             # blockval = torch.linalg.norm(block.values)
             if True:
-                # if blockval > 1e-10:
-                # feat = map_targetkeys_to_featkeys(features, k)
-
-                # sample_names = block.samples.names
-
-                # TODO: why is this necessary sometimes?
-                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
-
-                # featnorm = torch.linalg.norm(feat.values)
+                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys_integrated(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
                 nsamples, ncomp, _ = feat.values.shape
-                # nsamples, ncomp, nprops = feat.values.shape
-                # _,sidx = labels_where(feat.samples, Labels(sample_names, values = np.asarray(block.samples.values).reshape(-1,len(sample_names))), return_idx=True)
-                # assert np.all(block.samples.values == feat.samples.values[:, :6]), (
-                #     k,
-                #     block.samples.values.shape,
-                #     feat.samples.values.shape,
-                # )
                 pred = self.blockmodels[str(tuple(k))](feat.values)
-                # print(pred.shape, nsamples)
-
                 pred_blocks.append(
                     TensorBlock(
-                        values=pred.reshape((nsamples, ncomp, 1)),
+                        values=pred, #.reshape((nsamples, ncomp, 1)),
                         samples=feat.samples,
                         components=feat.components,
-                        properties=self.dummy_property,
+                        properties=self.block_properties[tuple(k.values.tolist())],
                     )
                 )
             else:
                 raise NotImplementedError
-                # pred_blocks.append(block.copy())
         pred_tmap = TensorMap(target_blocks.keys, pred_blocks)
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
