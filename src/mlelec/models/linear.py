@@ -70,11 +70,12 @@ class E3LayerNorm(nn.Module):
         self.bias = bias
 
         self.layersize = layersize
-        self.norm = nn.LayerNorm(self.layersize, eps = self.epsilon, device = self.device, elementwise_affine=True, bias = self.bias)
+        self.layer = nn.Linear(self.layersize, self.layersize, bias = self.bias)
+        # self.layersize, eps = self.epsilon, device = self.device, elementwise_affine=False, bias = self.bias)
 
     def forward(self, x):
-        assert len(x.shape) == 3
-        assert x.shape[2] == self.layersize
+        # assert len(x.shape) == 3
+        # assert x.shape[2] == self.layersize
         return self.norm(x)
 
 
@@ -89,7 +90,7 @@ class EquivariantNonLinearity(nn.Module):
         
         if norm:
             self.nn = [
-                nn.LayerNorm(layersize, device = self.device),
+                # nn.LayerNorm(layersize, device = self.device),
                 self.nonlinearity,
                 nn.LayerNorm(layersize, device = self.device)
             ]
