@@ -161,6 +161,10 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
 
     if return_ax:
         return fig, ax, ax_loss
+    
+def parity_plot(target, prediction):
+
+    pass
 
 
 from mlelec.data.pyscf_calculator import translation_vectors_for_kmesh

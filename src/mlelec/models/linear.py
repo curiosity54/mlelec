@@ -56,6 +56,27 @@ class NormLayer(nn.Module):
         norm_x = rescale(x, norm, new_norm)
         return norm
 
+class E3LayerNorm(nn.Module):
+    def __init__(self, layersize, epsilon = 1e-6, device = None, bias = False):
+        super().__init__()
+        
+        self.epsilon = epsilon
+        
+        if device is None:
+            self.device = 'cpu'
+        else:
+            self.device = device
+        
+        self.bias = bias
+
+        self.layersize = layersize
+        self.norm = nn.LayerNorm(self.layersize, eps = self.epsilon, device = self.device, elementwise_affine=True, bias = self.bias)
+
+    def forward(self, x):
+        assert len(x.shape) == 3
+        assert x.shape[2] == self.layersize
+        return self.norm(x)
+
 
 class EquivariantNonLinearity(nn.Module):
     def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, layersize = None, device=None):
@@ -68,10 +89,11 @@ class EquivariantNonLinearity(nn.Module):
         
         if norm:
             self.nn = [
-                nn.LayerNorm(layersize, device = self.device),
+                # nn.LayerNorm(layersize, device = self.device),
                 self.nonlinearity,
-                nn.LayerNorm(layersize, device = self.device)
+                # nn.LayerNorm(layersize, device = self.device)
             ]
+            self.norm = nn.LayerNorm(layersize, device = self.device, elementwise_affine = True, bias = False)
         else:
             self.nn = [self.nonlinearity]
 
@@ -83,7 +105,11 @@ class EquivariantNonLinearity(nn.Module):
 
         x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
         x_inv = self.nn(x_inv)
-        out = torch.einsum("if, imf->imf", x_inv, x) #/norm
+
+        try:
+            out = self.norm(torch.einsum("if, imf->imf", x_inv, x))
+        except:
+            out = torch.einsum("if, imf->imf", x_inv, x)
 
         return out
 
@@ -129,13 +155,21 @@ class MLP(nn.Module):
         bias: bool = False,
         device=None,
         apply_layer_norm = False, 
+        e3layernorm_size = None,
         # activation_with_linear = False,
     ):
         super().__init__()
 
         if nlayers == 0:
             # Purely linear model
-            self.mlp = [nn.Linear(nin, nout, bias=bias)]
+
+            if False: #e3layernorm_size is not None:
+                self.mlp = [
+                    E3LayerNorm(e3layernorm_size, device = device, bias = bias),
+                    nn.Linear(nin, nout, bias=bias)
+                    ]
+            else:
+                self.mlp = [nn.Linear(nin, nout, bias=bias)]
 
         else:
 
@@ -145,7 +179,13 @@ class MLP(nn.Module):
                 assert len(nhidden) == nlayers, "len(nhidden) must be equal to nlayers"
 
             # Input layer
-            self.mlp = [nn.Linear(nin, nhidden[0], bias = bias)]
+            if False: #e3layernorm_size is not None:
+                self.mlp = [
+                    E3LayerNorm(e3layernorm_size, device = device, bias = bias),
+                    nn.Linear(nin, nhidden[0], bias = bias)
+                    ]
+            else:
+                self.mlp = [nn.Linear(nin, nhidden[0], bias = bias)]
             
             # Hidden layers
             last_n = nhidden[0]
@@ -459,6 +499,7 @@ class LinearModelPeriodic(nn.Module):
         orbitals,
         device=None,
         apply_norm = False,
+        use_e3layernorm = False,
         **kwargs,
     ):
         super().__init__()
@@ -467,6 +508,7 @@ class LinearModelPeriodic(nn.Module):
         self.frames = frames
         self.orbitals = orbitals
         self.apply_norm = apply_norm
+        self.use_e3layernorm = use_e3layernorm
         if device is None:
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         else:
@@ -474,17 +516,29 @@ class LinearModelPeriodic(nn.Module):
         self.dummy_property = self.target_blocks[0].properties
         self._submodels(set_bias=kwargs.get("bias", False), **kwargs)
         self.ridges = None
+        self.scale_prediction = kwargs.get("scale_prediction", False)
+
     def _submodels(self, set_bias=False, **kwargs):
         self.blockmodels = {}
+
         for k in self.target_blocks.keys:
+            
             bias = False
             if k["L"] == 0 and set_bias:
                 bias = True
-            blockval = torch.linalg.norm(self.target_blocks[k].values)
+
+            # blockval = torch.linalg.norm(self.target_blocks[k].values)
+            
             # if  blockval > 1e-10:
             if True:  # <<<<<<<<<<<<<<<<<<<<<
 
                 feat = map_targetkeys_to_featkeys(self.feats, k)
+
+                # if self.use_e3layernorm:
+                #     e3layernorm_size = feat.values.shape[-1]
+                # else:
+                #     e3layernorm_size = None
+
                 self.blockmodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
                     nout=1,
@@ -492,8 +546,8 @@ class LinearModelPeriodic(nn.Module):
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
                     activation=kwargs.get("activation", None),
-                    # activation_with_linear=kwargs.get("activation_with_linear", False),
-                    apply_layer_norm=self.apply_norm,
+                    apply_layer_norm = self.apply_norm,
+                    # e3layernorm_size = e3layernorm_size,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
         self.model.to(self.device)
@@ -505,7 +559,11 @@ class LinearModelPeriodic(nn.Module):
 
         for k, block in self.target_blocks.items():
             # print(k)
-            blockval = torch.linalg.norm(block.values)
+            # blockval = torch.linalg.norm(block.values)
+            if self.scale_prediction:
+                blockstd = torch.std(self.target_blocks[k].values)
+            else:
+                blockstd = 1
             if True:
                 # if blockval > 1e-10:
                 # sample_names = block.samples.names
@@ -514,7 +572,7 @@ class LinearModelPeriodic(nn.Module):
 
                 # nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
-                pred = self.blockmodels[str(tuple(k))](feat.values)
+                pred = self.blockmodels[str(tuple(k))](feat.values) * blockstd
 
                 pred_blocks.append(
                     TensorBlock(
@@ -535,7 +593,11 @@ class LinearModelPeriodic(nn.Module):
         pred_blocks = []
         for k, block in target_blocks.items():
             # print(k)
-            blockval = torch.linalg.norm(block.values)
+            # blockval = torch.linalg.norm(block.values)
+            if self.scale_prediction:
+                blockstd = torch.std(self.target_blocks[k].values)
+            else:
+                blockstd = 1
             if True:
             # if blockval > 1e-10:
                 sample_names = block.samples.names
@@ -551,7 +613,7 @@ class LinearModelPeriodic(nn.Module):
                     block.samples.values.shape,
                     feat.samples.values.shape,
                 )
-                pred = self.blockmodels[str(tuple(k))](feat.values)
+                pred = self.blockmodels[str(tuple(k))](feat.values) * blockstd
                 # print(pred.shape, nsamples)
 
                 pred_blocks.append(
@@ -580,6 +642,10 @@ class LinearModelPeriodic(nn.Module):
         # for (k, block), feat in zip(target_blocks.items(), features.blocks()):
             # print(k)
             # blockval = torch.linalg.norm(block.values)
+            if self.scale_prediction:
+                blockstd = torch.std(self.target_blocks[k].values)
+            else:
+                blockstd = 1
             if True:
                 # if blockval > 1e-10:
                 # feat = map_targetkeys_to_featkeys(features, k)
@@ -598,7 +664,7 @@ class LinearModelPeriodic(nn.Module):
                 #     block.samples.values.shape,
                 #     feat.samples.values.shape,
                 # )
-                pred = self.blockmodels[str(tuple(k))](feat.values)
+                pred = self.blockmodels[str(tuple(k))](feat.values) * blockstd
                 # print(pred.shape, nsamples)
 
                 pred_blocks.append(
