@@ -56,7 +56,30 @@ class NormLayer(nn.Module):
         norm_x = rescale(x, norm, new_norm)
         return norm
 
+class E3LayerNorm(nn.Module):
+    def __init__(self, layersize, device = None, bias = False, epsilon = 1e-7):
+        super().__init__()
+        self.layersize = layersize
+        if device is None:
+            self.device = 'cpu'
+        else:
+            self.device = device        
+        self.bias = bias            # compute mean
+        self.epsilon = epsilon
+        self.alpha = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True) # parameter for mean
+        self.beta = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True)  # parameter for variance
+        # self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True) # parameter for global bias << BREAKS equivariance
 
+    def forward(self, x):
+        assert len(x.shape) == 3
+        assert x.shape[2] == self.layersize
+        if self.bias:
+            mean = torch.mean(x, dim = 2, keepdim = True)
+            x = x - self.alpha * mean
+        
+        var = torch.var(x,keepdim = True)
+        return self.beta * x / torch.sqrt(var +self.epsilon) #+ self.gamma.view(1,1,self.layersize)
+    
 class EquivariantNonLinearity(nn.Module):
     def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, layersize = None, device=None):
         super().__init__()
@@ -68,8 +91,9 @@ class EquivariantNonLinearity(nn.Module):
         
         if norm:
             self.nn = [
-                nn.LayerNorm(layersize, device = self.device),
+                # nn.LayerNorm(layersize, device = self.device),
                 self.nonlinearity,
+                
                 nn.LayerNorm(layersize, device = self.device)
             ]
         else:
