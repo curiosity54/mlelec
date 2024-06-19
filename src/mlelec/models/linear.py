@@ -77,24 +77,28 @@ class NormLayer(nn.Module):
 #         return self.layer(x)
 
 class E3LayerNorm(nn.Module):
-    def __init__(self, device = None, bias = False, epsilon = 1e-7):
+    def __init__(self, layersize, device = None, bias = False, epsilon = 1e-7):
         super().__init__()
+        self.layersize = layersize
         if device is None:
             self.device = 'cpu'
         else:
             self.device = device        
         self.bias = bias            # compute mean
         self.epsilon = epsilon
-        self.alpha = nn.Parameter(torch.ones(1, device = self.device), requires_grad=True) # parameter for mean
-        self.beta = nn.Parameter(torch.ones(1, device = self.device), requires_grad=True)  # parameter for variance
+        self.alpha = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True) # parameter for mean
+        self.beta = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True)  # parameter for variance
+        self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True).view(1,1,self.layersize) # parameter for global bias
+
     def forward(self, x):
         assert len(x.shape) == 3
+        assert x.shape[2] == self.layersize
         if self.bias:
             mean = torch.mean(x, dim = 2, keepdim = True)
             x = x - self.alpha * mean
         
         var = torch.var(x, keepdim = True)
-        return self.beta* x / torch.sqrt(var +self.epsilon)
+        return self.beta* x / torch.sqrt(var +self.epsilon) + self.gamma.view(1,1,self.layersize)
         
         # return self.layer(x)
 
