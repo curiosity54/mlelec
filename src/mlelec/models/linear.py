@@ -88,7 +88,7 @@ class E3LayerNorm(nn.Module):
         self.epsilon = epsilon
         self.alpha = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True) # parameter for mean
         self.beta = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True)  # parameter for variance
-        self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True).view(1,1,self.layersize) # parameter for global bias
+        # self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True) # parameter for global bias
 
     def forward(self, x):
         assert len(x.shape) == 3
@@ -98,9 +98,7 @@ class E3LayerNorm(nn.Module):
             x = x - self.alpha * mean
         
         var = torch.var(x, keepdim = True)
-        return self.beta* x / torch.sqrt(var +self.epsilon) + self.gamma.view(1,1,self.layersize)
-        
-        # return self.layer(x)
+        return self.beta * x / torch.sqrt(var +self.epsilon) #+ self.gamma.view(1,1,self.layersize)
 
 class EquivariantNonLinearity(nn.Module):
     def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, layersize = None, device=None):
