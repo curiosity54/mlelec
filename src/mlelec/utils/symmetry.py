@@ -209,7 +209,10 @@ def xyz_to_spherical(data, axes=()):
     # automatically detect the xyz dimensions
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
-    return torch.roll(data, -1, dims=axes)
+        axes = tuple(axes.tolist())
+    if len(axes)>1:
+        shifts = tuple([-1]*len(axes))
+    return torch.roll(data, shifts=shifts, dims=axes)
 
 
 def spherical_to_xyz(data, axes=()):
@@ -218,12 +221,13 @@ def spherical_to_xyz(data, axes=()):
     same meaning, only it goes from l=1 to (x,y,z).
     """
     shape = data.shape
-    rdata = data
     # automatically detect the l=1 dimensions
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
-    return torch.roll(data, 1, dims=axes)
-
+        axes = tuple(axes.tolist())
+    if len(axes)>1:
+        shifts = tuple([1]*len(axes))
+    return torch.roll(data, shifts=shifts, dims=axes)
 
 def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device: str = None):
     """
@@ -501,7 +505,8 @@ class ClebschGordanReal:
                     continue
                 # decouples the L term into m1, m2 components
                 # a = torch.einsum('spM,mnM->spmn', lcomponents[L], self._cg[(l1, l2, L)])
-                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([2],[2]))
+                # dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([2],[2]))
+                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([-1],[-1])) #CHECK<<<<<< 
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}
             decoupled[ltuple[2:]][l2] = dec_term
