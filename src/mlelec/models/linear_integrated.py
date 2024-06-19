@@ -71,7 +71,7 @@ class E3LayerNorm(nn.Module):
         # self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True) # parameter for global bias << BREAKS equivariance
 
     def forward(self, x):
-        assert len(x.shape) == 3
+        assert len(x.shape) == 3, f"Input tensor must be of shape (nstr, ncomponents, nfeatures), got {x.shape}"
         assert x.shape[2] == self.layersize
         if self.bias:
             mean = torch.mean(x, dim = 2, keepdim = True)
@@ -88,7 +88,7 @@ class EquivariantNonLinearity(nn.Module):
         if device is None:
             device = 'cpu'
         self.device = device
-        
+        # self.e3layernorm_ = E3LayerNorm(layersize, device = self.device, bias=True)
         if norm:
             self.nn = [
                 # nn.LayerNorm(layersize, device = self.device),
@@ -100,37 +100,18 @@ class EquivariantNonLinearity(nn.Module):
             self.nn = [self.nonlinearity]
 
         self.nn = nn.Sequential(*self.nn)
-        
+        # self.e3layernorm = E3LayerNorm(layersize, device = self.device, bias=True)
+       
     def forward(self, x):
 
         assert len(x.shape) == 3
-
-        x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
+        # x = self.e3layernorm_(x)
+        x_inv = torch.einsum("imf,imf->if", x, x)
+        x_inv = torch.sqrt(x_inv+self.epsilon)
         x_inv = self.nn(x_inv)
-        out = torch.einsum("if, imf->imf", x_inv, x) #/norm
-
+        out = torch.einsum("if, imf->imf", x_inv, x) 
+        # out = self.e3layernorm(out)
         return out
-
-
-def _norm_layer(x, norm_clamp=2e-12,  nonlinearity: callable = None):
-    """
-    x: torch.tensor of shape (nstr, ncomponents, nfeatures)
-
-    returns: torch.tensor of shape (nstr, nfeatures) i.e. compute norm of features
-    """
-    norm = clamped_norm(x, norm_clamp)
-    group_norm = nn.GroupNorm(num_groups=1, num_channels=x.shape[-1])
-    if nonlinearity is not None:
-        # Transform the norms only
-        norm = nonlinearity(group_norm(norm.squeeze(-1))).unsqueeze(-1)
-
-    # assert (
-    #         len(x.shape) == 3
-    #     ), "Input tensor must be of shape (nstr, ncomponents, nfeatures)"
-    #     norm = torch.einsum("imq,imq->iq", x, x)
-    # norm = torch.linalg.norm(_symm)
-    return norm
-
 
 class BlockModel(nn.Module):
     "other custom models"
