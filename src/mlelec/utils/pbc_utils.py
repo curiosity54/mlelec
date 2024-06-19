@@ -286,7 +286,7 @@ def move_orbitals_to_keys(in_blocks, dummy_property = None):
         for nlinlj in n1l1n2l2:
             idx = torch.where(torch.all(torch.isclose(block_view, nlinlj), dim = 1))[0]
             
-            keys.append(torch.hstack((k.values, torch.tensor(nlinlj))))
+            keys.append(torch.hstack((k.values, nlinlj.clone().detach())))
             if len(idx):
                 blocks.append( TensorBlock(
                             samples = b.samples,
