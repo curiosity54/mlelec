@@ -1,27 +1,45 @@
 # Handles 2 center objects - coupling decoupling
 # must include preprocessing and postprocessing utils
-from typing import Optional, List, Union, Tuple, Dict
-from metatensor import TensorMap, TensorBlock
-import torch
+import warnings
+from typing import Dict, List, Optional, Tuple, Union
+
 import ase
 import numpy as np
+import torch
+from metatensor import TensorBlock, TensorMap
+
 from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.symmetry import ClebschGordanReal
-import warnings
+
 
 SQRT_2 = 2 ** (0.5)
 ISQRT_2 = 1 / SQRT_2
+
 
 def isqrtm(A: torch.Tensor) -> torch.Tensor:
     eva, eve = torch.linalg.eigh(A)
     idx = eva > 1e-15
     return eve[:, idx] @ torch.diag(eva[idx] ** (-0.5)) @ eve[:, idx].T
 
+def isqrtp(A):
+    eva, eve = torch.linalg.eigh(A)
+    idx = eva > 1e-15
+    return eve[:, idx] @ torch.diag(eva[idx] ** (0.5)) @ eve[:, idx].T
+
+
 def _lowdin_orthogonalize(
     fock: torch.Tensor, ovlp: torch.Tensor
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    ovlp_i12 = isqrtm(ovlp)
-    return torch.einsum("ij,jk,kl->il", ovlp_i12, fock, ovlp_i12)
+    if isinstance(fock, torch.Tensor):
+        ovlp_i12 = isqrtm(ovlp)
+        return torch.einsum("ij,jk,kl->il", ovlp_i12, fock, ovlp_i12)
+    elif isinstance(fock, np.ndarray):
+        ortho_focks = []
+        for i, f in enumerate(fock):
+            ovlp_i12 = isqrtm(torch.from_numpy(ovlp[i]))
+            ortho_focks.append(torch.einsum("ij,jk,kl->il", ovlp_i12, torch.from_numpy(f), ovlp_i12))
+        return ortho_focks
+
 
 def fix_orbital_order(
     matrix: Union[torch.tensor, np.ndarray],
@@ -198,7 +216,7 @@ def _to_blocks(
     NH=False,
 ):
     if not isinstance(frames, list):
-        assert len(matrices.shape) == 2  
+        assert len(matrices.shape) == 2
         frames = [frames]
         matrices = matrices.reshape(1, *matrices.shape)
     
@@ -666,8 +684,9 @@ def _to_uncoupled_basis(
     return block_builder.build()
 
 
-from .metatensor_utils import labels_where
 from metatensor import Labels
+
+from .metatensor_utils import labels_where
 
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
@@ -809,8 +828,10 @@ def discard_nonhermiticity(matrices, retain="upper"):
         ), "matrix to discard non-hermiticity from must be a 2D matrix"
         fixed[i] = _reflect_hermitian(mat, retain_upper=retain_upper)
     return fixed
+import ase
 import scipy
-import ase 
+
+
 def compute_eigenval(fock, overlap, eV=False):
     
     eigenval=scipy.linalg.eigvals(fock,overlap)#,UPLO='U')

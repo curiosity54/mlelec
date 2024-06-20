@@ -274,7 +274,8 @@ class MLDataset(Dataset):
 
         self.target_class = ModelTargets(self.molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
-            next(iter(self.molecule_data.target.values())),
+            tensor=next(iter(self.molecule_data.target.values())),
+            overlap=self.molecule_data.aux_data['overlap'],
             frames=self.structures,
             orbitals=self.molecule_data.aux_data.get("orbitals", None),
             device=device,

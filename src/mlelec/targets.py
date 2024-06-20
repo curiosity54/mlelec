@@ -1,10 +1,11 @@
-import torch
-from typing import Dict, Optional, List
-import numpy as np
-import scipy
-import mlelec.utils.twocenter_utils as twocenter_utils
-import ase
 import warnings
+from typing import Dict, List, Optional
+
+import ase
+import numpy as np
+import torch
+
+import mlelec.utils.twocenter_utils as twocenter_utils
 
 
 class ModelTargets:  # generic class for different targets
@@ -16,14 +17,14 @@ class ModelTargets:  # generic class for different targets
         self.target_class = globals()[name]  # find target class from string
         # print(self.target_class)
 
-    def instantiate(self, tensor: torch.tensor, **kwargs):
+    def instantiate(self, tensor: torch.tensor, overlap: torch.Tensor,  **kwargs):
         self.target = self.target_class(
-            tensor, **kwargs
+            tensor, overlap, **kwargs
         )  # instantiate target class with required arguments
         return self.target
 
 
-class SingleCenter:  # class for single center tensorial properties
+class SingleCenter:
     def __init__(
         self, tensor: torch.tensor, orbitals: Optional[Dict], frames: List[ase.Atoms]
     ):
@@ -32,26 +33,29 @@ class SingleCenter:  # class for single center tensorial properties
         self.frames = frames
 
     def _blocks(self):
-        # decompose tensorial property to different SPH blocks if required
-        # for now
         self.blocks = self.tensor
         pass
 
 
-class TwoCenter:  # class for second-rank tensors
+class TwoCenter:
     def __init__(
         self,
         tensor: torch.tensor,
+        overlap: torch.tensor,
         orbitals: Dict,
-        frames: Optional[List[ase.Atoms]] = None,
+        frames: List[ase.Atoms],
         device=None,
     ):
         # assert (
         #     len(tensor.shape) == 3
         # ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
         self.tensor = tensor
+        self.overlap = overlap
         if isinstance(tensor, np.ndarray):
             self.tensor = [torch.from_numpy(tensor[i]) for i in range(tensor.shape[0])]
+
+        if isinstance(overlap, np.ndarray):
+            self.overlap = [torch.from_numpy(overlap[i]) for i in range(overlap.shape[0])]
 
         # self.tensor = self.tensor.to(device)
         self.orbitals = orbitals
@@ -90,6 +94,7 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def __init__(
         self,
         tensor,
+        overlap,
         orbitals,
         frames,
         model_strategy: str = "coupled",
@@ -105,7 +110,13 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
             tensor, frames=frames, orbital=orbitals
         )
 
-        super().__init__(tensor, orbitals, frames, device=device)
+        overs = twocenter_utils.fix_orbital_order(
+            overlap, frames=frames, orbital=orbitals
+        )
+
+        tensor = twocenter_utils._lowdin_orthogonalize(tensor, overs)
+
+        super().__init__(tensor, overs, orbitals, frames, device=device)
         # assert torch.allclose(
         #     self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
         # ), "Only symmetric Hamiltonians supported for now"
