@@ -92,8 +92,7 @@ class EquivariantNonLinearity(nn.Module):
         if norm:
             self.nn = [
                 # nn.LayerNorm(layersize, device = self.device),
-                self.nonlinearity,
-                
+                self.nonlinearity,       
                 nn.LayerNorm(layersize, device = self.device)
             ]
         else:

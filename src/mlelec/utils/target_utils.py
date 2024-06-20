@@ -1,12 +1,13 @@
 from typing import Optional, Union
 
+import torch
+
 import metatensor.torch as mts
+from metatensor.torch import TensorMap, Labels
 
 from mlelec.data.dataset import QMDataset
 from mlelec.utils.pbc_utils import matrix_to_blocks
 from mlelec.utils.twocenter_utils import _to_coupled_basis
-
-from mlelec.utils.metatensor_utils import sort_hack
 
 def get_targets(dataset: QMDataset,
                 cutoff: Optional[Union[int,float,None]] = None, 
@@ -15,27 +16,25 @@ def get_targets(dataset: QMDataset,
                 sort_orbs: Optional[bool] = True,
                 skip_symmetry: Optional[bool] = False,
                 device: Optional[str] = "cpu", 
-                matrix = None
+                matrix = None,
+                orbitals_to_properties = False
                 ):
     
     blocks = matrix_to_blocks(dataset, device = device, cutoff = cutoff, all_pairs = all_pairs, target = target, sort_orbs = sort_orbs, matrix = matrix)
     coupled_blocks = _to_coupled_basis(blocks, skip_symmetry = skip_symmetry, device = device, translations = True)
 
-    # TODO: when the sort bug is restored, uncomment the next two lines
-    # blocks = mts.sort(blocks)
-    # coupled_blocks = mts.sort(coupled_blocks)
+    blocks = mts.sort(blocks)
+    coupled_blocks = mts.sort(coupled_blocks)
 
-    # TODO: for now, HACK
-    blocks = sort_hack(blocks).to(device)
-    coupled_blocks = sort_hack(coupled_blocks).to(device)
-
-    # for k, b in blocks.items():
-
-    # blocks = blocks.to(arrays='numpy')
-    # blocks = mts.sort(blocks)
-    # blocks = blocks.to(arrays='torch')
-    
-    # coupled_blocks = coupled_blocks.to(arrays='numpy')
-    # coupled_blocks = coupled_blocks.to(arrays='torch')
+    if orbitals_to_properties:
+        keys = []
+        tblocks= []
+        for k, b in coupled_blocks.items(): 
+            li, lj, L = k['l_i'], k['l_j'], k['L']
+            inversion_sigma = (-1) ** (li + lj + L)
+            keys.append(torch.cat((k.values, torch.tensor([inversion_sigma]))))
+            tblocks.append(b.copy())
+        coupled_blocks = TensorMap(Labels(k.names+['inversion_sigma'], torch.stack(keys)), tblocks)
+        coupled_blocks = coupled_blocks.keys_to_properties(['n_i', 'l_i',  'n_j','l_j'])
     
     return blocks, coupled_blocks
