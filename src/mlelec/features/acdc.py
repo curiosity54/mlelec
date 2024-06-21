@@ -194,8 +194,7 @@ def pair_features(
                 properties = block.properties,
             )
         
-        from mlelec.utils.metatensor_utils import sort_block_hack
-        blocks.append(sort_block_hack(torch_block))
+        blocks.append(mts.sort_block(torch_block))
         
         # blocks.append(
         #     mts.sort_block(TensorBlock(
