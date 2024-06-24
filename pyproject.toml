@@ -20,7 +20,7 @@ dependencies = [
     "numpy",
     "hickle",
     "tqdm",
-    "pyscfad@git+https://github.com/fishjojo/pyscfad.git@d9793a45314270daa00f9b3cd4e46f03f620993f"
+#    "pyscfad@git+https://github.com/fishjojo/pyscfad.git@d9793a45314270daa00f9b3cd4e46f03f620993f"
 ]
 
 keywords = [] # TODO

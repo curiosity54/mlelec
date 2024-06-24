@@ -1,0 +1,40 @@
+[I 2024-05-28 14:18:10.802 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2024-05-28 14:18:10.806 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[I 2024-05-28 14:18:10.810 ServerApp] jupyterlab | extension was successfully linked.
+[I 2024-05-28 14:18:10.814 ServerApp] notebook | extension was successfully linked.
+[I 2024-05-28 14:18:10.964 ServerApp] notebook_shim | extension was successfully linked.
+[I 2024-05-28 14:18:10.976 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2024-05-28 14:18:10.977 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2024-05-28 14:18:10.977 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2024-05-28 14:18:10.979 LabApp] JupyterLab extension loaded from /home/saade/metatensor-models/mt-venv/lib/python3.11/site-packages/jupyterlab
+[I 2024-05-28 14:18:10.979 LabApp] JupyterLab application directory is /home/saade/metatensor-models/mt-venv/share/jupyter/lab
+[I 2024-05-28 14:18:10.979 LabApp] Extension Manager is 'pypi'.
+[I 2024-05-28 14:18:11.005 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2024-05-28 14:18:11.008 ServerApp] notebook | extension was successfully loaded.
+[I 2024-05-28 14:18:11.009 ServerApp] The port 8888 is already in use, trying another port.
+[I 2024-05-28 14:18:11.009 ServerApp] Serving notebooks from local directory: /home/saade/mlelec
+[I 2024-05-28 14:18:11.009 ServerApp] Jupyter Server 2.14.0 is running at:
+[I 2024-05-28 14:18:11.009 ServerApp] http://localhost:8889/tree
+[I 2024-05-28 14:18:11.009 ServerApp]     http://127.0.0.1:8889/tree
+[I 2024-05-28 14:18:11.009 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2024-05-28 14:18:11.035 ServerApp] Skipped non-installed server(s): bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
+[I 2024-05-28 14:18:25.637 ServerApp] jupyter_lsp | extension was successfully linked.
+[I 2024-05-28 14:18:25.641 ServerApp] jupyter_server_terminals | extension was successfully linked.
+[I 2024-05-28 14:18:25.645 ServerApp] jupyterlab | extension was successfully linked.
+[I 2024-05-28 14:18:25.649 ServerApp] notebook | extension was successfully linked.
+[I 2024-05-28 14:18:25.799 ServerApp] notebook_shim | extension was successfully linked.
+[I 2024-05-28 14:18:25.811 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2024-05-28 14:18:25.812 ServerApp] jupyter_lsp | extension was successfully loaded.
+[I 2024-05-28 14:18:25.812 ServerApp] jupyter_server_terminals | extension was successfully loaded.
+[I 2024-05-28 14:18:25.814 LabApp] JupyterLab extension loaded from /home/saade/metatensor-models/mt-venv/lib/python3.11/site-packages/jupyterlab
+[I 2024-05-28 14:18:25.814 LabApp] JupyterLab application directory is /home/saade/metatensor-models/mt-venv/share/jupyter/lab
+[I 2024-05-28 14:18:25.814 LabApp] Extension Manager is 'pypi'.
+[I 2024-05-28 14:18:25.840 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2024-05-28 14:18:25.843 ServerApp] notebook | extension was successfully loaded.
+[I 2024-05-28 14:18:25.843 ServerApp] The port 8889 is already in use, trying another port.
+[I 2024-05-28 14:18:25.844 ServerApp] Serving notebooks from local directory: /home/saade/mlelec
+[I 2024-05-28 14:18:25.844 ServerApp] Jupyter Server 2.14.0 is running at:
+[I 2024-05-28 14:18:25.844 ServerApp] http://localhost:8890/tree
+[I 2024-05-28 14:18:25.844 ServerApp]     http://127.0.0.1:8890/tree
+[I 2024-05-28 14:18:25.844 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2024-05-28 14:18:25.871 ServerApp] Skipped non-installed server(s): bash-language-server, dockerfile-language-server-nodejs, javascript-typescript-langserver, jedi-language-server, julia-language-server, pyright, python-language-server, python-lsp-server, r-languageserver, sql-language-server, texlab, typescript-language-server, unified-language-server, vscode-css-languageserver-bin, vscode-html-languageserver-bin, vscode-json-languageserver-bin, yaml-language-server
