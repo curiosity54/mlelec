@@ -771,7 +771,9 @@ class QMDataset(Dataset):
             elif dimension == 3:
                 f.wrap(center = (0,0,0), eps = 1e-60)
                 f.pbc = True
-            else:
+            elif dimension == 0:
+                f.pbc = False   
+            else: 
                 raise NotImplementedError('dimension must be 2 or 3')
 
         self.structures = frames
@@ -798,7 +800,8 @@ class QMDataset(Dataset):
             raise NotImplementedError("You must use precomputed data for now.")
         
         self._ismolecule = ismolecule
-        if not frames[0].pbc.any():
+        if self.dimension==0:
+            assert not frames[0].pbc.any()
             self._ismolecule = True
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
         if fix_p_orbital_order and not self._ismolecule:
