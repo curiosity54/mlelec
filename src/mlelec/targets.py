@@ -138,6 +138,12 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         # project onto another basis
         pass
 
+    def _set_blocks(self, blocks):            
+        from metatensor import TensorMap      
+        assert isinstance(blocks, TensorMap)  
+        self.blocks = blocks                  
+        self.block_keys = blocks.keys         
+                                            
 
 # class Eigenvalues:  # eigval of a second rank tensor
 #    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):

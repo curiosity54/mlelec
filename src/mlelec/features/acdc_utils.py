@@ -249,9 +249,7 @@ def cg_combine(
             ## full tensor product of properties
             feature_names.extend([f'k_{i}', f'species_neighbor_{i}', f'n_{i}', f'l_{i}'])
 
-        # NU = x_a.keys[0]["order_nu"] + x_b.keys[0]["order_nu"]
-        # feature_names = (tuple(n + "_a" for n in x_a.property_names) + ("k_" + str(NU),) + tuple(n + "_b" for n in x_b.property_names) + ("l_" + str(NU),))
-    # print(feature_names)
+    
     X_idx = {}
     X_blocks = {}
     X_samples = {}

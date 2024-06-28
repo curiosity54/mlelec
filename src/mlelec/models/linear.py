@@ -270,7 +270,6 @@ class LinearTargetModel(nn.Module):
         self.submodels = {}
         # return 1 model if no subtargets present, else spawn
         # multiple models
-        apply_layer_norm = False
         if len(self.dataset.target.block_keys) == 1:
             self.model = MLP(
                 nlayers=kwargs.get("nlayers", 2),
@@ -278,8 +277,8 @@ class LinearTargetModel(nn.Module):
                 nout=1,
                 nhidden=kwargs.get("nhidden", 10),
                 bias=set_bias,
+                activation=kwargs.get("activation", None),
                 device=self.device,
-                apply_layer_norm = False,
             )
         else:
             for k in self.dataset.target.block_keys:
@@ -289,14 +288,12 @@ class LinearTargetModel(nn.Module):
                 # print(feat.values.device, self.device)
                 if k["L"] == 0 and set_bias:
                     bias = True
-                    apply_layer_norm = False
                 self.submodels[str(tuple(k))] = MLP(
                     nin=feat.values.shape[-1],
                     nout=1,
                     nhidden=kwargs.get("nhidden", 10),
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
-                    apply_layer_norm = apply_layer_norm,
                 )
 
                 # print(k, self.submodels[str(tuple(k))])
@@ -360,6 +357,9 @@ class LinearTargetModel(nn.Module):
             )
             return self.reconstructed_uncoupled
         elif return_type == "tensor":
+            self.reconstructed_uncoupled = _to_uncoupled_basis(
+                pred_tmap, device=self.device
+            )
             if batch_indices is None:
                 # identify the frames in the batch
                 batch_indices = list(
@@ -390,7 +390,7 @@ class LinearTargetModel(nn.Module):
             raise NotImplementedError("return_type not implemented")
         return loss
 
-    def fit_ridge_analytical(self, set_bias=False) -> None:
+    def fit_ridge_analytical(self, alphas = np.logspace(-15, -1, 40),set_bias=False) -> None:
         from sklearn.linear_model import RidgeCV
 
         # set_bias will set bias=True for the invariant model
@@ -440,7 +440,7 @@ class LinearTargetModel(nn.Module):
                 # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
                 # ridge = ridge.fit(x,y)
                 ridge = RidgeCV(
-                    alphas=np.logspace(-15, -1, 40), fit_intercept=bias
+                    alphas=alphas, fit_intercept=bias
                 ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 pred = ridge.predict(x)
@@ -473,45 +473,42 @@ class LinearTargetModel(nn.Module):
 
         return self.recon_blocks, self.ridges
 
-    def predict_ridge_analytical(self, return_matrix=False) -> None:
-        from sklearn.linear_model import RidgeCV
-
-        # set_bias will set bias=True for the invariant model
-        self.recon_val = {}
-
-        pred_blocks_val = []
-        # kernels = []
-        for imdl, tkey in enumerate(self.dataset.target_val.keys):
-            target = self.dataset.target_val.block(tkey)
-            nsamples, ncomp, nprops = target.values.shape
-
-            feat = map_targetkeys_to_featkeys(self.dataset.feat_val, tkey)
-            x = (
-                (
-                    feat.values.reshape(
-                        (feat.values.shape[0] * feat.values.shape[1], -1)
-                    )
-                    / 1
-                )
-                .cpu()
-                .numpy()
-            )
-            pred = self.ridges[imdl].predict(x)
-            pred_blocks_val.append(
-                TensorBlock(
-                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
-                        self.device
-                    ),
-                    samples=target.samples,
-                    components=target.components,
-                    properties=self.dummy_property,
-                )
-            )
-
-        pred_tmap_val = TensorMap(self.dataset.target.blocks.keys, pred_blocks_val)
-        self.recon_blocks_val = pred_tmap_val
-        return self.recon_blocks_val
-
+    def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):                       
+        if self.ridges is None:                                                                            
+            assert ridges is not None, 'Ridges must be fitted first or provided as input'                  
+            # self.ridges = ridges                                                                         
+        elif self.ridges is not None and ridges is not None:                                               
+            warnings.warn('Using ridges provided')                                                         
+            ridges = ridges                                                                                
+        else:                                                                                              
+            ridges = self.ridges                                                                           
+                                                                                                           
+        if hfeat is None:                                                                                  
+            hfeat = self.feats                                                                             
+            warnings.warn('Using train hfeat, otherwise provide test hfeat')                               
+        if target_blocks is None:                                                                          
+            target_blocks = self.target_blocks                                                             
+            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')               
+                                                                                                           
+        pred_blocks = []                                                                                   
+        for imdl, (key, tkey) in enumerate(zip(ridges, target_blocks.keys)):                               
+                                                                                                           
+            feat = map_targetkeys_to_featkeys(hfeat, tkey)                                                 
+            nsamples, ncomp, _ = feat.values.shape                                                         
+            x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))/1).cpu().numpy()) 
+            pred = ridges[imdl].predict(x)                                                                 
+            pred_blocks.append(                                                                            
+                            TensorBlock(                                                                   
+                                values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))                
+                                .to(self.device),                                                          
+                                samples=feat.samples,                                                      
+                                components=feat.components,                                                
+                                properties=self.dummy_property,                                            
+                            )                                                                              
+                        )                                                                                  
+                                                                                                           
+        return TensorMap(target_blocks.keys, pred_blocks)                                                  
+    
 class LinearModelPeriodic(nn.Module):
     def __init__(
         self,
