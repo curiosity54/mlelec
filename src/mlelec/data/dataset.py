@@ -771,8 +771,10 @@ class QMDataset(Dataset):
             elif dimension == 3:
                 f.wrap(center = (0,0,0), eps = 1e-60)
                 f.pbc = True
+            elif dimension == 0: # Handle molecules 
+                f.pbc = False    
             else:
-                raise NotImplementedError('dimension must be 2 or 3')
+                raise NotImplementedError('dimension must be 0, 2 or 3')
 
         self.structures = frames
         self.frame_slice = frame_slice
@@ -798,7 +800,8 @@ class QMDataset(Dataset):
             raise NotImplementedError("You must use precomputed data for now.")
         
         self._ismolecule = ismolecule
-        if not frames[0].pbc.any():
+        if self.dimension==0:
+            assert not frames[0].pbc.any()
             self._ismolecule = True
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
         if fix_p_orbital_order and not self._ismolecule:
@@ -823,12 +826,14 @@ class QMDataset(Dataset):
         elif self._ismolecule:
             from mlelec.utils.twocenter_utils import fix_orbital_order
             assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
-            for ifr in range(len(fock_realspace)):
-                    fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
+            if fix_p_orbital_order:
+                for ifr in range(len(fock_realspace)):
+                        fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
             if overlap_realspace is not None:
                 assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
-                for ifr in range(len(overlap_realspace)):
-                        overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
+                if fix_p_orbital_order:
+                    for ifr in range(len(overlap_realspace)):
+                            overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
         if apply_condon_shortley:
@@ -900,7 +905,8 @@ class QMDataset(Dataset):
          # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
         elif (overlap_kspace is None) and (overlap_realspace is not None):
             self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
-            self.overlap_kspace = self.bloch_sum(overlap_realspace, is_tensor = False)
+            if not self._ismolecule:
+                self.overlap_kspace = self.bloch_sum(overlap_realspace, is_tensor = False)
         elif (overlap_kspace is None) and (overlap_realspace is None):
             warnings.warn("Overlap matrices not provided")
             self.overlap_realspace = None

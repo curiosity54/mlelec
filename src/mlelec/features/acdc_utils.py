@@ -181,27 +181,11 @@ def sample_atom_pair(block_a, block_b, is_mp = False):
     samples_b = block_b.samples
 
     if is_mp:
-        center_slice = []
-        smp_a, smp_b = 0, 0
-        while smp_b < samples_b.values.shape[0]:
-            # print(index_b, samples_b[smp_b][["structure", "center", "neighbor"]], index_a, samples_a[smp_a])
-            idx = [idx for idx, tup in enumerate(samples_a) if tup[0] == samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["neighbor"]][0]
-            center_slice.append(idx)
-            smp_b += 1
-        center_slice = torch.tensor(center_slice)
+        center_slice = torch.where(( samples_a.values[:,None]==samples_b.values[:,[0,2]]).all(-1))[0]
         return center_slice
     
     else:
-        neighbor_slice = []
-        smp_a, smp_b = 0, 0
-        
-        while smp_b < samples_b.values.shape[0]:
-            if (samples_b[smp_b]["structure"], samples_b[smp_b]["center"],) != (samples_a[smp_a]["structure"], samples_a[smp_a]["center"]):
-                if smp_a + 1 < samples_a.values.shape[0]:
-                    smp_a += 1
-            neighbor_slice.append(smp_a)
-            smp_b += 1
-        neighbor_slice = torch.tensor(neighbor_slice)
+        neighbor_slice = torch.where(( samples_a.values[:,None]==samples_b.values[:,:2]).all(-1))[0]
         return neighbor_slice    
 
 # Serious TODO: Cleanup please FIXME
@@ -326,16 +310,9 @@ def cg_combine(
             sel_idx = []
             sel_feats = torch.cartesian_prod(torch.arange(len(properties_a)), torch.arange(len(properties_b))) #np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
 
-            prop_ids_a = []
-            prop_ids_b = []
-            # prop_ids_a = 
-            for f_a in properties_a:
-                prop_ids_a.append(list(f_a) + [lam_a])
-            for f_b in properties_b:
-                prop_ids_b.append(list(f_b) + [lam_b])
+            prop_ids_a =torch.nn.functional.pad(properties_a.values, (0,1), value=lam_a)
+            prop_ids_b =torch.nn.functional.pad(properties_b.values, (0,1), value=lam_b)
             
-            prop_ids_a = torch.tensor(prop_ids_a)
-            prop_ids_b = torch.tensor(prop_ids_b)
             sel_idx = torch.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
             
             if len(sel_feats) == 0:
@@ -421,27 +398,14 @@ def cg_increment(
 
     nu = x_nu.keys["order_nu"][0].item()
     feature_roots = _remove_suffix(x_1.block(0).properties.names)
-    # if nu == 1:
-    #     feature_names = (
-    #         tuple(root + "_1" for root in feature_roots)
-    #         + ("l_1",)
-    #         + tuple(root + "_2" for root in feature_roots)
-    #         + ("l_2",)
-    #     )
-    # else:
-    # feature_names = feature_names
+
     if feature_names is None:
         feature_names = (tuple(x_nu.property_names)+
                             ("k_" + str(nu + 1),)
                             + tuple(root + "_" + str(nu + 1) for root in feature_roots)
                             + ("l_" + str(nu + 1),)
                             )
-        # feature_names = (
-        #     tuple(x_nu.block(0).properties.names)
-        #     + ("k_" + str(nu + 1),)
-        #     + tuple(root + "_" + str(nu + 1) for root in feature_roots)
-        #     + ("l_" + str(nu + 1),)
-        # )
+  
     return cg_combine(
         x_nu,
         x_1,
