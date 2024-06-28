@@ -130,7 +130,6 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                 matrices[0,0,0] = dataset.overlap_realspace[A]
             else:
                 raise ValueError("target must be either 'fock' or 'overlap")
-        
         for iii,T in enumerate(matrices):
             mT = tuple(-t for t in T)
             assert mT in matrices, f"{mT} not in the real space matrix keys"
