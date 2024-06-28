@@ -184,27 +184,31 @@ def sample_atom_pair(block_a, block_b, is_mp = False):
     samples_b = block_b.samples
 
     if is_mp:
-        center_slice = []
-        smp_a, smp_b = 0, 0
-        while smp_b < samples_b.values.shape[0]:
-            # print(index_b, samples_b[smp_b][["structure", "center", "neighbor"]], index_a, samples_a[smp_a])
-            idx = [idx for idx, tup in enumerate(samples_a) if tup[0] == samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["neighbor"]][0]
-            center_slice.append(idx)
-            smp_b += 1
-        center_slice = torch.tensor(center_slice)
+        ## assumes samples_a = ['structure', 'center'] and samples_b = ['structure', 'center', 'neighbor'....] and matches the strycture and center
+        center_slice = torch.where(( samples_a.values[:,None]==samples_b.values[:,[0,2]]).all(-1))[0]
+        # center_slice = []
+        # smp_a, smp_b = 0, 0
+        # while smp_b < samples_b.values.shape[0]:
+        #     # print(index_b, samples_b[smp_b][["structure", "center", "neighbor"]], index_a, samples_a[smp_a])
+        #     idx = [idx for idx, tup in enumerate(samples_a) if tup[0] == samples_b[smp_b]["structure"] and tup[1] == samples_b[smp_b]["neighbor"]][0]
+        #     center_slice.append(idx)
+        #     smp_b += 1
+        # center_slice = torch.tensor(center_slice)
         return center_slice
     
     else:
-        neighbor_slice = []
-        smp_a, smp_b = 0, 0
+        ## assumes samples_a = ['structure', 'center'] and samples_b = ['structure', 'center', 'neighbor'....] and matches the strycture and center
+        neighbor_slice = torch.where(( samples_a.values[:,None]==samples_b.values[:,:2]).all(-1))[0]
+        # neighbor_slice = []
+        # smp_a, smp_b = 0, 0
         
-        while smp_b < samples_b.values.shape[0]:
-            if (samples_b[smp_b]["structure"], samples_b[smp_b]["center"],) != (samples_a[smp_a]["structure"], samples_a[smp_a]["center"]):
-                if smp_a + 1 < samples_a.values.shape[0]:
-                    smp_a += 1
-            neighbor_slice.append(smp_a)
-            smp_b += 1
-        neighbor_slice = torch.tensor(neighbor_slice)
+        # while smp_b < samples_b.values.shape[0]:
+        #     if (samples_b[smp_b]["structure"], samples_b[smp_b]["center"],) != (samples_a[smp_a]["structure"], samples_a[smp_a]["center"]):
+        #         if smp_a + 1 < samples_a.values.shape[0]:
+        #             smp_a += 1
+        #     neighbor_slice.append(smp_a)
+        #     smp_b += 1
+        # neighbor_slice = torch.tensor(neighbor_slice)
         return neighbor_slice    
 
 # Serious TODO: Cleanup please FIXME
@@ -331,16 +335,19 @@ def cg_combine(
             sel_idx = []
             sel_feats = torch.cartesian_prod(torch.arange(len(properties_a)), torch.arange(len(properties_b))) #np.indices((len(properties_a), len(properties_b))).reshape(2, -1).T
 
-            prop_ids_a = []
-            prop_ids_b = []
-            # prop_ids_a = 
-            for f_a in properties_a:
-                prop_ids_a.append(list(f_a) + [lam_a])
-            for f_b in properties_b:
-                prop_ids_b.append(list(f_b) + [lam_b])
+            # prop_ids_a = []
+            # prop_ids_b = []
+            # for n_a, f_a in enumerate(properties_a):
+            #     prop_ids_a.append(tuple(f_a) + (lam_a,))
+            # for n_b, f_b in enumerate(properties_b):
+            #     prop_ids_b.append(tuple(f_b) + (lam_b,))
             
-            prop_ids_a = torch.tensor(prop_ids_a)
-            prop_ids_b = torch.tensor(prop_ids_b)
+            # prop_ids_a = torch.tensor(prop_ids_a)
+            # prop_ids_b = torch.tensor(prop_ids_b)
+
+            prop_ids_a =torch.nn.functional.pad(properties_a.values, (0,1), value=lam_a)#.to(torch.float64)
+            prop_ids_b =torch.nn.functional.pad(properties_b.values, (0,1), value=lam_b)#.to(torch.float64)
+            
             sel_idx = torch.hstack([prop_ids_a[sel_feats[:, 0]], prop_ids_b[sel_feats[:, 1]]])  # creating a tensor product
             
             if len(sel_feats) == 0:
@@ -375,6 +382,7 @@ def cg_combine(
 
                 else:
                     if isinstance(neighbor_slice, slice) or len(neighbor_slice):
+                        # print(torch.norm(samples_a.values[neighbor_slice]-samples_b.values[b_slice][:,:2]*1.0))
                         one_shot_blocks = clebsch_gordan.combine(block_a.values[neighbor_slice][:, :, sel_feats[:, 0]],
                                                                  block_b.values[b_slice][:, :, sel_feats[:, 1]],
                                                                  L,

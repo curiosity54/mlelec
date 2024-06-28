@@ -120,7 +120,7 @@ def pair_features(
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
 
-        L = max(lcut, hypers["max_angular"])
+        L = max(lcut, hypers["max_angular"]+1)
         cg = ClebschGordanReal(lmax=L, device=device)
 
     if hypers_pair is None:
