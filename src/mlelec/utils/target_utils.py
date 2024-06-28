@@ -17,7 +17,8 @@ def get_targets(dataset: QMDataset,
                 skip_symmetry: Optional[bool] = False,
                 device: Optional[str] = "cpu", 
                 matrix = None,
-                orbitals_to_properties = False
+                orbitals_to_properties = False,
+                return_uncoupled = False
                 ):
     
     blocks = matrix_to_blocks(dataset, device = device, cutoff = cutoff, all_pairs = all_pairs, target = target, sort_orbs = sort_orbs, matrix = matrix)
@@ -36,5 +37,8 @@ def get_targets(dataset: QMDataset,
             tblocks.append(b.copy())
         coupled_blocks = TensorMap(Labels(k.names+['inversion_sigma'], torch.stack(keys)), tblocks)
         coupled_blocks = coupled_blocks.keys_to_properties(['n_i', 'l_i',  'n_j','l_j'])
-    
-    return blocks, coupled_blocks
+
+    if return_uncoupled:   
+        return blocks, coupled_blocks
+    else:
+        return coupled_blocks
