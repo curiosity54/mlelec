@@ -29,7 +29,7 @@ from xitorch.linalg import symeig
 mlelec_dir = Path(__file__).parents[3]
 
 
-class MLDataset(IndexedDataset):
+class MLDataset():
     '''
     Goes from DFT data stored in QMDataset to a torch-compatible dataset ready for machine learning.
     '''
@@ -41,13 +41,15 @@ class MLDataset(IndexedDataset):
         features: Optional[TensorMap] = None,
         shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
-        target_names: Optional[Union[str, List]] = 'fock_blocks',
-        cutoff = None,
+        item_names: Optional[Union[str, List]] = 'fock_blocks',
+        sort_orbs: Optional[bool] = True,
+        all_pairs: Optional[bool] = False,
+        skip_symmetry: Optional[bool] = False,
+        orbitals_to_properties: Optional[bool] = True,
+        cutoff: Optional[Union[int, float]] = None,
         **kwargs,
     ):
         
-        super().__init__()
-
         self.device = device
         self.nstructs = len(qmdata.structures)
         self.rng = None
@@ -62,26 +64,27 @@ class MLDataset(IndexedDataset):
         self.structures = self.qmdata.structures
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
-        self.sort_orbs = kwargs.get("sort_orbs", True)
-        self.all_pairs = kwargs.get("all_pairs", False)
-        self.skip_symmetry = kwargs.get("skip_symmetry", False)
-        self.orbitals_to_properties = kwargs.get("orbitals_to_properties", True)
+        self.sort_orbs = sort_orbs
+        self.all_pairs = all_pairs
+        self.skip_symmetry = skip_symmetry
+        self.orbitals_to_properties = orbitals_to_properties
+        self.cutoff = cutoff
 
-        #### Initialize targets
-        if isinstance(target_names, str):
-            target_names = [target_names]
-        self.target_names = [self._flattenname(t) for t in target_names]
+        #### Initialize items
+        if isinstance(item_names, str):
+            item_names = [item_names]
+        self.item_names = [self._flattenname(t) for t in item_names]
 
-        targets = {}
+        items = {}
 
-        for name in self.target_names:
+        for name in self.item_names:
 
-            if name not in self._implemented_targets():
+            if name not in self._implemented_items():
                 warnings.warn(f"Target {name} is not implemented! Skipping it")
                 continue
 
             if name == 'fock_blocks':
-                targets[name] = self.compute_coupled_blocks()
+                items[name] = self.compute_coupled_blocks()
 
             elif name == 'fock_realspace':
                 # TODO
@@ -92,38 +95,38 @@ class MLDataset(IndexedDataset):
                 continue
             
             elif name == 'eigenvalues':
-                if 'atomresolveddensity' not in self.target_names:
-                    targets[name] = self.compute_eigenvalues(return_eigenvectors = False)
+                if 'atomresolveddensity' not in self.item_names:
+                    items[name] = self.compute_eigenvalues(return_eigenvectors = False)
 
             elif name == 'atomresolveddensity':
-                if 'eigenvalues' in self.target_names:
+                if 'eigenvalues' in self.item_names:
                     T, e  = self.compute_atom_resolved_density(return_eigenvalues = True)
-                    targets['eigenvalues'] = e
+                    items['eigenvalues'] = e
 
                 else:
                     T  = self.compute_atom_resolved_density(return_eigenvalues = False)
 
-                targets[name] = T
+                items[name] = T
 
             else:
-                raise ValueError(f"This looks like a bug! {name} is in MLDataset._implemented_targets but it is not properly handled in the loop.")
+                raise ValueError(f"This looks like a bug! {name} is in MLDataset._implemented_items but it is not properly handled in the loop.")
                 
 
-        # Define dicionaty of tragets
-        self.target = targets
+        # Define dictionary of targets
 
         # sets the first target as the primary target - # FIXME
-        self.target_class = ModelTargets(self.qmdata.target_names[0])
-        self.target = self.target_class.instantiate(
-            next(iter(self.qmdata.target.values())),
-            frames=self.structures,
-            orbitals=self.qmdata.aux_data.get("orbitals", None),
-            device=device,
-            **kwargs,
-        )
+        # self.target_class = ModelTargets(self.qmdata.item_names[0])
+        # self.target = self.target_class.instantiate(
+        #     next(iter(self.qmdata.target.values())),
+        #     frames=self.structures,
+        #     orbitals=self.qmdata.aux_data.get("orbitals", None),
+        #     device=device,
+        #     **kwargs,
+        # )
 
         #### If auxiliary data is required, compute it/initialize it
-        self.aux_data = self.qmdata.aux_data
+        # TODO: is this necessary?
+        # self.aux_data = self.qmdata.aux_data
 
         # TODO: not sure what this is? Is it for end-to-end models?
         self.model_type = model_type  # flag to know if we are using acdc features or want to cycle hrough positons
@@ -134,7 +137,7 @@ class MLDataset(IndexedDataset):
         # Default is 70/20/10 split
         self.train_frac = kwargs.get("train_frac", 0.7)
         self.val_frac = kwargs.get("val_frac", 0.2)
-        self.train_frac = kwargs.get("val_frac", 0.1)
+        self.test_frac = kwargs.get("test_frac", 0.1)
 
         try:
             assert np.isclose(self.train_frac + self.val_frac + self.test_frac, 1, rtol = 1e-6, atol = 1e-5)
@@ -142,6 +145,35 @@ class MLDataset(IndexedDataset):
             self.test_frac = 1 - (self.train_frac + self.val_frac)
             assert self.test_frac > 0
             warnings.warn(f'Selected `test_frac` incorrect. Changed to {self.test_frac}')
+
+
+        self.items = {}
+        for k in items:
+            item = items[k]
+            if isinstance(item, torch.ScriptObject):
+                if item._type().name() == 'TensorMap':
+                    self.items[k], self.grouped_labels = self._split_by_structure(item)
+            elif isinstance(item, list) or isinstance(item, torch.Tensor):
+                self.items[k] = item
+
+        try:
+            assert self.grouped_labels is not None
+        except:
+            self.grouped_labels = [Labels(names = 'structure', 
+                                          values = torch.tensor(A).reshape(-1, 1).to(dtype = self.device)) for A in self.indices]
+            
+        # Initialize mentatensor.learn.IndexedDataset
+        _d = {k: [self.items[k][A] for A in self.train_idx] for k in self.items}
+        _g = [self.grouped_labels[A] for A in self.train_idx]
+        self.train_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
+
+        _d = {k: [self.items[k][A] for A in self.val_idx] for k in self.items}
+        _g = [self.grouped_labels[A] for A in self.val_idx]
+        self.val_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
+
+        _d = {k: [self.items[k][A] for A in self.test_idx] for k in self.items}
+        _g = [self.grouped_labels[A] for A in self.test_idx]
+        self.test_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
     def _shuffle(self, random_seed: int = None):
         '''
@@ -155,7 +187,7 @@ class MLDataset(IndexedDataset):
 
         self.indices = torch.randperm(
             self.nstructs, generator=self.rng
-        )  # .to(self.device)
+        ).to(self.device)
 
         # update self.structures to reflect shuffling
         # self.structures_original = self.structures.copy()
@@ -172,7 +204,14 @@ class MLDataset(IndexedDataset):
         assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
-        return mts.slice(y, axis = "samples", labels = Labels(names = ["structure"], values = torch.tensor(indices).reshape(-1, 1)))
+        return mts.slice(y, axis = "samples", labels = Labels(names = ["structure"], values = indices.reshape(-1, 1)))
+    
+    def _split_by_structure(self, blocks: TensorMap, split_by_axis: Optional[str] = "samples", split_by_dimension: Optional[str] = "structure") -> TensorMap:
+        grouped_labels = [mts.Labels(names = split_by_dimension, 
+                                     values = A.reshape(-1, 1)) for A in mts.unique_metadata(blocks, 
+                                                                              axis = split_by_axis, 
+                                                                              names = split_by_dimension).values]
+        return mts.split(blocks, split_by_axis, grouped_labels), grouped_labels
 
     def _split_indices(
         self,
@@ -207,8 +246,7 @@ class MLDataset(IndexedDataset):
         except AssertionError:
             splits[-1] = self.nstructs - splits[0] - splits[1]
 
-        # TODO why sorted?
-        self.train_idx, self.val_idx, self.test_idx = [np.sort(s) for s in np.split(self.indices, np.cumsum(splits))]
+        self.train_idx, self.val_idx, self.test_idx = torch.split(self.indices, splits)
 
         # self.train_idx = self.indices[:int(self.train_frac * self.nstructs)].sort()[0]
         # self.val_idx = self.indices[int(self.train_frac * self.nstructs) : int((self.train_frac + self.val_frac) * self.nstructs)].sort()[0]
@@ -269,6 +307,7 @@ class MLDataset(IndexedDataset):
         return {"input": x, "output": y, "idx": idx}
     
     def compute_coupled_blocks(self, matrix = None, use_overlap = False):
+        #TODO: move to a target class?
         if use_overlap:
             target = 'overlap'
         else:
@@ -288,6 +327,7 @@ class MLDataset(IndexedDataset):
         return blocks
 
     def compute_eigenvalues(self, return_eigenvectors = False):
+        #TODO: move to a target class?
 
         if self.qmdata._ismolecule:
             A = self.qmdata.fock_realspace
@@ -338,12 +378,14 @@ class MLDataset(IndexedDataset):
             return eigenvalues
         
     def compute_atom_resolved_density(self, return_eigenvalues: Optional[bool] = True):
+        #TODO: move to a target class?
 
         # Function to create nested lists
         def create_nested_list(shape):
             if len(shape) == 0:
                 return None
             return [create_nested_list(shape[1:]) for _ in range(shape[0])]
+        
         # Function to set value in nested list by indices
         def set_nested_list_value(nested_list, indices, value):
             for idx in indices[:-1]:
@@ -406,7 +448,7 @@ class MLDataset(IndexedDataset):
         else:
             return T
         
-    def _implemented_targets(self):
+    def _implemented_items(self):
         return [
             'fock_blocks', 
             'overlap_blocks', 
