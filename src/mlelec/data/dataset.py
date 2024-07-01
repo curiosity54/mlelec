@@ -80,15 +80,16 @@ class MoleculeDataset(Dataset):
         lb_target: List[str] = None, 
         use_precomputed: bool = True,
         aux: Optional[List] = None,
-        # lb_aux: Optional[List] = None,
+        lb_aux: Optional[List] = None,
         data_path: Optional[str] = None,
         aux_path: Optional[str] = None,
         frames: Optional[List[ase.Atoms]] = None,
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
+        lb_aux_data: Optional[dict] = None,
         device: str = "cpu",
         basis: str = "sto-3g",
-        large_basis: str = "aug-cc-pvtz"
+        large_basis: str = "def2-tzvp"
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
@@ -99,16 +100,17 @@ class MoleculeDataset(Dataset):
         self.frame_slice = frame_slice
         self.target_names = target
         self.basis = basis
-        self.large_target_names = lb_target
+        self.lb_target_names = lb_target
 
         self.target = {t: [] for t in self.target_names}
-        self.lb_target = {t: [] for t in self.large_target_names}
+        self.lb_target = {t: [] for t in self.lb_target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
         if target_data is None:
             self.data_path = os.path.join(self.path, basis)
             self.aux_path = os.path.join(self.path, basis)
-            self.large_data_path = os.path.join(self.path, large_basis)
+            self.lb_data_path = os.path.join(self.path, large_basis)
+            self.lb_aux_path = os.path.join(self.path, large_basis)
             # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
@@ -139,16 +141,23 @@ class MoleculeDataset(Dataset):
                     f.cell = [100, 100, 100]  # TODO this better
 
         self.load_target(target_data=target_data)
+        self.load_lb_target()
         self.aux_data_names = aux
+        self.lb_aux_data_names = lb_aux
         if "fock" in target:
             if self.aux_data_names is None:
                 self.aux_data_names = ["overlap", "orbitals"]
+                self.lb_aux_data_names = ["overlap", "orbitals"]
             elif "overlap" not in self.aux_data_names:
                 self.aux_data_names.append("overlap")
+                self.lb_aux_data_names.append("overlap")
 
         if self.aux_data_names is not None:
             self.aux_data = {t: [] for t in self.aux_data_names}
             self.load_aux_data(aux_data=aux_data)
+
+            self.lb_aux_data = {t: [] for t in self.lb_aux_data_names}
+            self.load_lb_aux_data(lb_aux_data=lb_aux_data)
 
     def load_structures(self, frames: Optional[List[ase.Atoms]] = None):
         if frames is not None:
@@ -178,8 +187,9 @@ class MoleculeDataset(Dataset):
                 ]
                 
     def load_lb_target(self):
-        for t in self.large_target_names:
-            self.lb_target[t] = hickle.load(self.large_data_path + "/{}.hickle".format(t))[self.frame_slice]
+        for t in self.lb_target_names:
+            print(self.lb_data_path + "/{}.hickle".format(t))
+            self.lb_target[t] = hickle.load(self.lb_data_path + "/{}.hickle".format(t))[self.frame_slice]
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
@@ -211,6 +221,24 @@ class MoleculeDataset(Dataset):
                 ),
                 axis=1,
             )
+
+    def load_lb_aux_data(self, lb_aux_data: Optional[dict] = None):
+        if lb_aux_data is not None:
+            for t in self.lb_aux_data_names:
+                if torch.is_tensor(lb_aux_data[t]):
+                    self.lb_aux_data[t] = lb_aux_data[t][self.frame_slice]
+                else:
+                    self.lb_aux_data[t] = lb_aux_data[t]
+        else:
+            for t in self.lb_aux_data_names:
+                self.lb_aux_data[t] = hickle.load(
+                    self.lb_aux_path + "/{}.hickle".format(t)
+                )
+                if torch.is_tensor(self.lb_aux_data[t]):
+                    self.lb_aux_data[t] = self.lb_aux_data[t][self.frame_slice].to(
+                        device=self.device
+                    )
+
 
     def shuffle(self, indices: torch.tensor):
         self.structures = [self.structures[i] for i in indices]
@@ -257,6 +285,7 @@ class MLDataset(Dataset):
         features: Optional[TensorMap] = None,
         shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
+        orthogonal: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -278,6 +307,7 @@ class MLDataset(Dataset):
             overlap=self.molecule_data.aux_data['overlap'],
             frames=self.structures,
             orbitals=self.molecule_data.aux_data.get("orbitals", None),
+            orthogonal=orthogonal,
             device=device,
             **kwargs,
         )

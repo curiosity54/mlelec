@@ -188,17 +188,20 @@ def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True
     return torch.stack(dipoles), eigenvalues
 
 
-def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indices, mfs):
+def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indices, mfs, orthogonal=True):
     # Convert fock predictions back to pyscf order
     # Compute dipole moment for each molecule in batch
     batch_frames = [ml_data.structures[i] for i in batch_indices]
     batch_fock = unfix_orbital_order(
         batch_fockvars, batch_frames, ml_data.molecule_data.aux_data["orbitals"]
     )
-    batch_overlap = [
-        torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i])
-        for i in batch_indices
-    ]
+    if orthogonal:
+        batch_overlap = None
+    else:
+        batch_overlap = [
+            torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i])
+            for i in batch_indices
+        ]
     batch_mfs = [mfs[i] for i in batch_indices]
     dipoles, eigenvalues = compute_dipole_moment_from_mf(batch_mfs,
                                                          batch_fock, batch_overlap)
@@ -240,16 +243,18 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps=None, orthogonal=Tru
     return torch.stack(polarisability), eigenvalues
 
 
-def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs):
+def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, orthogonal=True):
 
     batch_frames = [ml_data.structures[i] for i in batch_indices]
     batch_fock = unfix_orbital_order(
         batch_fockvars, batch_frames, ml_data.molecule_data.aux_data["orbitals"]
     )
-    batch_overlap = [
-        torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i])
-        for i in batch_indices
-    ]
+    if orthogonal:
+        batch_overlap = None
+    else:
+        batch_overlap = [
+            torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i])
+            for i in batch_indices]
     batch_mfs = [mfs[i] for i in batch_indices]
     polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap)
     return polars, eigenvalues

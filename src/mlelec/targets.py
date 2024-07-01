@@ -44,6 +44,7 @@ class TwoCenter:
         overlap: torch.tensor,
         orbitals: Dict,
         frames: List[ase.Atoms],
+        orthogonal: bool,
         device=None,
     ):
         # assert (
@@ -97,6 +98,7 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         overlap,
         orbitals,
         frames,
+        orthogonal,
         model_strategy: str = "coupled",
         device="cpu",
         **kwargs,
@@ -113,10 +115,10 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         overs = twocenter_utils.fix_orbital_order(
             overlap, frames=frames, orbital=orbitals
         )
+        if orthogonal:
+            tensor = twocenter_utils._lowdin_orthogonalize(tensor, overs)
 
-        tensor = twocenter_utils._lowdin_orthogonalize(tensor, overs)
-
-        super().__init__(tensor, overs, orbitals, frames, device=device)
+        super().__init__(tensor, overs, orbitals, frames, orthogonal, device=device)
         # assert torch.allclose(
         #     self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
         # ), "Only symmetric Hamiltonians supported for now"
