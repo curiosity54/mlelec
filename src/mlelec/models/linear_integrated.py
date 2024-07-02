@@ -510,7 +510,7 @@ class LinearModelPeriodic(nn.Module):
         self.model = torch.nn.ModuleDict(self.blockmodels)
         self.model.to(self.device)
 
-    def forward(self, return_matrix=False):
+    def old_forward(self, return_matrix=False):
         self.recon = {}
 
         pred_blocks = []
@@ -582,7 +582,7 @@ class LinearModelPeriodic(nn.Module):
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
     
-    def predict_batch(self, features, target_blocks = None, return_matrix = False):
+    def forward(self, features, target_blocks = None, return_matrix = False):
 
         if target_blocks is None:
             target_blocks = self.target_blocks
@@ -594,7 +594,8 @@ class LinearModelPeriodic(nn.Module):
             # print(k)
             # blockval = torch.linalg.norm(block.values)
             if True:
-                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys_integrated(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
+                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys_integrated(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
+                feat = map_targetkeys_to_featkeys_integrated(features, k)
                 nsamples, ncomp, _ = feat.values.shape
                 pred = self.blockmodels[str(tuple(k))](feat.values)
                 pred_blocks.append(

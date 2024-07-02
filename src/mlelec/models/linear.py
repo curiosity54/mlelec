@@ -608,8 +608,11 @@ class LinearModelPeriodic(nn.Module):
         return self.recon_blocks
         # _to_matrix(_to_uncoupled_basis(pred_sum_dict[s]), frames = self.frames, orbitals=self.orbitals)
 
-    def predict(self, features, target_blocks, return_matrix=False):
+    def predict(self, features, target_blocks=None, return_matrix=False):
         pred_blocks = []
+        if target_blocks is None:
+            target_blocks = self.target_blocks
+            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
         for k, block in target_blocks.items():
             # print(k)
             # blockval = torch.linalg.norm(block.values)
@@ -619,27 +622,22 @@ class LinearModelPeriodic(nn.Module):
                 blockstd = 1
             if True:
             # if blockval > 1e-10:
-                sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(features, k)
-                # feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
 
-                featnorm = torch.linalg.norm(feat.values)
-                nsamples, ncomp, nprops = block.values.shape
+                # feat = _match_feature_and_target_samples(block, feat, return_idx=True) # FIXME: return_idx does the opposite of its name?
+
+                nsamples, ncomp, nprops = feat.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
 
-                assert torch.all(block.samples.values == feat.samples.values[:, :6]), (
-                    k,
-                    block.samples.values.shape,
-                    feat.samples.values.shape,
-                )
+               
                 pred = self.blockmodels[str(tuple(k))](feat.values) * blockstd
                 # print(pred.shape, nsamples)
 
                 pred_blocks.append(
                     TensorBlock(
                         values=pred.reshape((nsamples, ncomp, 1)),
-                        samples=block.samples,
-                        components=block.components,
+                        samples=feat.samples,
+                        components=feat.components,
                         properties=self.dummy_property,
                     )
                 )
