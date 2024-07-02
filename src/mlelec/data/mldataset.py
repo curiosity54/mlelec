@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Tuple
 import warnings
 import copy
 from collections import defaultdict
@@ -74,6 +74,7 @@ class MLDataset():
         if isinstance(item_names, str):
             item_names = [item_names]
         self.item_names = [self._flattenname(t) for t in item_names]
+        orig_item_names = {self._flattenname(t): t for t in item_names}
 
         items = {}
 
@@ -82,17 +83,17 @@ class MLDataset():
             if name not in self._implemented_items():
                 warnings.warn(f"Target {name} is not implemented! Skipping it")
                 continue
-
-            if name == 'fock_blocks':
+            
+            if name == 'fockblocks':
                 items[name] = self.compute_coupled_blocks()
 
-            elif name == 'fock_realspace':
+            elif name == 'fockrealspace':
                 # TODO
                 continue
 
-            elif name == 'fock_kspace':
-                # TODO
-                continue
+            elif name == 'fockkspace':
+                assert not self.qmdata._ismolecule, "k-space Hamiltonian not available for molecules."
+                items[name] = self.compute_tensors(self.qmdata.fock_kspace)
             
             elif name == 'eigenvalues':
                 if 'atomresolveddensity' not in self.item_names:
@@ -111,7 +112,6 @@ class MLDataset():
             else:
                 raise ValueError(f"This looks like a bug! {name} is in MLDataset._implemented_items but it is not properly handled in the loop.")
                 
-
         # Define dictionary of targets
 
         # sets the first target as the primary target - # FIXME
@@ -138,6 +138,7 @@ class MLDataset():
         self.train_frac = kwargs.get("train_frac", 0.7)
         self.val_frac = kwargs.get("val_frac", 0.2)
         self.test_frac = kwargs.get("test_frac", 0.1)
+        self._split_indices(self.train_frac, self.val_frac, self.test_frac)
 
         try:
             assert np.isclose(self.train_frac + self.val_frac + self.test_frac, 1, rtol = 1e-6, atol = 1e-5)
@@ -160,20 +161,23 @@ class MLDataset():
             assert self.grouped_labels is not None
         except:
             self.grouped_labels = [Labels(names = 'structure', 
-                                          values = torch.tensor(A).reshape(-1, 1).to(dtype = self.device)) for A in self.indices]
+                                          values = A.reshape(-1, 1)) for A in self.indices]
             
         # Initialize mentatensor.learn.IndexedDataset
-        _d = {k: [self.items[k][A] for A in self.train_idx] for k in self.items}
+        _d = {orig_item_names[k]: [self.items[k][A] for A in self.train_idx] for k in self.items}
         _g = [self.grouped_labels[A] for A in self.train_idx]
-        self.train_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
+        self.train_dataset = IndexedDataset(sample_id = _g, **_d)
+        # self.train_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
-        _d = {k: [self.items[k][A] for A in self.val_idx] for k in self.items}
+        _d = {orig_item_names[k]: [self.items[k][A] for A in self.val_idx] for k in self.items}
         _g = [self.grouped_labels[A] for A in self.val_idx]
-        self.val_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
+        self.val_dataset = IndexedDataset(sample_id = _g, **_d)
+        # self.val_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
-        _d = {k: [self.items[k][A] for A in self.test_idx] for k in self.items}
+        _d = {orig_item_names[k]: [self.items[k][A] for A in self.test_idx] for k in self.items}
         _g = [self.grouped_labels[A] for A in self.test_idx]
-        self.test_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
+        self.test_dataset = IndexedDataset(sample_id = _g, **_d)
+        # self.test_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
     def _shuffle(self, random_seed: int = None):
         '''
@@ -240,7 +244,8 @@ class MLDataset():
                 self.test_frac = 1 - (self.train_frac + self.val_frac)
                 assert self.test_frac > 0
 
-        splits = [int(np.rint(s/100*self.nstructs)) for s in [self.train_frac, self.val_frac, self.test_frac]]
+        splits = [int(np.rint(s*self.nstructs)) for s in [self.train_frac, self.val_frac, self.test_frac]]
+
         try:
             assert sum(splits) == self.nstructs
         except AssertionError:
@@ -256,9 +261,9 @@ class MLDataset():
             assert (len(self.test_idx)> 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
             ), "Split indices not generated properly"
 
-        self.target_train = self._get_subset(self.target.blocks, self.train_idx)
-        self.target_val = self._get_subset(self.target.blocks, self.val_idx)
-        self.target_test = self._get_subset(self.target.blocks, self.test_idx)
+        # self.target_train = self._get_subset(self.target.blocks, self.train_idx)
+        # self.target_val = self._get_subset(self.target.blocks, self.val_idx)
+        # self.target_test = self._get_subset(self.target.blocks, self.test_idx)
 
         self.train_frames = [self.structures[i] for i in self.train_idx]
         self.val_frames = [self.structures[i] for i in self.val_idx]
@@ -285,26 +290,58 @@ class MLDataset():
     def __len__(self):
         return self.nstructs
 
-    def __getitem__(self, idx):
-        if not self.model_type == "acdc":
-            return self.structures[idx], self.target.tensor[idx]
-        else:
-            assert self.features is not None, "Features not set, call _set_features() first"
-            x = mts.slice(self.features, axis="samples", labels=Labels(names=["structure"], values = idx.reshape(-1, 1)))
+    # def __getitem__(self, idx):
+    #     if not self.model_type == "acdc":
+    #         return self.structures[idx], self.target.tensor[idx]
+    #     else:
+    #         assert self.features is not None, "Features not set, call _set_features() first"
+    #         x = mts.slice(self.features, axis="samples", labels=Labels(names=["structure"], values = idx.reshape(-1, 1)))
 
-            if self.model_return == "blocks":
-                y = mts.slice(self.target.blocks, axis="samples", labels = Labels(names=["structure"], values = idx.reshape(-1, 1)))
-            else:
-                idx = [i.item() for i in idx]
-                y = self.target.tensor[idx]
+    #         if self.model_return == "blocks":
+    #             y = mts.slice(self.target.blocks, axis="samples", labels = Labels(names=["structure"], values = idx.reshape(-1, 1)))
+    #         else:
+    #             idx = [i.item() for i in idx]
+    #             y = self.target.tensor[idx]
  
-            return x, y, idx
+    #         return x, y, idx
 
     def collate_fn(self, batch):
         x = batch[0][0]
         y = batch[0][1]
         idx = batch[0][2]
         return {"input": x, "output": y, "idx": idx}
+    
+    def compute_tensors(self, tensors: Union[torch.Tensor, List]):
+        
+        out_tensors = []
+
+        for ifr, tensor in enumerate(tensors):
+
+            shape = tensor.shape
+            leading_shape = shape[:-2]
+            indices = itertools.product(*[range(dim) for dim in leading_shape])
+            
+            dtype = tensor.dtype
+            
+            out_tensor = torch.empty_like(tensor)
+
+            frame = self.qmdata.structures[ifr]
+            natm = len(frame)
+            basis = [len(self.qmdata.basis[s]) for s in frame.numbers]
+            basis = itertools.product(basis, basis)
+            posit = itertools.product(range(natm), range(natm))
+            mask = frame.get_all_distances(mic = True) <= self.cutoff
+            t = [torch.ones(size, dtype = dtype) if mask[p] else torch.zeros(size, dtype = dtype) for p, size in zip(posit, basis)]
+            mask = torch.vstack([torch.hstack([t[natm*i+j] for j in range(natm)]) for i in range(natm)])
+    
+            for index in indices:
+
+                M = tensor[index].clone()
+                out_tensor[index] = M*mask
+            
+            out_tensors.append(out_tensor)
+        
+        return out_tensors
     
     def compute_coupled_blocks(self, matrix = None, use_overlap = False):
         #TODO: move to a target class?
@@ -420,7 +457,8 @@ class MLDataset():
             C = eigenvectors[index]
 
             if ifr != frames[indices[0]]:
-                frame = frames[indices[0]]
+                ifr = indices[0]
+                frame = frames[ifr]
                 natm = len(frame)
                 nelec = sum(frame.numbers)
                 occ = torch.tensor([2.0+0.0j if i <= nelec//2 else 0.0+0.0j for i in range(C.shape[0])])
@@ -450,18 +488,18 @@ class MLDataset():
         
     def _implemented_items(self):
         return [
-            'fock_blocks', 
-            'overlap_blocks', 
+            'fockblocks', 
+            'overlapblocks', 
             # 'fock_realspace',
-            # 'fock_kspace',
+            'fockkspace',
             # 'overlap_realspace',
             # 'overlap_kspace',
             'eigenvalues',
             'atomresolveddensity'
             ]
 
-    def _flattenname(string):
-        return ''.join(''.join(string.split('_')).split(' '))
+    def _flattenname(self, string):
+        return ''.join(''.join(string.split('_')).split(' ')).lower()
 
 def _approximation_error(matrix: torch.Tensor, s_matrix: torch.Tensor) -> torch.Tensor:
     norm_of_matrix = torch.norm(matrix)
