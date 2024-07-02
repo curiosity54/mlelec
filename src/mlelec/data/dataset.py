@@ -264,11 +264,11 @@ class MLDataset(Dataset):
         # self.target.shuffle(self.indices)
         # self.molecule_data.shuffle(self.indices)
 
-    def _get_subset(self, y: TensorMap, indices: torch.tensor):
+    def _get_subset(self, y:torch.ScriptObject, indices: torch.tensor):
 
         # indices = indices.cpu().numpy()
+        assert isinstance(y, torch.ScriptObject) and y._type().name() == "TensorMap", "y must be a TensorMap"
         
-        assert isinstance(y, TensorMap)
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
         return mts.slice(
@@ -328,14 +328,10 @@ class MLDataset(Dataset):
                 (self.train_frac + self.val_frac) * self.nstructs
             )
         ].sort()[0]
-        self.test_idx = self.indices[
-            int((self.train_frac + self.val_frac) * self.nstructs) :
-        ].sort()[0]
+        self.test_idx = self.indices[int((self.train_frac + self.val_frac) * self.nstructs) :].sort()[0]
         if self.test_frac > 0:
-            assert (
-                len(self.test_idx)
-                > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-            ), "Split indices not generated properly"
+            assert (len(self.test_idx)> 0.0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+                    ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)

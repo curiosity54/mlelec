@@ -531,6 +531,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
         pairs = pair_features(
             dataset.structures,
             hypers,
+            hypers_pair=kwargs.get("hypers_pair", hypers),
             order_nu=kwargs.get("order_nu_pair", 1),
             lcut=hypers["max_angular"],
             feature_names=single[0].properties.names,
