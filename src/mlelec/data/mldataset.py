@@ -1,4 +1,5 @@
-from typing import Dict, List, Optional, Union, Tuple
+from typing import Dict, List, Optional, Union, Tuple, NamedTuple
+from collections import namedtuple
 import warnings
 import copy
 from collections import defaultdict
@@ -198,17 +199,17 @@ class MLDataset():
             
         # Initialize mentatensor.learn.IndexedDataset
         _dict = {orig_item_names[k]: [self.items[k][A] for A in self.train_idx] for k in self.items}
-        _group_lbl = [self.grouped_labels[A] for A in self.train_idx]
+        _group_lbl = [self.grouped_labels[A].values.tolist()[0][0] for A in self.train_idx]
         self.train_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
         # self.train_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
         _dict = {orig_item_names[k]: [self.items[k][A] for A in self.val_idx] for k in self.items}
-        _group_lbl = [self.grouped_labels[A] for A in self.val_idx]
+        _group_lbl = [self.grouped_labels[A].values.tolist()[0][0] for A in self.val_idx]
         self.val_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
         # self.val_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
         _dict = {orig_item_names[k]: [self.items[k][A] for A in self.test_idx] for k in self.items}
-        _group_lbl = [self.grouped_labels[A] for A in self.test_idx]
+        _group_lbl = [self.grouped_labels[A].values.tolist()[0][0] for A in self.test_idx]
         self.test_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
         # self.test_dataset = IndexedDataset.from_dict(_d, sample_id = _g)
 
@@ -326,9 +327,9 @@ class MLDataset():
                 raise NotImplementedError(f"Training strategy {training_strategy} not implemented.")
         else:
             if training_strategy == 'twocenter':
-                assert 'neighbors' in features.sample_names, f"Features must contain 'neighbors' label for {training_strategy}."
+                assert 'neighbor' in features.sample_names, f"Features must contain 'neighbor' label for {training_strategy}."
             elif training_strategy == 'one_center':
-                assert 'neighbors' not in features.sample_names, f"Features must not contain 'neighbors' label for {training_strategy}."
+                assert 'neighbor' not in features.sample_names, f"Features must not contain 'neighbor' label for {training_strategy}."
             else:
                 raise NotImplementedError(f"Training strategy {training_strategy} not implemented")
             self.features = features
@@ -557,10 +558,11 @@ class MLDataset():
         else:
             return T
         
-    def _compute_model_metadata(self):
+    def _compute_model_metadata(self ):
 
         qmdata = self.qmdata
-        
+        species_pair = np.unique([comb for frame in qmdata.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis = 0)
+
         if not self.orbitals_to_properties:
             raise NotImplementedError("Only orbitals to properties implemented.")
         
@@ -568,8 +570,7 @@ class MLDataset():
         property_names = ['n_i', 'l_i', 'n_j', 'l_j']
         property_values = {}
         
-        species = list(qmdata.basis.keys())
-        for s1, s2 in itertools.product(species, repeat = 2):
+        for s1, s2 in species_pair:
             same_species = s1 == s2
             if same_species:
                 block_types = [-1,0,1]
@@ -585,7 +586,9 @@ class MLDataset():
                     
                     for block_type in block_types:
                         key = block_type, s1, s2, L, sigma
-                        
+                        if s1 == s2 and n1 == n2 and l1 == l2:
+                            if ((sigma == -1 and block_type in (0, 1)) or (sigma == 1 and block_type == -1)) and not self.skip_symmetry:
+                                continue
                         if key not in property_values:
                             property_values[key] = []
                         
@@ -607,10 +610,42 @@ class MLDataset():
 
         self.model_metadata = mts.sort(TensorMap(Labels(key_names, torch.tensor(keys, device = qmdata.device)), blocks))
 
-                
 
+    def group_and_join(self,
+        batch: List[NamedTuple],
+        fields_to_join: Optional[List[str]] = None,
+        join_kwargs: Optional[dict] = None,
+    ) -> NamedTuple:
 
-        
+        data = []
+        names = batch[0]._fields
+        if fields_to_join is None:
+            fields_to_join = names
+        if join_kwargs is None:
+            join_kwargs = {}
+        for name, field in zip(names, list(zip(*batch))):
+            if name == "sample_id":  # special case, keep as is
+                data.append(field)
+                continue
+
+            if name in fields_to_join:  # Join tensors if requested
+                if isinstance(field[0], torch.ScriptObject) and field[0]._has_method(
+                    "keys_to_properties"
+                ):  # inferred metatensor.torch.TensorMap type
+                    data.append(mts.join(field, axis="samples", **join_kwargs))
+                elif isinstance(field[0], torch.Tensor):  # torch.Tensor type
+                    try:
+                        data.append(torch.stack(field))
+                    except RuntimeError:
+                        data.append(field)
+                else:
+                    data.append(field)
+
+            else:  # otherwise just keep as a list
+                data.append(field)
+
+        return namedtuple("Batch", names)(*data)        
+    
     def _implemented_items(self):
         return [
             'fockblocks', 

@@ -554,25 +554,30 @@ def compute_features(dataset: QMDataset,
                      **kwargs):
     
     # TODO: is this the right place/format for this function?
-    import time
+    unique_species = set.union(*[frame.symbols.species() for frame in dataset.structures])
+    structures = dataset.structures + [ase.Atoms(''.join(unique_species), positions = np.random.normal(0, 1, (len(unique_species), 3)), pbc = False)]
+
     if hypers_pair is None:
         hypers_pair = hypers_atom
     return_rho0ij = kwargs.get("return_rho0ij", False)
     
-    # now = time.time()
-    rhoij = pair_features(dataset.structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
+    rhoij = pair_features(structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
                           kmesh = dataset.kmesh, device = device, lcut = lcut, return_rho0ij = return_rho0ij)  
-    # print(f'pair in {now-time.time()}')
+
     if both_centers and not return_rho0ij:
         NU = 3
     else:
         NU = 2
-    rhonui = single_center_features(dataset.structures, hypers_atom, order_nu = NU, lcut = lcut, device = device, feature_names = rhoij.property_names)
+    rhonui = single_center_features(structures, hypers_atom, order_nu = NU, lcut = lcut, device = device, feature_names = rhoij.property_names)
 
-    # return rhonui, rhoij
-    # print(f'atom in {now-time.time()}')
     hfeat = twocenter_features_periodic_NH(single_center = rhonui, pair = rhoij, all_pairs = all_pairs, device = device)
-    # print(f'symm in {now-time.time()}')
+
+    hfeat = mts.slice(hfeat, axis = 'samples', labels = Labels(['structure'], torch.arange(len(dataset.structures)).reshape(-1, 1)))
+    keys_to_drop = [k.values for k, b in hfeat.items() if b.values.numel() == 0]
+    if len(keys_to_drop) > 0:
+        keys_to_drop = Labels(hfeat.keys.names, torch.stack(keys_to_drop))
+        hfeat = mts.drop_blocks(hfeat, keys = keys_to_drop)
+
     return hfeat
 
 
