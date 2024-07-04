@@ -888,7 +888,7 @@ class QMDataset(Dataset):
             if not self._ismolecule:
                 self.fock_kspace = self.bloch_sum(fock_realspace, is_tensor = False)
         elif (fock_kspace is None) and (fock_realspace is None):
-            warnings.warn("Target not provided. ARE YOU DUMB OR WHAT???????? Get your life together you complete piece of crap. ")
+            warnings.warn("Target not provided.")
             # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
         elif (fock_kspace is not None) and (fock_realspace is not None):
             raise NotImplementedError("TBI: check consistency.")

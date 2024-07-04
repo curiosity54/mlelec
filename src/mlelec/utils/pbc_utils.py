@@ -1183,7 +1183,7 @@ def TMap_bloch_sums_feat(target_blocks, phase, indices=None, kpts_idx=None, retu
 
 ######--------------- NEW/OLD - to discard or incorporate? --------------------------- ###########################
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False):
+def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, sample_id = None):
 
     if device is None:
         device = dataset.device
@@ -1252,7 +1252,11 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
         # loops over samples (structure, i, j)
     
         for sample, blockval in zip(block.samples.values, block.values):
-            
+
+            if blockval.numel() == 0:
+                # Empty block
+                continue        
+
             A, i, j, Tx, Ty, Tz = sample.tolist()
             T = Tx, Ty, Tz
             mT = tuple(-t for t in T)

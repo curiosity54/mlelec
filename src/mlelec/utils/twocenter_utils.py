@@ -856,6 +856,11 @@ def _to_uncoupled_basis(
         device = device
     )
     for idx, block in blocks.items():
+
+        if block.values.numel() == 0:
+            # Empty block
+            continue
+
         block_type = idx["block_type"]
         ai = idx["species_i"]
         ni = idx["n_i"]

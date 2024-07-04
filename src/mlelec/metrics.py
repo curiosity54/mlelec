@@ -212,10 +212,15 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
 #         return sum(losses)
     
 def Eigval_loss(
-    pred: torch.tensor, target: torch.tensor, overlap: Optional[torch.tensor] = None
+    pred: Union[torch.tensor, List], target: Union[torch.tensor, List], overlap: Optional[torch.tensor] = None
 ):
     """Loss function for eigenvalues"""
-    return torch.sum((pred - target - (pred.mean() - target.mean())) ** 2)
+    try:
+        return torch.sum((pred - target)**2)
+        # return torch.sum((pred - target - (pred.mean() - target.mean())) ** 2)
+    except TypeError:
+        return sum([torch.sum((p - t)**2) for p, t in zip(pred, target)])
+        # return sum([torch.sum((p - t - (p.mean() - t.mean())) ** 2) for p, t in zip(pred, target)])
 
 
 def Custom_loss():
