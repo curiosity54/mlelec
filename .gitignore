@@ -67,3 +67,7 @@ examples/data/periodic/deepH_graphene/wrap/feat_2
 examples/data/periodic/deepH_graphene/wrap/feat_4
 examples/data/periodic/deepH_graphene/wrap/feat_5
 examples/data/periodic/deepH_graphene/wrap/feat_3
+TRAIN-Copy1.py
+train_new_model.py
+benzene-deformations.png
+benzene_test.py
