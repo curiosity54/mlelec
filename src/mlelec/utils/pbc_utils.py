@@ -1,3 +1,4 @@
+from typing import Tuple
 import numpy as np
 import torch
 import warnings
@@ -299,199 +300,6 @@ def move_orbitals_to_keys(in_blocks, dummy_property = None):
     # keys = block_type, species_i, species_j, L, sigma, n_i, l_i, n_j, l_j
     tmap = TensorMap(keys, blocks)
     return mts.permute_dimensions(tmap, axis='keys', dimensions_indexes = [0,1,5,6,2,7,8,3,4])
-
-def OLD_blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True):
-    ## WARNING: currently 'detaching' values before filling in matrices, so DONT train on reconstructed matrices
-    if device is None:
-        device = dataset.device
-        
-    if "cell_shift_a" not in blocks.keys.names:
-        assert "cell_shift_b" not in blocks.keys.names, "Weird! keys contain 'cell_shift_b' but not 'cell_shift_a'."
-        assert "cell_shift_c" not in blocks.keys.names, "Weird! keys contain 'cell_shift_c' but not 'cell_shift_a'."
-
-        assert "cell_shift_a" in blocks.sample_names, "Cell shifts must be in samples."
-        assert "cell_shift_b" in blocks.sample_names, "Cell shifts must be in samples."
-        assert "cell_shift_c" in blocks.sample_names, "Cell shifts must be in samples."
-
-        if "L" in blocks.keys.names:
-            from mlelec.utils.twocenter_utils import _to_uncoupled_basis
-            blocks = _to_uncoupled_basis(blocks, cg = cg, device = device)
-        blocks = move_cell_shifts_to_keys(blocks)      
-
-    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
-    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
-    orbs_mult = {
-        species: 
-                {tuple(k): v
-            for k, v in zip(
-                *np.unique(
-                    np.asarray(dataset.basis[species])[:, :2],
-                    axis=0,
-                    return_counts=True,
-                )
-            )
-        }
-        for species in dataset.basis
-    }
-
-    reconstructed_matrices = []
-    
-    bt1factor = ISQRT_2
-    bt2factor =2 # because all_pairs=False in matrix_to_blocks still returns all species pairs (not ordered)
-    if all_pairs:
-        bt1factor /= 2
-        bt2factor = 2
-
-    for A in range(len(dataset.structures)):
-        norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
-        reconstructed_matrices.append({})
-
-    # loops over block types
-    for key, block in blocks.items():
-        block_type = key["block_type"]
-        ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
-        aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
-        T = key["cell_shift_a"], key["cell_shift_b"], key["cell_shift_c"]
-
-        T_is_not_zero = np.linalg.norm(T) > 1e-20
-        
-        #----sorting ni,li,nj,lj---
-        if sort_orbs:
-            fac=1 # sorted orbs - we only count everything once
-            if ai == aj and (ni ==nj and li == lj): #except these diag blocks
-                fac=2 #so we need to divide by 2 to avoic double count
-        else: 
-            # no sorting -->  we count everything twice
-            fac=2
-        #----sorting ni,li,nj,lj---
-        #TODO: make consistent in kmatrix_to_blocks, kblocks_to_matrix
-        mT = tuple(-t for t in T)
-        # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
-        # of a p block = 3
-        orbs_i = orbs_mult[ai]
-        orbs_j = orbs_mult[aj]
-        
-        # The shape of the block corresponding to the orbital pair
-        shapes = {
-            (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
-            for k1 in orbs_i
-            for k2 in orbs_j
-        }
-        # where does orbital PHI = (ni, li) start within a block of atom i
-        phioffset = orbs_offset[(ai, ni, li)] 
-        # where does orbital PSI = (nj,lj) start within a block of atom j
-        psioffset = orbs_offset[(aj, nj, lj)]
-
-        # loops over samples (structure, i, j)
-    
-        for sample, blockval in zip(block.samples, block.values):
-            
-            A = sample["structure"]
-            i = sample["center"]
-            j = sample["neighbor"]
-
-            other_fac = 1
-            if i == j and T_is_not_zero and not all_pairs:
-                other_fac = 0.5
-            
-            if T not in reconstructed_matrices[A]:
-                assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
-                norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
-                reconstructed_matrices[A][T] = torch.zeros(norbs, norbs, device = device)
-                reconstructed_matrices[A][mT] = torch.zeros(norbs, norbs, device = device)
-
-            matrix_T  = reconstructed_matrices[A][T]
-            matrix_mT = reconstructed_matrices[A][mT]
-            # beginning of the block corresponding to the atom i-j pair
-            i_start, j_start = atom_blocks_idx[(A, i, j)]
-            # where does orbital (ni, li) end (or how large is it)
-            phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
-            # where does orbital (nj, lj) end (or how large is it)
-            psi_end = shapes[(ni, li, nj, lj)][1]  
-            # values = blockval[:, :, 0] #.detach().clone() # FIXME detach?
-            # position of the orbital within this block
-            if block_type == 0:
-                # <i \phi| H(T)|j \psi> = # <i \phi| H(-T)|j \psi>^T 
-                if not sort_orbs:
-                    ff = 0.5
-                else: 
-                    # ff = 0.5
-                    if not(ni==nj and li==lj):
-                        ff = 1
-                    else:
-                        ff = 0.5
-                matrix_T[
-                    i_start + phioffset : i_start + phioffset + phi_end,
-                    j_start + psioffset : j_start + psioffset + psi_end,
-                             ] += blockval[:, :, 0]*ff
-                matrix_mT[
-                    j_start + psioffset : j_start + psioffset + psi_end,
-                    i_start + phioffset : i_start + phioffset + phi_end,
-                             ] += blockval[:, :, 0].T*other_fac*ff
-            elif block_type==2:
-                ff=0.5
-                if not all_pairs:
-                    ff=1
-                # if all_pairs: # and not sort_orbs:
-                #     ff=0.5
-                # else: 
-                #     ff = 100
-                matrix_T[
-                    i_start + phioffset : i_start + phioffset + phi_end,
-                    j_start + psioffset : j_start + psioffset + psi_end,
-                             ] += blockval[:, :, 0]*ff
-                matrix_mT[
-                    j_start + psioffset : j_start + psioffset + psi_end,
-                    i_start + phioffset : i_start + phioffset + phi_end,
-                             ] += blockval[:, :, 0].T*other_fac*ff
-            elif abs(block_type) == 1:
-                # values = values * bt1factor/fac*other_fac
-                
-                iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
-                                  slice(j_start + psioffset , j_start + psioffset + psi_end)
-                ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
-                                slice(j_start + phioffset , j_start + phioffset + phi_end),
-                                
-                jphi_ipsi_slice = slice(j_start + phioffset , j_start + phioffset + phi_end),\
-                                 slice(i_start + psioffset , i_start + psioffset + psi_end)
-                
-                jpsi_iphi_slice = slice(j_start + psioffset , j_start + psioffset + psi_end),\
-                        slice(i_start + phioffset , i_start + phioffset + phi_end)
-                                  
-                                  
-                # Eq (1) <i \phi| H(T)|j \psi> = # block_(+1)ijT + block_(-1)ijT 
-                # Eq (2) <j \phi| H(-T)|i \psi> = # block_(+1)ijT - block_(-1)ijT 
-                # Eq (3) <j \psi| H(-T)|i \phi> = # block_(+1)ijT^\dagger + block_(-1)ijT^\dagger (Transpose of Eq1) 
-                # Eq (4) <i \psi| H(T)|j \phi> = # block_(+1)ijT^\dagger - block_(-1)ijT^\dagger (Transpose of Eq2)
-                bt1_fact_fin = bt1factor/fac*other_fac
-                if block_type == 1:
-                    # first half of Eq (1) 
-                    matrix_T[iphi_jpsi_slice] += blockval[:, :, 0]* bt1_fact_fin
-                    # first half of Eq (2)
-                    matrix_mT[jphi_ipsi_slice] += blockval[:, :, 0]* bt1_fact_fin
-                    # first half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += blockval[:, :, 0].T* bt1_fact_fin
-                    # first half of Eq (4)
-                    matrix_T[ ipsi_jphi_slice] += blockval[:, :, 0].T* bt1_fact_fin
-        
-                else:
-                    # second half of Eq (1)
-                    matrix_T[iphi_jpsi_slice] += blockval[:, :, 0]* bt1_fact_fin
-                    # second half of Eq (2)
-                    matrix_mT[jphi_ipsi_slice] -= blockval[:, :, 0]* bt1_fact_fin
-                    # second half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += blockval[:, :, 0].T* bt1_fact_fin
-                    # second half of Eq (4)
-                    matrix_T[ipsi_jphi_slice ] -= blockval[:, :, 0].T* bt1_fact_fin
-         
-    for A, matrix in enumerate(reconstructed_matrices):
-        Ts = list(matrix.keys())
-        for T in Ts:
-            mT = tuple(-t for t in T)
-         
-            assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
-
-    return reconstructed_matrices
 
 # def fourier_transform(H_k, kpts, T):
 #     '''
@@ -1183,7 +991,7 @@ def TMap_bloch_sums_feat(target_blocks, phase, indices=None, kpts_idx=None, retu
 
 ######--------------- NEW/OLD - to discard or incorporate? --------------------------- ###########################
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, sample_id = None):
+def blocks_to_matrix_OLD(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, sample_id = None):
 
     if device is None:
         device = dataset.device
@@ -1210,16 +1018,24 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
 
     reconstructed_matrices = []
     
+    # bt 1
     bt1factor = ISQRT_2
     if all_pairs:
         bt1factor /= 2
 
+    # bt 2 
+    bt2_factor_p=0.5
+    if not all_pairs:
+        bt2_factor_p=1
+
+    old_A = -1
     for A in range(len(dataset.structures)):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
         reconstructed_matrices.append({})
 
     # loops over block types
     for key, block in blocks.items():
+
         block_type = key["block_type"]
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
@@ -1250,40 +1066,44 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
         psioffset = orbs_offset[(aj, nj, lj)]
 
         # loops over samples (structure, i, j)
+
+        # bt 0
+        if not sort_orbs:
+            bt0_factor_p = 0.5
+        else: 
+            if not(ni==nj and li==lj):
+                bt0_factor_p = 1
+            else:
+                bt0_factor_p = 0.5
     
-        for sample, blockval in zip(block.samples.values, block.values):
+        samples = block.samples.values.tolist()
+        
+        blockvalues = block.values
+        if detach:
+            blockvalues = blockvalues.detach() #.clone()
+
+        for sample, blockval in zip(samples, blockvalues[:,:,0]):
 
             if blockval.numel() == 0:
                 # Empty block
                 continue        
 
-            A, i, j, Tx, Ty, Tz = sample.tolist()
+            A, i, j, Tx, Ty, Tz = sample
             T = Tx, Ty, Tz
-            mT = tuple(-t for t in T)
+            mT = -Tx, -Ty, -Tz
 
             other_fac = 1
             if i == j and T != (0,0,0) and not all_pairs:
                 other_fac = 0.5
 
             # bt 0
-            if not sort_orbs:
-                bt0_factor_p = 0.5
-            else: 
-                if not(ni==nj and li==lj):
-                    bt0_factor_p = 1
-                else:
-                    bt0_factor_p = 0.5
             bt0_factor_m = bt0_factor_p*other_fac
 
             # bt 2 
-            bt2_factor_p=0.5
-            if not all_pairs:
-                bt2_factor_p=1
             bt2_factor_m = bt2_factor_p*other_fac
 
             # bt 1
             bt1_fact_fin = bt1factor/fac*other_fac
-
             
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
@@ -1293,28 +1113,30 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
 
             matrix_T  = reconstructed_matrices[A][T]
             matrix_mT = reconstructed_matrices[A][mT]
-            # beginning of the block corresponding to the atom i-j pair
-            i_start, j_start = atom_blocks_idx[(A, i, j)]
-            # where does orbital (ni, li) end (or how large is it)
-            phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
-            # where does orbital (nj, lj) end (or how large is it)
-            psi_end = shapes[(ni, li, nj, lj)][1]  
 
-            iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
-                              slice(j_start + psioffset , j_start + psioffset + psi_end)
-            ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
-                              slice(j_start + phioffset , j_start + phioffset + phi_end),
-                            
-            jphi_ipsi_slice = slice(j_start + phioffset , j_start + phioffset + phi_end),\
-                              slice(i_start + psioffset , i_start + psioffset + psi_end)
+            if A != old_A:
+                # beginning of the block corresponding to the atom i-j pair
+                i_start, j_start = atom_blocks_idx[(A, i, j)]
+                # where does orbital (ni, li) end (or how large is it)
+                phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
+                # where does orbital (nj, lj) end (or how large is it)
+                psi_end = shapes[(ni, li, nj, lj)][1]  
+
+                iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
+                                slice(j_start + psioffset , j_start + psioffset + psi_end)
+                ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
+                                slice(j_start + phioffset , j_start + phioffset + phi_end),
+                                
+                jphi_ipsi_slice = slice(j_start + phioffset , j_start + phioffset + phi_end),\
+                                slice(i_start + psioffset , i_start + psioffset + psi_end)
+                
+                jpsi_iphi_slice = slice(j_start + psioffset , j_start + psioffset + psi_end),\
+                                slice(i_start + phioffset , i_start + phioffset + phi_end)
+                old_A = A
+
             
-            jpsi_iphi_slice = slice(j_start + psioffset , j_start + psioffset + psi_end),\
-                              slice(i_start + phioffset , i_start + phioffset + phi_end)
+            # bv = blockval #[:, :, 0]
 
-            if detach:
-                bv = blockval[:, :, 0].detach().clone()
-            else:
-                bv = blockval[:, :, 0]
             # position of the orbital within this block
             if block_type == 0:
                 # <i \phi| H(T)|j \psi> = # <i \phi| H(-T)|j \psi>^T 
@@ -1327,8 +1149,8 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                 #     else:
                 #         ff = 0.5
 
-                matrix_T[iphi_jpsi_slice] += bv*bt0_factor_p
-                matrix_mT[jpsi_iphi_slice] += bv.T*bt0_factor_m
+                matrix_T[iphi_jpsi_slice] += blockval*bt0_factor_p
+                matrix_mT[jpsi_iphi_slice] += blockval.T*bt0_factor_m
                 
             elif block_type == 2:
                 
@@ -1336,35 +1158,35 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                 # if not all_pairs:
                 #     ff=1
                 
-                matrix_T[iphi_jpsi_slice] += bv*bt2_factor_p
-                matrix_mT[jpsi_iphi_slice] += bv.T*bt2_factor_m
+                matrix_T[iphi_jpsi_slice] += blockval*bt2_factor_p
+                matrix_mT[jpsi_iphi_slice] += blockval.T*bt2_factor_m
                 
             elif abs(block_type) == 1:
                 # Eq (1) <i \phi| H(T)|j \psi> = # block_(+1)ijT + block_(-1)ijT 
                 # Eq (2) <j \phi| H(-T)|i \psi> = # block_(+1)ijT - block_(-1)ijT 
                 # Eq (3) <j \psi| H(-T)|i \phi> = # block_(+1)ijT^\dagger + block_(-1)ijT^\dagger (Transpose of Eq1) 
                 # Eq (4) <i \psi| H(T)|j \phi> = # block_(+1)ijT^\dagger - block_(-1)ijT^\dagger (Transpose of Eq2)
-                bv = bv*bt1_fact_fin
+                # bv = bv*bt1_fact_fin
 
                 if block_type == 1:
                     # first half of Eq (1) 
-                    matrix_T[iphi_jpsi_slice] += bv
+                    matrix_T[iphi_jpsi_slice] += blockval*bt1_fact_fin
                     # first half of Eq (2)
-                    matrix_mT[jphi_ipsi_slice] += bv
+                    matrix_mT[jphi_ipsi_slice] += blockval*bt1_fact_fin
                     # first half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += bv.T
+                    matrix_mT[jpsi_iphi_slice] += blockval.T*bt1_fact_fin
                     # first half of Eq (4)
-                    matrix_T[ ipsi_jphi_slice] += bv.T
+                    matrix_T[ ipsi_jphi_slice] += blockval.T*bt1_fact_fin
         
                 else:
                     # second half of Eq (1)
-                    matrix_T[iphi_jpsi_slice] += bv
+                    matrix_T[iphi_jpsi_slice] += blockval*bt1_fact_fin
                     # second half of Eq (2)
-                    matrix_mT[jphi_ipsi_slice] -= bv
+                    matrix_mT[jphi_ipsi_slice] -= blockval*bt1_fact_fin
                     # second half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += bv.T
+                    matrix_mT[jpsi_iphi_slice] += blockval.T*bt1_fact_fin
                     # second half of Eq (4)
-                    matrix_T[ipsi_jphi_slice ] -= bv.T
+                    matrix_T[ipsi_jphi_slice ] -= blockval.T*bt1_fact_fin
          
     for A, matrix in enumerate(reconstructed_matrices):
         Ts = list(matrix.keys())
@@ -1374,131 +1196,6 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
 
     return reconstructed_matrices
-
-# FIXME: if any of these will be restored, remember to move to mts.torch
-# def NEW_blocks_to_matrix(blocks, dataset, device=None, return_negative=False, cg = None):
-#     if device is None:
-#         device = dataset.device
-
-#     if "L" in blocks.keys.names:
-#         from mlelec.utils.twocenter_utils import _to_uncoupled_basis
-#         blocks = _to_uncoupled_basis(blocks, cg = cg)
-
-#     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
-#     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
-#     orbs_mult = {
-#         species: 
-#                 {tuple(k): v
-#             for k, v in zip(
-#                 *np.unique(
-#                     np.asarray(dataset.basis[species])[:, :2],
-#                     axis=0,
-#                     return_counts=True,
-#                 )
-#             )
-#         }
-#         for species in dataset.basis
-#     }
-
-#     reconstructed_matrices_plus = []
-#     reconstructed_matrices_minus = []
-
-#     # Loop over frames
-#     for A, shifts in enumerate(dataset.realspace_translations):
-#         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
-
-#         reconstructed_matrices_plus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
-#         reconstructed_matrices_minus.append({T: torch.zeros(norbs, norbs, device = device) for T in shifts})
-
-#     # loops over block types
-#     for key, block in blocks.items():
-#         block_type = key["block_type"]
-#         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
-#         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
-        
-#         # What's the multiplicity of the orbital type, ex. 2p_x, 2p_y, 2p_z makes the multiplicity 
-#         # of a p block = 3
-#         orbs_i = orbs_mult[ai]
-#         orbs_j = orbs_mult[aj]
-        
-#         # The shape of the block corresponding to the orbital pair
-#         shapes = {
-#             (k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
-#             for k1 in orbs_i
-#             for k2 in orbs_j
-#         }
-#         # offset of the orbital (ni, li) within a block of atom i
-#         ioffset = orbs_offset[(ai, ni, li)] 
-#         # offset of the orbital (nj,lj) within a block of atom j
-#         joffset = orbs_offset[(aj, nj, lj)]
-
-#         i_end, j_end = shapes[(ni, li, nj, lj)]
-
-#         # loops over samples (structure, i, j)
-#         for sample, blockval in zip(block.samples, block.values):
-            
-#             A = sample["structure"]
-#             i = sample["center"]
-#             j = sample["neighbor"]
-#             Tx, Ty, Tz = sample["cell_shift_a"], sample["cell_shift_b"], sample["cell_shift_c"]
-
-#             matrix_T_plus  = reconstructed_matrices_plus[A][Tx, Ty, Tz]
-
-#             if return_negative:
-#                 matrix_T_minus = reconstructed_matrices_minus[A][Tx, Ty, Tz]
-#             # i_start, j_start = atom_blocks_idx[(A, i, j)]
-
-#             i_start, j_start = atom_blocks_idx[(A, i, j)]
-#             i_slice = slice(i_start + ioffset, i_start + ioffset + i_end) 
-#             j_slice = slice(j_start + joffset, j_start + joffset + j_end)
-
-#             # OPT (commented)
-#             # values = blockval[:, :, 0].clone()
-
-#             if block_type == 1:
-#                 matrix_T_plus[
-#                     # i_start + ioffset : i_start + ioffset + i_end,
-#                     # j_start + joffset : j_start + joffset + j_end,
-#                     i_slice, j_slice
-#                 ] += blockval[:, :, 0]*ISQRT_2 # OPTvalues
-
-#                 if return_negative:
-#                     matrix_T_minus[
-#                         # j_start + ioffset : j_start + ioffset + i_end,
-#                         # i_start + joffset : i_start + joffset + j_end,
-#                         i_slice, j_slice
-#                     ] += blockval[:, :, 0]*ISQRT_2 # values # OPT
-                        
-#             elif block_type == -1:
-                    
-#                 matrix_T_plus[
-#                     # i_start + ioffset : i_start + ioffset + i_end,
-#                     # j_start + joffset : j_start + joffset + j_end,
-#                     i_slice, j_slice
-#                 ] += blockval[:, :, 0] # values # OPT
-
-#                 if return_negative:
-#                     matrix_T_minus[
-#                         # j_start + ioffset : j_start + ioffset + i_end,
-#                         # i_start + joffset : i_start + joffset + j_end,
-#                         i_slice, j_slice
-#                     ] -= blockval[:, :, 0] # values # OPT
-
-#             # if block_type == 0 or block_type == 2:
-#             else: # bt = 0 or 2
-
-#                 matrix_T_plus[
-#                     # i_start + ioffset : i_start + ioffset + i_end,
-#                     # j_start + joffset : j_start + joffset + j_end,
-#                     i_slice,
-#                     j_slice,
-#                              ] = blockval[:, :, 0] # values # OPT
-
-
-#     if return_negative:
-#         return reconstructed_matrices_plus, reconstructed_matrices_minus
-#     return reconstructed_matrices_plus
-
 
 def matrix_to_blocks_OLD(dataset, device=None, all_pairs = True, cutoff = None, target='fock'):
     from mlelec.utils.metatensor_utils import TensorBuilder
@@ -1707,3 +1404,131 @@ def matrix_to_blocks_OLD(dataset, device=None, all_pairs = True, cutoff = None, 
 
                 i_start += orbs_tot[ai]
     return block_builder.build()
+
+#############
+
+@torch.jit.script
+def _process_block(block_type: int, blockval: torch.Tensor, matrix_T: torch.Tensor, matrix_mT: torch.Tensor, 
+                   i_start: int, j_start: int, phioffset: int, psioffset: int, phi_end: int, psi_end: int,
+                   bt0_factor_p: float, bt0_factor_m: float, bt2_factor_p: float, bt2_factor_m: float, bt1_fact_fin: float):
+    iphi_jpsi_slice_0 = slice(i_start + phioffset, i_start + phioffset + phi_end)
+    iphi_jpsi_slice_1 = slice(j_start + psioffset, j_start + psioffset + psi_end)
+    jpsi_iphi_slice_0 = slice(j_start + psioffset, j_start + psioffset + psi_end)
+    jpsi_iphi_slice_1 = slice(i_start + phioffset, i_start + phioffset + phi_end)
+    jphi_ipsi_slice_0 = slice(j_start + phioffset, j_start + phioffset + phi_end)
+    jphi_ipsi_slice_1 = slice(i_start + psioffset, i_start + psioffset + psi_end)
+    ipsi_jphi_slice_0 = slice(i_start + psioffset, i_start + psioffset + psi_end)
+    ipsi_jphi_slice_1 = slice(j_start + phioffset, j_start + phioffset + phi_end)
+
+    if block_type == 0:
+        matrix_T[iphi_jpsi_slice_0, iphi_jpsi_slice_1] += blockval * bt0_factor_p
+        matrix_mT[jpsi_iphi_slice_0, jpsi_iphi_slice_1] += blockval.T * bt0_factor_m
+    elif block_type == 2:
+        matrix_T[iphi_jpsi_slice_0, iphi_jpsi_slice_1] += blockval * bt2_factor_p
+        matrix_mT[jpsi_iphi_slice_0, jpsi_iphi_slice_1] += blockval.T * bt2_factor_m
+    elif abs(block_type) == 1:
+        if block_type == 1:
+            matrix_T[iphi_jpsi_slice_0, iphi_jpsi_slice_1] += blockval * bt1_fact_fin
+            matrix_mT[jphi_ipsi_slice_0, jphi_ipsi_slice_1] += blockval * bt1_fact_fin
+            matrix_mT[jpsi_iphi_slice_0, jpsi_iphi_slice_1] += blockval.T * bt1_fact_fin
+            matrix_T[ipsi_jphi_slice_0, ipsi_jphi_slice_1] += blockval.T * bt1_fact_fin
+        else:
+            matrix_T[iphi_jpsi_slice_0, iphi_jpsi_slice_1] += blockval * bt1_fact_fin
+            matrix_mT[jphi_ipsi_slice_0, jphi_ipsi_slice_1] -= blockval * bt1_fact_fin
+            matrix_mT[jpsi_iphi_slice_0, jpsi_iphi_slice_1] += blockval.T * bt1_fact_fin
+            matrix_T[ipsi_jphi_slice_0, ipsi_jphi_slice_1] -= blockval.T * bt1_fact_fin
+
+def blocks_to_matrix(blocks, dataset, device=None, cg=None, all_pairs=False, sort_orbs=True, detach=False, sample_id=None):
+    if device is None:
+        device = dataset.device
+        
+    if "L" in blocks.keys.names:
+        from mlelec.utils.twocenter_utils import _to_uncoupled_basis
+        blocks = _to_uncoupled_basis(blocks, cg=cg, device=device)
+
+    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
+    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_mult = {
+        species: {tuple(k): v for k, v in zip(*np.unique(np.asarray(dataset.basis[species])[:, :2], axis=0, return_counts=True))}
+        for species in dataset.basis
+    }
+
+    reconstructed_matrices = []
+    
+    bt1factor = 1/np.sqrt(2)
+    if all_pairs:
+        bt1factor *= 0.5
+
+    bt2_factor_p = 0.5 if all_pairs else 1
+
+    for A in range(len(dataset.structures)):
+        norbs = sum(orbs_tot[ai] for ai in dataset.structures[A].numbers)
+        reconstructed_matrices.append({})
+
+    for key, block in blocks.items():
+        block_type = key["block_type"]
+        ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
+        aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
+        
+        if sort_orbs:
+            fac = 1 if not (ai == aj and ni == nj and li == lj) else 2
+        else:
+            fac = 2
+
+        orbs_i = orbs_mult[ai]
+        orbs_j = orbs_mult[aj]
+        
+        shapes = {(k1 + k2): (orbs_i[tuple(k1)], orbs_j[tuple(k2)])
+                  for k1 in orbs_i for k2 in orbs_j}
+        phioffset = orbs_offset[(ai, ni, li)]
+        psioffset = orbs_offset[(aj, nj, lj)]
+
+        bt0_factor_p = 0.5 if not sort_orbs else (1 if not(ni == nj and li == lj) else 0.5)
+    
+        samples = block.samples.values.tolist()
+        blockvalues = block.values.detach() if detach else block.values
+
+        old_A = -1
+        for sample, blockval in zip(samples, blockvalues[:,:,0]):
+            if blockval.numel() == 0:
+                continue        
+
+            A, i, j, Tx, Ty, Tz = sample
+            T = (Tx, Ty, Tz)
+            mT = (-Tx, -Ty, -Tz)
+
+            other_fac = 0.5 if (i == j and T != (0,0,0) and not all_pairs) else 1
+
+            bt0_factor_m = bt0_factor_p * other_fac
+            bt2_factor_m = bt2_factor_p * other_fac
+            bt1_fact_fin = bt1factor / fac * other_fac
+            
+            if T not in reconstructed_matrices[A]:
+                assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
+                norbs = sum(orbs_tot[ai] for ai in dataset.structures[A].numbers)
+                reconstructed_matrices[A][T] = torch.zeros(norbs, norbs, device=device)
+                reconstructed_matrices[A][mT] = torch.zeros(norbs, norbs, device=device)
+
+            matrix_T = reconstructed_matrices[A][T]
+            matrix_mT = reconstructed_matrices[A][mT]
+
+            if A != old_A:
+                i_start, j_start = atom_blocks_idx[(A, i, j)]
+                phi_end = shapes[(ni, li, nj, lj)][0]
+                psi_end = shapes[(ni, li, nj, lj)][1]  
+                old_A = A
+
+            _process_block(block_type, blockval, matrix_T, matrix_mT, 
+                           i_start, j_start, phioffset, psioffset, phi_end, psi_end,
+                           bt0_factor_p, bt0_factor_m, bt2_factor_p, bt2_factor_m, bt1_fact_fin)
+         
+    for A, matrix in enumerate(reconstructed_matrices):
+        Ts = list(matrix.keys())
+        for T in Ts:
+            mT = tuple(-t for t in T)
+            assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), \
+                   torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
+
+    return reconstructed_matrices
+
+

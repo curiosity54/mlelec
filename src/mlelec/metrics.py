@@ -1,6 +1,6 @@
 # Evaluation metrics
 import warnings
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple
 
 import numpy as np
 import torch
@@ -74,7 +74,7 @@ from mlelec.utils.symmetry import ClebschGordanReal
 #     assert torch.norm(loss-loss.real) < 1e-10
 #     return loss.real
 
-def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1):
+def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tensor, TensorMap, Tuple, List], loss_per_block = False, norm = 1):
     """L2 loss function"""
     
     if isinstance(pred, torch.Tensor):
@@ -115,6 +115,12 @@ def L2_loss(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, Te
         for key, values in pred.items():
             losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
             norm)
+
+    elif isinstance(pred, list):
+
+        losses = []
+        for p, t in zip(pred, target):
+            losses.append(torch.norm(p - t)**2)
 
     if loss_per_block:
         return losses, sum(losses)

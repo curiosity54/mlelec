@@ -77,14 +77,13 @@ class MLDataset():
 
         # Set features
         self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut)
+        print('Features set')
         
         if shuffle:
             self._shuffle(shuffle_seed)
         else:
             self.indices = torch.arange(self.nstructs)
         
-        
-
         # Initialize items
         if isinstance(item_names, str):
             item_names = [item_names]
@@ -150,7 +149,9 @@ class MLDataset():
                 
             else:
                 raise ValueError(f"This looks like a bug! {name} is in MLDataset._implemented_items but it is not properly handled in the loop.")
-                
+
+        print('Items set')
+
         # Define dictionary of targets
 
         # sets the first target as the primary target - # FIXME
@@ -563,52 +564,65 @@ class MLDataset():
         qmdata = self.qmdata
         species_pair = np.unique([comb for frame in qmdata.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis = 0)
 
-        if not self.orbitals_to_properties:
-            raise NotImplementedError("Only orbitals to properties implemented.")
-        
-        key_names = ['block_type', 'species_i', 'species_j', 'L', 'inversion_sigma']
-        property_names = ['n_i', 'l_i', 'n_j', 'l_j']
-        property_values = {}
-        
+        # key_names = ['block_type', 'species_i', 'species_j', 'L', 'inversion_sigma']
+        # property_names = ['n_i', 'l_i', 'n_j', 'l_j', 'dummy']
+        # property_values = {}
+        key_names = ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j', 'L']
+        if self.orbitals_to_properties:
+            key_names += ['inversion_sigma']
+        keys = []
+
         for s1, s2 in species_pair:
             same_species = s1 == s2
-            if same_species:
-                block_types = [-1,0,1]
-            else: 
-                block_types = [2]
+
             nl1 = np.unique([nlm[:2] for nlm in qmdata.basis[s1]], axis = 0)
             nl2 = np.unique([nlm[:2] for nlm in qmdata.basis[s2]], axis = 0)
 
-            for (n1, l1), (n2, l2) in zip(nl1, nl2):
-                
-                for L in range(abs(l1-l2), l1+l2+1):
-                    sigma = (-1)**(l1+l2+L)
-                    
-                    for block_type in block_types:
-                        key = block_type, s1, s2, L, sigma
+            if same_species:
+                block_types = [-1,0,1]
+                orbital_list = [(a, b) for a, b in itertools.product(nl1.tolist(), nl2.tolist()) if a <= b]
+            else: 
+                if s1 > s2:
+                    continue
+                block_types = [2]
+                orbital_list = itertools.product(nl1, nl2)
+            
+            for block_type in block_types:
+                for (n1, l1), (n2, l2) in orbital_list:
+                    for L in range(abs(l1-l2), l1+l2+1):
+                        sigma = (-1)**(l1+l2+L)
+
                         if s1 == s2 and n1 == n2 and l1 == l2:
                             if ((sigma == -1 and block_type in (0, 1)) or (sigma == 1 and block_type == -1)) and not self.skip_symmetry:
                                 continue
-                        if key not in property_values:
-                            property_values[key] = []
-                        
-                        property_values[key].append([n1,l1,n2,l2])
+
+                        if self.orbitals_to_properties:
+                            key = block_type, s1, n1, l1, s2, n2, l2, L, sigma
+                        else:
+                            key = block_type, s1, n1, l1, s2, n2, l2, L
+
+                        keys.append(key)
+                        # if key not in property_values:
+                        #     property_values[key] = []
+                        # property_values[key].append([n1,l1,n2,l2,0])
 
         blocks = []
-        keys = []
+        # keys = []
         dummy_label = Labels(['dummy'], torch.tensor([[0]], device = qmdata.device))
-        for k in property_values:
-            keys.append(k)
+        for k in keys:
+            # keys.append(k)
             blocks.append(
                 TensorBlock(
                     samples = dummy_label,
-                    properties = Labels(property_names, torch.tensor(property_values[k], device = qmdata.device)),
+                    properties = dummy_label, #Labels(property_names, torch.tensor(property_values[k], device = qmdata.device)),
                     components = [dummy_label],
-                    values = torch.zeros((1, 1, len(property_values[k])), dtype = torch.float32, device = qmdata.device)
+                    values = torch.zeros((1, 1, 1), dtype = torch.float32, device = qmdata.device) #torch.zeros((1, 1, len(property_values[k])), dtype = torch.float32, device = qmdata.device)
                 )
             )
 
         self.model_metadata = mts.sort(TensorMap(Labels(key_names, torch.tensor(keys, device = qmdata.device)), blocks))
+        if self.orbitals_to_properties:
+            self.model_metadata = self.model_metadata.keys_to_properties(['n_i', 'l_i', 'n_j', 'l_j'])
 
 
     def group_and_join(self,

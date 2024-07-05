@@ -687,7 +687,7 @@ class LinearModelPeriodic(nn.Module):
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
-                feat = map_targetkeys_to_featkeys(self.feats, k)
+                feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
                 nsamples, ncomp, _ = block.values.shape
 
 

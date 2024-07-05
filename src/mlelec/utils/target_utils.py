@@ -24,9 +24,6 @@ def get_targets(dataset: QMDataset,
     blocks = matrix_to_blocks(dataset, device = device, cutoff = cutoff, all_pairs = all_pairs, target = target, sort_orbs = sort_orbs, matrix = matrix)
     coupled_blocks = _to_coupled_basis(blocks, skip_symmetry = skip_symmetry, device = device, translations = True)
 
-    blocks = mts.sort(blocks)
-    coupled_blocks = mts.sort(coupled_blocks)
-
     if orbitals_to_properties:
         keys = []
         tblocks= []
@@ -38,7 +35,8 @@ def get_targets(dataset: QMDataset,
         coupled_blocks = TensorMap(Labels(k.names+['inversion_sigma'], torch.stack(keys)), tblocks)
         coupled_blocks = coupled_blocks.keys_to_properties(['n_i', 'l_i',  'n_j','l_j'])
 
+
     if return_uncoupled:   
-        return blocks, coupled_blocks
+        return mts.sort(blocks), mts.sort(coupled_blocks)
     else:
-        return coupled_blocks
+        return mts.sort(coupled_blocks)
