@@ -19,8 +19,10 @@ import torch.utils.data as data
 import copy
 from collections import defaultdict
 from pathlib import Path
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
-from mlelec.utils.pbc_utils import unique_Aij_block
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, fix_orbital_order
+from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform
+
+
 mlelec_dir = Path(__file__).parents[3]
 
 # Dataset class  - to load and pass around structures, targets and
@@ -802,7 +804,6 @@ class QMDataset(Dataset):
             self._ismolecule = True
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
         if fix_p_orbital_order and not self._ismolecule:
-            from mlelec.utils.twocenter_utils import fix_orbital_order
             if fock_kspace is not None:
                 for ifr in range(len(fock_kspace)):
                     for ik, k in enumerate(fock_kspace[ifr]):
@@ -863,6 +864,7 @@ class QMDataset(Dataset):
                     for T in overlap_realspace[ifr]:
                         overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
 
+
         # self.target_names = target
         # self.aux_names = aux
 
@@ -886,7 +888,7 @@ class QMDataset(Dataset):
         elif (fock_kspace is None) and (fock_realspace is not None):
             self.fock_realspace = self._set_matrices_realspace(fock_realspace)
             if not self._ismolecule:
-                self.fock_kspace = self.bloch_sum(fock_realspace, is_tensor = False)
+                self.fock_kspace = self.bloch_sum(self.fock_realspace, is_tensor = True)
         elif (fock_kspace is None) and (fock_realspace is None):
             warnings.warn("Target not provided.")
             # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
@@ -903,7 +905,7 @@ class QMDataset(Dataset):
         elif (overlap_kspace is None) and (overlap_realspace is not None):
             self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
             if not self._ismolecule:
-                self.overlap_kspace = self.bloch_sum(overlap_realspace, is_tensor = False)
+                self.overlap_kspace = self.bloch_sum(self.overlap_realspace, is_tensor = True)
         elif (overlap_kspace is None) and (overlap_realspace is None):
             warnings.warn("Overlap matrices not provided")
             self.overlap_realspace = None
@@ -930,16 +932,15 @@ class QMDataset(Dataset):
             _matrices_realspace.append({})
             # _matrices_realspace_neg.append({})
             for k in m:
-                minus_k = tuple(-np.array(k))
                 if isinstance(m[k], torch.Tensor):
-                    _matrices_realspace[-1][k] = m[k]
+                    _matrices_realspace[-1][k] = m[k].to(device = self.device)
                     # _matrices_realspace_neg[-1][k] = m[minus_k]
                 elif isinstance(m[k], np.ndarray):
-                    _matrices_realspace[-1][k] = torch.from_numpy(m[k])
+                    _matrices_realspace[-1][k] = torch.from_numpy(m[k]).to(device = self.device)
                     # _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
 
                 elif isinstance(m[k], list):
-                    _matrices_realspace[-1][k] = torch.tensor(m[k])
+                    _matrices_realspace[-1][k] = torch.tensor(m[k], device = self.device)
                     # _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
                 else:
                     raise ValueError(
@@ -953,13 +954,13 @@ class QMDataset(Dataset):
         if isinstance(matrices_kspace, list):
             if isinstance(matrices_kspace[0], np.ndarray):
                 _matrices_kspace = [
-                    torch.from_numpy(m).to(self.device) for m in matrices_kspace
+                    torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
                 ]
             elif isinstance(matrices_kspace[0], torch.Tensor):
-                _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
+                _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
             elif isinstance(matrices_kspace[0], list):
                 _matrices_kspace = [
-                    torch.tensor(m).to(self.device) for m in matrices_kspace
+                    torch.tensor(m).to(device = self.device) for m in matrices_kspace
                 ]
             else:
                 raise TypeError(
@@ -970,13 +971,13 @@ class QMDataset(Dataset):
                 self.structures
             ), "You must provide matrices_kspace for each structure"
             _matrices_kspace = [
-                torch.from_numpy(m).to(self.device) for m in matrices_kspace
+                torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
             ]
         elif isinstance(matrices_kspace, torch.Tensor):
             assert matrices_kspace.shape[0] == len(
                 self.structures
             ), "You must provide matrices_kspace for each structure"
-            _matrices_kspace = [m.to(self.device) for m in matrices_kspace]
+            _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
         else:
             raise TypeError(
                 "matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor."
@@ -997,10 +998,6 @@ class QMDataset(Dataset):
         raise NotImplementedError("This must happen when the targets are computed!")
 
     def bloch_sum(self, matrices_realspace, is_tensor = True):
-        # TODO: make sense of the 1/sqrt(N) factor multiplying the sum. Is it really necessary?
-        #       how do calculations with different kmesh compare with one another (same unit cell)
-        from mlelec.utils.pbc_utils import inverse_fourier_transform
-
         matrices_kspace = []
 
         if is_tensor:
@@ -1008,7 +1005,8 @@ class QMDataset(Dataset):
             for ifr, H in enumerate(matrices_realspace):
                 if H != {}:
                     H_T = torch.stack(list(H.values())).to(device = self.device)
-                    T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64)).to(device = self.device)
+                    # T_list = torch.from_numpy(np.array(list(H.keys()), dtype = torch.float64)).to(device = self.device)
+                    T_list = torch.tensor(list(H.keys()), dtype = torch.float64, device = self.device)
                     k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
                     matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
                 else:
@@ -1016,9 +1014,9 @@ class QMDataset(Dataset):
 
         elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
             for ifr, H in enumerate(matrices_realspace):
-                H_T = torch.from_numpy(np.array(list(H.values())))
-                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = np.float64))
-                k = torch.from_numpy(self.kpts_rel[ifr])
+                H_T = torch.from_numpy(np.array(list(H.values()))).to(device = self.device)
+                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = float.float64)).to(device = self.device)
+                k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
                 matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
                 
         

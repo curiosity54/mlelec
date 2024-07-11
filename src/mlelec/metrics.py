@@ -112,9 +112,9 @@ def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tens
     elif isinstance(pred, dict):
         assert isinstance(target, dict), "Target must be a dictionary"
         losses = []
-        for key, values in pred.items():
-            losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
-            norm)
+        for key, p in pred.items():
+            t = target[key]
+            losses.append(torch.norm(p - t)**2 / norm)
 
     elif isinstance(pred, list):
 

@@ -31,8 +31,8 @@ def get_targets(dataset: QMDataset,
             li, lj, L = k['l_i'], k['l_j'], k['L']
             inversion_sigma = (-1) ** (li + lj + L)
             keys.append(torch.cat((k.values, torch.tensor([inversion_sigma]))))
-            tblocks.append(b.copy())
-        coupled_blocks = TensorMap(Labels(k.names+['inversion_sigma'], torch.stack(keys)), tblocks)
+            tblocks.append(b.copy().to(device = device))
+        coupled_blocks = TensorMap(Labels(k.names+['inversion_sigma'], torch.stack(keys).to(device = device)), tblocks)
         coupled_blocks = coupled_blocks.keys_to_properties(['n_i', 'l_i',  'n_j','l_j'])
 
 
