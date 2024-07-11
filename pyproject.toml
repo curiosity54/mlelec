@@ -8,11 +8,11 @@ readme = "README.md"
 # license = TODO
 description = "TODO"
 
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 dependencies = [
     "pyscf >= 2.3.0",
-    "metatensor", 
-    "rascaline@git+https://github.com/Luthaf/rascaline.git",
+    "metatensor-torch", 
+    #"rascaline@git+https://github.com/Luthaf/rascaline.git", # Rascaline torch
     "wigners",
     "torch",
     "scikit-learn",
