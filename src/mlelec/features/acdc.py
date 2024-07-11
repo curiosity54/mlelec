@@ -140,7 +140,6 @@ def pair_features(
     rho0_ij = calculator.compute(rascaline.torch.systems_to_torch(frames), use_native_system = use_native)
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
-    
 
     if return_rho0ij:
         return rho0_ij
@@ -160,11 +159,14 @@ def pair_features(
             if False: #[i, j, x, y, z] in negative_list: # <<<<<<<< THIS MAKES HALF THE SAMPLES IN FEATURES than in targets ##FIXME pls 
                 continue
             else:
-                value_indices.append(isample)
-                sample_labels.append([ifr, i, j, x, y, z, 1])
+                
         
                 # Look for negative translation for |bt|=1
                 if not ((same_atoms and is_central_cell)):
+                
+                    value_indices.append(isample)
+                    sample_labels.append([ifr, i, j, x, y, z, 1])
+
                     if not same_species:
                         continue
                     
@@ -551,11 +553,12 @@ def compute_features(dataset: QMDataset,
                      both_centers: Optional[bool] = False,
                      all_pairs: Optional[bool] = False, 
                      device: Optional[str] = 'cpu',
+                     return_rhoij = False,
                      **kwargs):
     
     # TODO: is this the right place/format for this function?
     unique_species = set.union(*[frame.symbols.species() for frame in dataset.structures])
-    structures = dataset.structures + [ase.Atoms(''.join(unique_species), positions = np.random.normal(0, 1, (len(unique_species), 3)), pbc = False)]
+    structures = dataset.structures #+ [ase.Atoms(''.join(unique_species), positions = np.random.normal(0, 1, (len(unique_species), 3)), pbc = False)]
 
     if hypers_pair is None:
         hypers_pair = hypers_atom
@@ -563,7 +566,10 @@ def compute_features(dataset: QMDataset,
     
     rhoij = pair_features(structures, hypers_atom, hypers_pair, order_nu = 1, all_pairs = all_pairs, both_centers = both_centers,
                           kmesh = dataset.kmesh, device = device, lcut = lcut, return_rho0ij = return_rho0ij)  
-
+    
+    if return_rhoij:
+        return rhoij
+    
     if both_centers and not return_rho0ij:
         NU = 3
     else:
