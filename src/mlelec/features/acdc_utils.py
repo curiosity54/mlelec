@@ -51,7 +51,7 @@ def fix_gij(rho0_ij):
             bvalues = torch.zeros((b0samples.values.shape[0], block.values.shape[1], block.values.shape[2]))
             # bsam = 8
             _, _, m2 = block.samples.intersection_and_mapping(b0samples)
-
+        
             bvalues[m2!=-1] = block.values
             block = TensorBlock(
                 values = bvalues,

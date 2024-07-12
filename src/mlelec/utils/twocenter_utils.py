@@ -2,12 +2,14 @@
 # must include preprocessing and postprocessing utils
 from typing import Optional, List, Union, Tuple, Dict
 import warnings
+from collections import defaultdict
 
 import torch
 import ase
 import numpy as np
 
 from metatensor.torch import TensorMap, TensorBlock, Labels
+import metatensor.torch as mts
 
 from mlelec.utils.metatensor_utils import TensorBuilder, labels_where
 from mlelec.utils.symmetry import ClebschGordanReal
@@ -821,7 +823,7 @@ def _to_coupled_basis(
     return block_builder.build()
 
 
-def _to_uncoupled_basis(
+def _to_uncoupled_basis_old(
     blocks: TensorMap,
     # orbitals: Optional[dict] = None,
     cg: Optional[ClebschGordanReal] = None,
@@ -910,6 +912,53 @@ def _to_uncoupled_basis(
         )
     return block_builder.build()
 
+def _to_uncoupled_basis(
+    blocks: TensorMap,
+    cg: Optional[ClebschGordanReal] = None,
+    device: str = "cpu",
+    translations: bool = False,
+):
+    if cg is None:
+        lmax = max(blocks.keys["L"])
+        cg = ClebschGordanReal(lmax, device = device)
+
+    dummy_property = Labels(['dummy'], torch.tensor([[0]]))
+
+    uncoupled_blocks = {}
+    samples = {}
+    for key, block in blocks.items():
+
+        if block.values.numel() == 0:
+            # Empty block
+            continue
+        values = block.values
+        dtype = values.dtype
+
+        block_type, ai, aj, L  = key.values[:4].tolist()
+
+        for ip, (ni, li, nj, lj) in enumerate(block.properties.values[:, :4].tolist()):
+            k = block_type, ai, ni, li, aj, nj, lj
+            
+            if k not in uncoupled_blocks:
+                 uncoupled_blocks[k] = torch.zeros((values.shape[0], 2*li+1, 2*lj+1, 1), device = device, dtype = dtype)
+                 samples[k] = block.samples
+
+            uncoupled_blocks[k].add_(torch.tensordot(values[:,:,ip:ip+1], cg._cg[(li, lj, L)].to(dtype = dtype), dims=([1], [2])).permute(0, 2, 3, 1))
+
+    new_blocks = []
+    new_keys = []
+    for k in uncoupled_blocks:
+        _, _, _, li, _, _, lj = k
+        new_keys.append(k)
+        new_blocks.append(
+            TensorBlock(
+                values = uncoupled_blocks[k],
+                samples = samples[k],
+                properties = dummy_property,
+                components = [Labels(['m_i'], torch.arange(-li, li+1).reshape(-1, 1)), Labels(['m_j'], torch.arange(-lj, lj+1).reshape(-1, 1))]
+                )
+        )
+    return mts.sort(TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks))
 
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):

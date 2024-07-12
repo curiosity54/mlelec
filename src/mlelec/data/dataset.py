@@ -20,7 +20,339 @@ import copy
 from collections import defaultdict
 from pathlib import Path
 from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, fix_orbital_order
-from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform
+from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform, fourier_transform
+class QMDataset(Dataset):
+    '''
+    Class containing information about the quantum chemistry calculation and its results.
+    '''
+    
+    def __init__(
+        self,
+        frames,
+        frame_slice: slice = slice(None),
+        kmesh: Union[List[int], List[List[int]]] = [1, 1, 1],
+        fock_kspace: Union[List, torch.tensor, np.ndarray] = None,
+        fock_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
+        overlap_kspace: Union[List, torch.tensor, np.ndarray] = None,
+        overlap_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
+        # aux: List[str] = ["real_overlap"],
+        # use_precomputed: bool = True,
+        device="cuda",
+        orbs_name: str = "sto-3g",
+        orbs: List = None,
+        dimension: int = 3,
+        fix_p_orbital_order = False,
+        apply_condon_shortley = False,
+        ismolecule=False,
+    ):
+    
+        for f in frames:
+            if dimension == 2:
+                f.pbc = [True, True, False]
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif dimension == 3:
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif dimension == 0: # Handle molecules 
+                f.pbc = False    
+            else:
+                raise NotImplementedError('dimension must be 0, 2 or 3')
+
+        self.structures = frames
+        self.frame_slice = frame_slice
+        self.nstructs = len(frames)
+        self.kmesh = kmesh
+        self.kmesh_is_list = False
+        if isinstance(kmesh[0], list):
+            self.kmesh_is_list = True
+            assert (
+                len(self.kmesh) == self.nstructs
+            ), "If kmesh is a list, it must have the same length as the number of structures"
+        else:
+            self.kmesh = [
+                kmesh for _ in range(self.nstructs)
+            ]  # currently easiest to do
+  
+        self.device = device
+        self.basis = orbs  # actual orbitals
+        self.basis_name = orbs_name
+        self._set_nao()
+
+        self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
+        
+        # self.use_precomputed = use_precomputed
+        # if not use_precomputed:
+        #     raise NotImplementedError("You must use precomputed data for now.")
+        
+        self._ismolecule = ismolecule
+        if self.dimension==0:
+            assert not frames[0].pbc.any()
+            self._ismolecule = True
+
+        # TODO: move to method
+        # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
+        if fix_p_orbital_order and not self._ismolecule:
+            if fock_kspace is not None:
+                for ifr in range(len(fock_kspace)):
+                    for ik, k in enumerate(fock_kspace[ifr]):
+                        fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+            if overlap_kspace is not None:
+                for ifr in range(len(overlap_kspace)):
+                    for ik, k in enumerate(overlap_kspace[ifr]):
+                        overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+            if fock_realspace is not None:
+                for ifr in range(len(fock_realspace)):
+                    for T in fock_realspace[ifr]:
+                        fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
+            if overlap_realspace is not None:
+                for ifr in range(len(overlap_realspace)):
+                    for T in overlap_realspace[ifr]:
+                        overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
+        
+        elif self._ismolecule:
+            from mlelec.utils.twocenter_utils import fix_orbital_order
+            assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
+            if fix_p_orbital_order:
+                for ifr in range(len(fock_realspace)):
+                        fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
+            if overlap_realspace is not None:
+                assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
+                if fix_p_orbital_order:
+                    for ifr in range(len(overlap_realspace)):
+                            overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
+
+        # TODO: Move to method
+        # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
+        if apply_condon_shortley:
+            if fock_kspace is not None:
+                for ifr in range(len(fock_kspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for ik, k in enumerate(fock_kspace[ifr]):
+                        fock_kspace[ifr][ik] = k*cs
+            if overlap_kspace is not None:
+                for ifr in range(len(overlap_kspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for ik, k in enumerate(overlap_kspace[ifr]):
+                        overlap_kspace[ifr][ik] = k*cs
+            if fock_realspace is not None:
+                for ifr in range(len(fock_realspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for T in fock_realspace[ifr]:
+                        fock_realspace[ifr][T] = fock_realspace[ifr][T]*cs
+            if overlap_realspace is not None:
+                for ifr in range(len(overlap_realspace)):
+                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
+                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
+                    cs = cs@cs.T
+                    for T in overlap_realspace[ifr]:
+                        overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
+
+        self.cells = []
+        self.phase_matrices = []
+        self.supercells = []
+        if self._ismolecule ==False:
+            for ifr, structure in enumerate(self.structures):
+                cell, scell, phase = get_scell_phase(
+                    structure, self.kmesh[ifr], basis=self.basis_name
+                )
+                self.cells.append(cell)
+        self.set_kpts()
+
+        # TODO: move to method
+        # Assign/compute Hamiltonian
+        if (fock_kspace is not None) and (fock_realspace is None):
+            self.set_fock_kspace(fock_kspace)
+            self.fock_realspace = None
+            # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
+        elif (fock_kspace is None) and (fock_realspace is not None):
+            self.fock_realspace = self._set_matrices_realspace(fock_realspace)
+            if not self._ismolecule:
+                self.fock_kspace = self.bloch_sum(self.fock_realspace, is_tensor = True)
+        elif (fock_kspace is None) and (fock_realspace is None):
+            warnings.warn("Target not provided.")
+            # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
+        elif (fock_kspace is not None) and (fock_realspace is not None):
+            raise NotImplementedError("TBI: check consistency.")
+        else:
+            raise NotImplementedError("Weird condition not handled")
+        
+        # TODO: move to method
+        # Assign/compute Overlap
+        if (overlap_kspace is not None) and (overlap_realspace is None):
+            self.set_overlap_kspace(overlap_kspace)
+            self.overlap_realspace = None
+         # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
+        elif (overlap_kspace is None) and (overlap_realspace is not None):
+            self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
+            if not self._ismolecule:
+                self.overlap_kspace = self.bloch_sum(self.overlap_realspace, is_tensor = True)
+        elif (overlap_kspace is None) and (overlap_realspace is None):
+            warnings.warn("Overlap matrices not provided")
+            self.overlap_realspace = None
+            self.overlap_kspace = None
+        elif (overlap_kspace is not None) and (overlap_realspace is not None):
+            raise NotImplementedError("TBI: check consistency.")
+        else:
+            raise NotImplementedError("Weird condition not handled")
+
+    def set_kpts(self):
+        self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
+        self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
+
+    def _set_matrices_realspace(self, matrices_realspace):
+        if not isinstance(matrices_realspace[0], dict):
+            assert self._ismolecule, "matrices_realspace should be a dictionary of translated unless molecule"
+            return matrices_realspace
+        
+        _matrices_realspace = []
+        # _matrices_realspace_neg = []
+        
+        for m in matrices_realspace:
+            _matrices_realspace.append({})
+            # _matrices_realspace_neg.append({})
+            for k in m:
+                if isinstance(m[k], torch.Tensor):
+                    _matrices_realspace[-1][k] = m[k].to(device = self.device)
+                    # _matrices_realspace_neg[-1][k] = m[minus_k]
+                elif isinstance(m[k], np.ndarray):
+                    _matrices_realspace[-1][k] = torch.from_numpy(m[k]).to(device = self.device)
+                    # _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
+
+                elif isinstance(m[k], list):
+                    _matrices_realspace[-1][k] = torch.tensor(m[k], device = self.device)
+                    # _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
+                else:
+                    raise ValueError(
+                        "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
+                    )
+    
+        return _matrices_realspace #, _matrices_realspace_neg
+
+    def _set_matrices_kspace(self, matrices_kspace):
+        '''Returns a list of torch.Tensors from a list of np.ndarrays or torch.Tensors'''
+        if isinstance(matrices_kspace, list):
+            if isinstance(matrices_kspace[0], np.ndarray):
+                _matrices_kspace = [
+                    torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
+                ]
+            elif isinstance(matrices_kspace[0], torch.Tensor):
+                _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
+            elif isinstance(matrices_kspace[0], list):
+                _matrices_kspace = [
+                    torch.tensor(m).to(device = self.device) for m in matrices_kspace
+                ]
+            else:
+                raise TypeError(
+                    "matrices_kspace should be a list [torch.Tensor, np.ndarray, or lists]"
+                )
+        elif isinstance(matrices_kspace, np.ndarray):
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "You must provide matrices_kspace for each structure"
+            _matrices_kspace = [
+                torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
+            ]
+        elif isinstance(matrices_kspace, torch.Tensor):
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "You must provide matrices_kspace for each structure"
+            _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
+        else:
+            raise TypeError(
+                "matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor."
+            )
+
+        return _matrices_kspace
+
+    def set_fock_kspace(self, fock_kspace):
+        self.fock_kspace = self._set_matrices_kspace(fock_kspace)
+
+    def set_overlap_kspace(self, overlap_kspace):
+        self.overlap_kspace = self._set_matrices_kspace(overlap_kspace)
+
+    def compute_matrices_realspace(self, matrices_kspace):
+        """From a list of matrices in kspace, compute a list of dictionaries labeled by real space translations"""
+        # When only kspace input is provided, the right moment to compute real space dummy targets is at the instantiation of (the analogue of) the MLDataset class.
+        # Here, only the genuine data given by the DFT code should be used 
+        raise NotImplementedError("This must happen when the targets are computed!")
+
+    def bloch_sum(self, matrices_realspace, is_tensor = True):
+        matrices_kspace = []
+
+        if is_tensor:
+        # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
+            for ifr, H in enumerate(matrices_realspace):
+                if H != {}:
+                    H_T = torch.stack(list(H.values())).to(device = self.device)
+                    # T_list = torch.from_numpy(np.array(list(H.keys()), dtype = torch.float64)).to(device = self.device)
+                    T_list = torch.tensor(list(H.keys()), dtype = torch.float64, device = self.device)
+                    k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
+                    matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
+                else:
+                    matrices_kspace.append(None) # FIXME: not the best way to handle this situation
+
+        elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
+            for ifr, H in enumerate(matrices_realspace):
+                H_T = torch.from_numpy(np.array(list(H.values()))).to(device = self.device)
+                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = float.float64)).to(device = self.device)
+                k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
+                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
+                
+        
+        return matrices_kspace
+
+    # def baseline_with_nsc_fock(self):
+    #     for cell in self.cells:
+
+    def _set_nao(self):
+        self.nao = [sum(len(self.basis[s]) for s in frame.numbers) for frame in self.structures]
+
+    def __len__(self):
+        return self.nstructs
+
+# Tests
+def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-10):
+    from mlelec.utils.pbc_utils import inverse_fourier_transform
+
+    reconstructed_matrices_kspace = []
+    for ifr, H in enumerate(matrices_realspace):
+        reconstructed_matrices_kspace.append([])
+        kpts = kpoints[ifr]
+        for k in kpts:
+            reconstructed_matrices_kspace[ifr].append(
+                inverse_fourier_transform(
+                    np.array(list(H.values())), np.array(list(H.keys())), k
+                )
+            )
+        reconstructed_matrices_kspace[ifr] = torch.from_numpy(
+            np.array(reconstructed_matrices_kspace[ifr])
+        )
+        assert reconstructed_matrices_kspace[ifr].shape == matrices_kspace[ifr].shape
+        assert (
+            torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol
+        ), (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
+
+
+
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
+####################################################
 
 
 mlelec_dir = Path(__file__).parents[3]
@@ -731,325 +1063,6 @@ from mlelec.data.pyscf_calculator import (
 #     def __len__(self):
 #         return self.nstructs
 
-
-class QMDataset(Dataset):
-    '''
-    Class containing information about the quantum chemistry calculation and its results.
-    '''
-    from mlelec.utils.pbc_utils import (
-        fourier_transform,
-        inverse_fourier_transform,
-    )
-
-    # TODO: make format compatible with MolecularDataset
-    def __init__(
-        self,
-        frames,
-        frame_slice: slice = slice(None),
-        kmesh: Union[List[int], List[List[int]]] = [1, 1, 1],
-        fock_kspace: Union[List, torch.tensor, np.ndarray] = None,
-        fock_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
-        overlap_kspace: Union[List, torch.tensor, np.ndarray] = None,
-        overlap_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
-        # aux: List[str] = ["real_overlap"],
-        use_precomputed: bool = True,
-        device="cuda",
-        orbs_name: str = "sto-3g",
-        orbs: List = None,
-        dimension: int = 3,
-        fix_p_orbital_order = False,
-        apply_condon_shortley = False,
-        ismolecule=False,
-    ):
-    
-        for f in frames:
-            if dimension == 2:
-                f.pbc = [True, True, False]
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif dimension == 3:
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif dimension == 0: # Handle molecules 
-                f.pbc = False    
-            else:
-                raise NotImplementedError('dimension must be 0, 2 or 3')
-
-        self.structures = frames
-        self.frame_slice = frame_slice
-        self.nstructs = len(frames)
-        self.kmesh = kmesh
-        self.kmesh_is_list = False
-        if isinstance(kmesh[0], list):
-            self.kmesh_is_list = True
-            assert (
-                len(self.kmesh) == self.nstructs
-            ), "If kmesh is a list, it must have the same length as the number of structures"
-        else:
-            self.kmesh = [
-                kmesh for _ in range(self.nstructs)
-            ]  # currently easiest to do
-  
-        self.device = device
-        self.basis = orbs  # actual orbitals
-        self.basis_name = orbs_name
-        self.use_precomputed = use_precomputed
-        self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
-        if not use_precomputed:
-            raise NotImplementedError("You must use precomputed data for now.")
-        
-        self._ismolecule = ismolecule
-        if self.dimension==0:
-            assert not frames[0].pbc.any()
-            self._ismolecule = True
-        # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
-        if fix_p_orbital_order and not self._ismolecule:
-            if fock_kspace is not None:
-                for ifr in range(len(fock_kspace)):
-                    for ik, k in enumerate(fock_kspace[ifr]):
-                        fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-            if overlap_kspace is not None:
-                for ifr in range(len(overlap_kspace)):
-                    for ik, k in enumerate(overlap_kspace[ifr]):
-                        overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-            if fock_realspace is not None:
-                for ifr in range(len(fock_realspace)):
-                    for T in fock_realspace[ifr]:
-                        fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
-            if overlap_realspace is not None:
-                for ifr in range(len(overlap_realspace)):
-                    for T in overlap_realspace[ifr]:
-                        overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
-        
-        elif self._ismolecule:
-            from mlelec.utils.twocenter_utils import fix_orbital_order
-            assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
-            if fix_p_orbital_order:
-                for ifr in range(len(fock_realspace)):
-                        fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
-            if overlap_realspace is not None:
-                assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
-                if fix_p_orbital_order:
-                    for ifr in range(len(overlap_realspace)):
-                            overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
-
-        # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
-        if apply_condon_shortley:
-            if fock_kspace is not None:
-                for ifr in range(len(fock_kspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for ik, k in enumerate(fock_kspace[ifr]):
-                        fock_kspace[ifr][ik] = k*cs
-            if overlap_kspace is not None:
-                for ifr in range(len(overlap_kspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for ik, k in enumerate(overlap_kspace[ifr]):
-                        overlap_kspace[ifr][ik] = k*cs
-            if fock_realspace is not None:
-                for ifr in range(len(fock_realspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for T in fock_realspace[ifr]:
-                        fock_realspace[ifr][T] = fock_realspace[ifr][T]*cs
-            if overlap_realspace is not None:
-                for ifr in range(len(overlap_realspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for T in overlap_realspace[ifr]:
-                        overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
-
-
-        # self.target_names = target
-        # self.aux_names = aux
-
-
-        self.cells = []
-        self.phase_matrices = []
-        self.supercells = []
-        if self._ismolecule ==False:
-            for ifr, structure in enumerate(self.structures):
-                cell, scell, phase = get_scell_phase(
-                    structure, self.kmesh[ifr], basis=self.basis_name
-                )
-                self.cells.append(cell)
-        self.set_kpts()
-
-        # Assign/compute Hamiltonian
-        if (fock_kspace is not None) and (fock_realspace is None):
-            self.set_fock_kspace(fock_kspace)
-            self.fock_realspace = None
-            # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
-        elif (fock_kspace is None) and (fock_realspace is not None):
-            self.fock_realspace = self._set_matrices_realspace(fock_realspace)
-            if not self._ismolecule:
-                self.fock_kspace = self.bloch_sum(self.fock_realspace, is_tensor = True)
-        elif (fock_kspace is None) and (fock_realspace is None):
-            warnings.warn("Target not provided.")
-            # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
-        elif (fock_kspace is not None) and (fock_realspace is not None):
-            raise NotImplementedError("TBI: check consistency.")
-        else:
-            raise NotImplementedError("Weird condition not handled")
-        
-        # Assign/compute Overlap
-        if (overlap_kspace is not None) and (overlap_realspace is None):
-            self.set_overlap_kspace(overlap_kspace)
-            self.overlap_realspace = None
-         # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
-        elif (overlap_kspace is None) and (overlap_realspace is not None):
-            self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
-            if not self._ismolecule:
-                self.overlap_kspace = self.bloch_sum(self.overlap_realspace, is_tensor = True)
-        elif (overlap_kspace is None) and (overlap_realspace is None):
-            warnings.warn("Overlap matrices not provided")
-            self.overlap_realspace = None
-            self.overlap_kspace = None
-        elif (overlap_kspace is not None) and (overlap_realspace is not None):
-            raise NotImplementedError("TBI: check consistency.")
-        else:
-            raise NotImplementedError("Weird condition not handled")
-
-
-    def set_kpts(self):
-        self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
-        self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
-
-    def _set_matrices_realspace(self, matrices_realspace):
-        if not isinstance(matrices_realspace[0], dict):
-            assert self._ismolecule, "matrices_realspace should be a dictionary of translated unless molecule"
-            return matrices_realspace
-        
-        _matrices_realspace = []
-        # _matrices_realspace_neg = []
-        
-        for m in matrices_realspace:
-            _matrices_realspace.append({})
-            # _matrices_realspace_neg.append({})
-            for k in m:
-                if isinstance(m[k], torch.Tensor):
-                    _matrices_realspace[-1][k] = m[k].to(device = self.device)
-                    # _matrices_realspace_neg[-1][k] = m[minus_k]
-                elif isinstance(m[k], np.ndarray):
-                    _matrices_realspace[-1][k] = torch.from_numpy(m[k]).to(device = self.device)
-                    # _matrices_realspace_neg[-1][k] = torch.from_numpy(m[minus_k])
-
-                elif isinstance(m[k], list):
-                    _matrices_realspace[-1][k] = torch.tensor(m[k], device = self.device)
-                    # _matrices_realspace_neg[-1][k] = torch.tensor(m[minus_k])
-                else:
-                    raise ValueError(
-                        "matrices_realspace should be one among torch.tensor, numpy.ndarray, or list"
-                    )
-    
-        return _matrices_realspace #, _matrices_realspace_neg
-
-    def _set_matrices_kspace(self, matrices_kspace):
-        '''Returns a list of torch.Tensors from a list of np.ndarrays or torch.Tensors'''
-        if isinstance(matrices_kspace, list):
-            if isinstance(matrices_kspace[0], np.ndarray):
-                _matrices_kspace = [
-                    torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
-                ]
-            elif isinstance(matrices_kspace[0], torch.Tensor):
-                _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
-            elif isinstance(matrices_kspace[0], list):
-                _matrices_kspace = [
-                    torch.tensor(m).to(device = self.device) for m in matrices_kspace
-                ]
-            else:
-                raise TypeError(
-                    "matrices_kspace should be a list [torch.Tensor, np.ndarray, or lists]"
-                )
-        elif isinstance(matrices_kspace, np.ndarray):
-            assert matrices_kspace.shape[0] == len(
-                self.structures
-            ), "You must provide matrices_kspace for each structure"
-            _matrices_kspace = [
-                torch.from_numpy(m).to(device = self.device) for m in matrices_kspace
-            ]
-        elif isinstance(matrices_kspace, torch.Tensor):
-            assert matrices_kspace.shape[0] == len(
-                self.structures
-            ), "You must provide matrices_kspace for each structure"
-            _matrices_kspace = [m.to(device = self.device) for m in matrices_kspace]
-        else:
-            raise TypeError(
-                "matrices_kspace should be either a list [torch.Tensor, np.ndarray, or lists], a np.ndarray, or torch.Tensor."
-            )
-
-        return _matrices_kspace
-
-    def set_fock_kspace(self, fock_kspace):
-        self.fock_kspace = self._set_matrices_kspace(fock_kspace)
-
-    def set_overlap_kspace(self, overlap_kspace):
-        self.overlap_kspace = self._set_matrices_kspace(overlap_kspace)
-
-    def compute_matrices_realspace(self, matrices_kspace):
-        """From a list of matrices in kspace, compute a list of dictionaries labeled by real space translations"""
-        # When only kspace input is provided, the right moment to compute real space dummy targets is at the instantiation of (the analogue of) the MLDataset class.
-        # Here, only the genuine data given by the DFT code should be used 
-        raise NotImplementedError("This must happen when the targets are computed!")
-
-    def bloch_sum(self, matrices_realspace, is_tensor = True):
-        matrices_kspace = []
-
-        if is_tensor:
-        # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
-            for ifr, H in enumerate(matrices_realspace):
-                if H != {}:
-                    H_T = torch.stack(list(H.values())).to(device = self.device)
-                    # T_list = torch.from_numpy(np.array(list(H.keys()), dtype = torch.float64)).to(device = self.device)
-                    T_list = torch.tensor(list(H.keys()), dtype = torch.float64, device = self.device)
-                    k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
-                    matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
-                else:
-                    matrices_kspace.append(None) # FIXME: not the best way to handle this situation
-
-        elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
-            for ifr, H in enumerate(matrices_realspace):
-                H_T = torch.from_numpy(np.array(list(H.values()))).to(device = self.device)
-                T_list = torch.from_numpy(np.array(list(H.keys()), dtype = float.float64)).to(device = self.device)
-                k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list = T_list, k = k, norm = 1))
-                
-        
-        return matrices_kspace
-
-    # def baseline_with_nsc_fock(self):
-    #     for cell in self.cells:
-
-
-    def __len__(self):
-        return self.nstructs
-
-# Tests
-def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-10):
-    from mlelec.utils.pbc_utils import inverse_fourier_transform
-
-    reconstructed_matrices_kspace = []
-    for ifr, H in enumerate(matrices_realspace):
-        reconstructed_matrices_kspace.append([])
-        kpts = kpoints[ifr]
-        for k in kpts:
-            reconstructed_matrices_kspace[ifr].append(
-                inverse_fourier_transform(
-                    np.array(list(H.values())), np.array(list(H.keys())), k
-                )
-            )
-        reconstructed_matrices_kspace[ifr] = torch.from_numpy(
-            np.array(reconstructed_matrices_kspace[ifr])
-        )
-        assert reconstructed_matrices_kspace[ifr].shape == matrices_kspace[ifr].shape
-        assert (
-            torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]) < tol
-        ), (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
 
 ############################################################################################################################################################
 # Dataset/Dataloader specific functions
