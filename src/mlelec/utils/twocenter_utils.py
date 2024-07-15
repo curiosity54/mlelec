@@ -16,6 +16,7 @@ from mlelec.utils.symmetry import ClebschGordanReal
 
 SQRT_2 = 2 ** (0.5)
 ISQRT_2 = 1 / SQRT_2
+dummy_property = Labels(['dummy'], torch.tensor([[0]]))
 
 
 def fix_orbital_order(
@@ -922,8 +923,6 @@ def _to_uncoupled_basis(
         lmax = max(blocks.keys["L"])
         cg = ClebschGordanReal(lmax, device = device)
 
-    dummy_property = Labels(['dummy'], torch.tensor([[0]]))
-
     uncoupled_blocks = {}
     samples = {}
     for key, block in blocks.items():
@@ -947,18 +946,30 @@ def _to_uncoupled_basis(
 
     new_blocks = []
     new_keys = []
+
+    components_i = {}    
+    components_j = {}    
     for k in uncoupled_blocks:
         _, _, _, li, _, _, lj = k
+        try:
+            _ = components_i[li]
+        except:
+            components_i[li] = Labels(['m_i'], torch.arange(-li, li+1).reshape(-1, 1))
+        try:
+            _ = components_j[lj]
+        except:
+            components_j[lj] = Labels(['m_j'], torch.arange(-lj, lj+1).reshape(-1, 1))
+            
         new_keys.append(k)
         new_blocks.append(
             TensorBlock(
                 values = uncoupled_blocks[k],
                 samples = samples[k],
                 properties = dummy_property,
-                components = [Labels(['m_i'], torch.arange(-li, li+1).reshape(-1, 1)), Labels(['m_j'], torch.arange(-lj, lj+1).reshape(-1, 1))]
+                components = [components_i[li], components_j[lj]]
                 )
         )
-    return mts.sort(TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks))
+    return TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks)
 
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
