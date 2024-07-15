@@ -75,7 +75,7 @@ class MLDataset():
             lcut = max(self.model_metadata.keys['L'])
 
         # Set features
-        self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut, kwargs.get('compute_features', True))
+        self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut, kwargs.get('calc_features', True))
         print('Features set')
         
         # Initialize items
@@ -206,9 +206,9 @@ class MLDataset():
         self.val_frames = [self.structures[i] for i in self.val_idx]
         self.test_frames = [self.structures[i] for i in self.test_idx]
 
-    def _set_features(self, features, training_strategy, hypers_atom, hypers_pair, lcut, compute_features):
+    def _set_features(self, features, training_strategy, hypers_atom, hypers_pair, lcut, calc_features):
 
-        if not compute_features:
+        if not calc_features:
             self.features = None
             warnings.warn('Features not computed nor set.')
         elif features is None and self.model_type == "acdc":
