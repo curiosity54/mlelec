@@ -584,7 +584,7 @@ def compute_features(dataset: QMDataset,
         keys_to_drop = Labels(hfeat.keys.names, torch.stack(keys_to_drop))
         hfeat = mts.drop_blocks(hfeat, keys = keys_to_drop)
 
-    return hfeat
+    return mts.sort(hfeat)
 
 
 # def twocenter_features_periodic_NH_OLD(
