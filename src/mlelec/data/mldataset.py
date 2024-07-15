@@ -51,7 +51,6 @@ class MLDataset():
         all_pairs: Optional[bool] = False,
         skip_symmetry: Optional[bool] = False,
         orbitals_to_properties: Optional[bool] = True,
-        
         **kwargs,
     ):
     
@@ -76,7 +75,7 @@ class MLDataset():
             lcut = max(self.model_metadata.keys['L'])
 
         # Set features
-        self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut)
+        self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut, kwargs.get('compute_features', True))
         print('Features set')
         
         # Initialize items
@@ -207,9 +206,12 @@ class MLDataset():
         self.val_frames = [self.structures[i] for i in self.val_idx]
         self.test_frames = [self.structures[i] for i in self.test_idx]
 
-    def _set_features(self, features, training_strategy, hypers_atom, hypers_pair, lcut):
+    def _set_features(self, features, training_strategy, hypers_atom, hypers_pair, lcut, compute_features):
 
-        if features is None and self.model_type == "acdc":
+        if not compute_features:
+            self.features = None
+            warnings.warn('Features not computed nor set.')
+        elif features is None and self.model_type == "acdc":
             assert hypers_atom is not None, "`hypers_atom` must be present when `features` is not provided."
             assert lcut is not None, f"`lcut` must be present when `features` is not provided."
             
