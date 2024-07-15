@@ -81,7 +81,7 @@ class MLDataset():
         # Initialize items
         if isinstance(item_names, str):
             item_names = [item_names]
-        if self.model_type =='acdc':
+        if self.model_type =='acdc' and kwargs.get('calc_features', True):
             item_names.append('features')
 
         # Set items
