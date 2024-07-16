@@ -283,12 +283,15 @@ class QMDataset(Dataset):
         # Here, only the genuine data given by the DFT code should be used 
         raise NotImplementedError("This must happen when the targets are computed!")
 
-    def bloch_sum(self, matrices_realspace, is_tensor = True):
+    def bloch_sum(self, matrices_realspace, is_tensor = True, structure_ids = None):
         matrices_kspace = []
+
+        if structure_ids is None:
+            structure_ids = range(len(matrices_realspace))
 
         if is_tensor:
         # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
-            for ifr, H in enumerate(matrices_realspace):
+            for ifr, H in zip(structure_ids, matrices_realspace):
                 if H != {}:
                     H_T = torch.stack(list(H.values())).to(device = self.device)
                     # T_list = torch.from_numpy(np.array(list(H.keys()), dtype = torch.float64)).to(device = self.device)
@@ -299,7 +302,7 @@ class QMDataset(Dataset):
                     matrices_kspace.append(None) # FIXME: not the best way to handle this situation
 
         elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
-            for ifr, H in enumerate(matrices_realspace):
+            for ifr, H in zip(structure_ids, matrices_realspace):
                 H_T = torch.from_numpy(np.array(list(H.values()))).to(device = self.device)
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = float.float64)).to(device = self.device)
                 k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
