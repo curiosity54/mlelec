@@ -14,6 +14,9 @@ from mlelec.targets import ModelTargets
 import metatensor.torch as mts
 from metatensor.torch import TensorMap, Labels, TensorBlock
 import os
+import sys
+import io
+from contextlib import redirect_stderr
 import warnings
 import torch.utils.data as data
 import copy
@@ -157,13 +160,23 @@ class QMDataset(Dataset):
         self.cells = []
         self.phase_matrices = []
         self.supercells = []
-        if self._ismolecule ==False:
-            for ifr, structure in enumerate(self.structures):
-                cell, scell, phase = get_scell_phase(
-                    structure, self.kmesh[ifr], basis=self.basis_name
-                )
-                self.cells.append(cell)
+        stderr_capture = io.StringIO()
+        
+        with redirect_stderr(stderr_capture):
+            if self._ismolecule ==False:
+                for ifr, structure in enumerate(self.structures):
+                    cell, scell, phase = get_scell_phase(
+                        structure, self.kmesh[ifr], basis=self.basis_name
+                    )
+                    self.cells.append(cell)
         self.set_kpts()
+        try:
+            assert stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(stderr_capture.getvalue())
 
         # TODO: move to method
         # Assign/compute Hamiltonian
