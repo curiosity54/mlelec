@@ -21,7 +21,7 @@ from collections import defaultdict
 from pathlib import Path
 from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, fix_orbital_order
 from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform, fourier_transform
-class QMDataset(Dataset):
+class QMDataset():
     '''
     Class containing information about the quantum chemistry calculation and its results.
     '''
@@ -46,33 +46,12 @@ class QMDataset(Dataset):
         ismolecule=False,
     ):
     
-        for f in frames:
-            if dimension == 2:
-                f.pbc = [True, True, False]
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif dimension == 3:
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif dimension == 0: # Handle molecules 
-                f.pbc = False    
-            else:
-                raise NotImplementedError('dimension must be 0, 2 or 3')
-
-        self.structures = frames
+        self.dimension = dimension
+        self.wrap_frames(frames)
         self.frame_slice = frame_slice
         self.nstructs = len(frames)
-        self.kmesh = kmesh
-        self.kmesh_is_list = False
-        if isinstance(kmesh[0], list):
-            self.kmesh_is_list = True
-            assert (
-                len(self.kmesh) == self.nstructs
-            ), "If kmesh is a list, it must have the same length as the number of structures"
-        else:
-            self.kmesh = [
-                kmesh for _ in range(self.nstructs)
-            ]  # currently easiest to do
+        self.set_kmesh(kmesh)
+        
   
         self.device = device
         self.basis = orbs  # actual orbitals
@@ -201,6 +180,34 @@ class QMDataset(Dataset):
             raise NotImplementedError("TBI: check consistency.")
         else:
             raise NotImplementedError("Weird condition not handled")
+        
+    def wrap_frames(self, frames, dimension):
+        for f in frames:
+            if self.dimension == 2:
+                f.pbc = [True, True, False]
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif self.dimension == 3:
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif self.dimension == 0: # Handle molecules 
+                f.pbc = False    
+            else:
+                raise NotImplementedError('dimension must be 0, 2 or 3')
+        self.structures = frames
+
+    def set_kmesh(self, kmesh):
+        self.kmesh = kmesh
+        self.kmesh_is_list = False
+        if isinstance(kmesh[0], list):
+            self.kmesh_is_list = True
+            assert (
+                len(self.kmesh) == self.nstructs
+            ), "If kmesh is a list, it must have the same length as the number of structures"
+        else:
+            self.kmesh = [
+                kmesh for _ in range(self.nstructs)
+            ]  # currently easiest to do
 
     def set_kpts(self):
         self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
