@@ -136,7 +136,7 @@ def _update_matrices(reconstructed_matrices, slices_info, structure_ids):
             T = info["T"]
             mT = info["mT"]
             block_type = info["block_type"]
-            blockval = info["blockval"]
+            blockval = info["blockval"].clone()
             iphi_jpsi_slice = info["iphi_jpsi_slice"]
             ipsi_jphi_slice = info["ipsi_jphi_slice"]
             jphi_ipsi_slice = info["jphi_ipsi_slice"]
