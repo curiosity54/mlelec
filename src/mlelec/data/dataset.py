@@ -14,6 +14,9 @@ from mlelec.targets import ModelTargets
 import metatensor.torch as mts
 from metatensor.torch import TensorMap, Labels, TensorBlock
 import os
+import sys
+import io
+from contextlib import redirect_stderr
 import warnings
 import torch.utils.data as data
 import copy
@@ -136,13 +139,23 @@ class QMDataset():
         self.cells = []
         self.phase_matrices = []
         self.supercells = []
-        if self._ismolecule ==False:
-            for ifr, structure in enumerate(self.structures):
-                cell, scell, phase = get_scell_phase(
-                    structure, self.kmesh[ifr], basis=self.basis_name
-                )
-                self.cells.append(cell)
+        stderr_capture = io.StringIO()
+        
+        with redirect_stderr(stderr_capture):
+            if self._ismolecule ==False:
+                for ifr, structure in enumerate(self.structures):
+                    cell, scell, phase = get_scell_phase(
+                        structure, self.kmesh[ifr], basis=self.basis_name
+                    )
+                    self.cells.append(cell)
         self.set_kpts()
+        try:
+            assert stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(stderr_capture.getvalue())
 
         # TODO: move to method
         # Assign/compute Hamiltonian
@@ -290,12 +303,15 @@ class QMDataset():
         # Here, only the genuine data given by the DFT code should be used 
         raise NotImplementedError("This must happen when the targets are computed!")
 
-    def bloch_sum(self, matrices_realspace, is_tensor = True):
+    def bloch_sum(self, matrices_realspace, is_tensor = True, structure_ids = None):
         matrices_kspace = []
+
+        if structure_ids is None:
+            structure_ids = range(len(matrices_realspace))
 
         if is_tensor:
         # if isinstance(next(iter(matrices_realspace[0].values())), torch.Tensor):
-            for ifr, H in enumerate(matrices_realspace):
+            for ifr, H in zip(structure_ids, matrices_realspace):
                 if H != {}:
                     H_T = torch.stack(list(H.values())).to(device = self.device)
                     # T_list = torch.from_numpy(np.array(list(H.keys()), dtype = torch.float64)).to(device = self.device)
@@ -306,7 +322,7 @@ class QMDataset():
                     matrices_kspace.append(None) # FIXME: not the best way to handle this situation
 
         elif isinstance(next(iter(matrices_realspace[0].values())), np.ndarray):
-            for ifr, H in enumerate(matrices_realspace):
+            for ifr, H in zip(structure_ids, matrices_realspace):
                 H_T = torch.from_numpy(np.array(list(H.values()))).to(device = self.device)
                 T_list = torch.from_numpy(np.array(list(H.keys()), dtype = float.float64)).to(device = self.device)
                 k = torch.from_numpy(self.kpts_rel[ifr]).to(device = self.device)
