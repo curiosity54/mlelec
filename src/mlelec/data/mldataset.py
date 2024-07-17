@@ -519,8 +519,8 @@ class MLDataset():
             Ms = self.qmdata.overlap_kspace
 
         use_overlap = False        
-        if Ms is not None:
-            use_overlap = True
+        # if Ms is not None:
+        #     use_overlap = True
 
         eigenvalues, eigenvectors = self.compute_eigenvalues(return_eigenvectors = True)
         
@@ -562,11 +562,11 @@ class MLDataset():
 
                 # Compute the matrix elements of the atom resolved density matrix
                 blocks = [block for slice_ in torch.split(P, split_idx, dim = 0) for block in torch.split(slice_, split_idx, dim = 1)]
-                T_ = torch.tensor([torch.norm(b) for b in blocks], device = self.device).reshape(natm, natm)
+                T_ = torch.tensor([torch.norm(b) for b in blocks], device = self.device) #reshape(natm, natm)
 
                 set_nested_list_value(T__, index, T_)
             
-            T.append(torch.stack(T__))
+            T.append(torch.stack(T__).T)
         
         if return_eigenvalues:
             return T, eigenvalues
