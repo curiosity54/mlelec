@@ -140,12 +140,12 @@ class MLDataset():
         #     b = b.values.to(device=self.device)
         return mts.slice(y, axis = "samples", labels = Labels(names = ["structure"], values = indices.reshape(-1, 1)))
     
-    def _split_by_structure(self, blocks: TensorMap, split_by_axis: Optional[str] = "samples", split_by_dimension: Optional[str] = "structure") -> TensorMap:
-        grouped_labels = [mts.Labels(names = split_by_dimension, 
+    def _split_by_structure(self, blocks: TensorMap) -> TensorMap:
+        grouped_labels = [mts.Labels(names = 'structure', 
                                      values = A.reshape(-1, 1)) for A in mts.unique_metadata(blocks, 
-                                                                              axis = split_by_axis, 
-                                                                              names = split_by_dimension).values]
-        return mts.split(blocks, split_by_axis, grouped_labels), grouped_labels
+                                                                              axis = 'samples', 
+                                                                              names = 'structure').values]
+        return mts.split(blocks, 'samples', grouped_labels), grouped_labels
 
     def _split_indices(
         self,
@@ -270,7 +270,7 @@ class MLDataset():
             elif flat_name == 'fockrealspace':
                 if self.qmdata._ismolecule:
                     l = self.compute_tensors(self.qmdata.fock_realspace)
-
+                    items[name] = l
                 else:
                     items[name] = []
                     l = self.compute_tensors([torch.stack(list(h.values())) for h in self.qmdata.fock_realspace])
@@ -279,7 +279,7 @@ class MLDataset():
             elif flat_name == 'overlaprealspace':
                 if self.qmdata._ismolecule:
                     l = self.compute_tensors(self.qmdata.overlap_realspace)
-
+                    items[name] = l
                 else:
                     items[name] = []
                     l = self.compute_tensors([torch.stack(list(h.values())) for h in self.qmdata.overlap_realspace])
@@ -299,8 +299,9 @@ class MLDataset():
 
             elif flat_name == 'atomresolveddensity':
                 if 'eigenvalues' in _item_names:
-                    T, e  = self.compute_atom_resolved_density(return_eigenvalues = True)
+                    T, e, rho  = self.compute_atom_resolved_density(return_eigenvalues = True)
                     items['eigenvalues'] = e
+                    items['density_matrix'] = rho
 
                 else:
                     T  = self.compute_atom_resolved_density(return_eigenvalues = False)
@@ -514,9 +515,9 @@ class MLDataset():
             nested_list[indices[-1]] = value
 
         if self.qmdata._ismolecule:
-            Ms = self.qmdata.overlap_realspace
+            overlaps = self.qmdata.overlap_realspace
         else:
-            Ms = self.qmdata.overlap_kspace
+            overlaps = self.qmdata.overlap_kspace
 
         use_overlap = False        
         # if Ms is not None:
@@ -527,57 +528,54 @@ class MLDataset():
         frames = self.qmdata.structures
         basis = self.qmdata.basis
 
-        T = []
+        ard = []
+        rhos = []
 
-        for ifr, (eval, evec, frame, M) in enumerate(zip(eigenvalues, eigenvectors, frames, Ms)):
-
-            leading_shape = evec.shape[:-2]
-            indices = itertools.product(*[range(dim) for dim in leading_shape])
+        for ifr, (eval, C, frame, S) in enumerate(zip(eigenvalues, eigenvectors, frames, overlaps)):
 
             natm = len(frame)
-            nelec = sum(frame.numbers)
+            ncore = sum(self.qmdata.ncore[s] for s in frame.numbers)
+            nelec = sum(frame.numbers) - ncore
             split_idx = [len(basis[s]) for s in frame.numbers]
+            needed = True if len(np.unique(split_idx)) > 1 else False
+            max_dim = np.max(split_idx)
+            n = C.shape[-1]
 
-            T__ = create_nested_list(leading_shape)
+            # Occupations
+            occ = torch.tensor([2.0+0.0j if i <= nelec//2 else 0.0+0.0j for i in range(C.shape[-1])], dtype = torch.complex128)
+
+            # Compute the one-particle density matrix
+            rho = torch.einsum('n,...in,...jn', occ, C, C.conj())
             
-            for index in indices:
-
-                # Eigenvectors matrix
-                C = evec[index]
-
-                # Occupations
-                occ = torch.tensor([2.0+0.0j if i <= nelec//2 else 0.0+0.0j for i in range(C.shape[0])], dtype = torch.complex128)
-
-                # Compute the one-particle density matrix
-                rho = torch.einsum('n,in,jn', occ, C, C.conj())
-
-                if use_overlap:
-                    # Compute the population matrix
-                    sqrt_S, _ = _sqrtm_newton_schulz(M[index])
-
-                    P = sqrt_S @ rho @ sqrt_S
-                else:
-                    # Use rho
-                    P = rho
-
-                # Compute the matrix elements of the atom resolved density matrix
-                blocks = [block for slice_ in torch.split(P, split_idx, dim = 0) for block in torch.split(slice_, split_idx, dim = 1)]
-                T_ = torch.tensor([torch.norm(b) for b in blocks], device = self.device) #reshape(natm, natm)
-
-                set_nested_list_value(T__, index, T_)
+            slices = torch.split(rho, split_idx, dim=0)
+            blocks = [torch.split(slice_, split_idx, dim=1) for slice_ in slices]
+            blocks_flat = [block for sublist in blocks for block in sublist]
             
-            T.append(torch.stack(T__).T)
+            if needed:
+                squared_blocks = []
+                for block in blocks_flat:
+                    pad_size = (0, max_dim - block.size(1), 0, max_dim - block.size(0))
+                    squared_block = torch.nn.functional.pad(block, pad_size, "constant", 0)
+                    squared_blocks.append(squared_block)
+                blocks_flat = squared_blocks
+
+            ard.append(torch.stack(blocks_flat).norm(dim = (1, 2)))
+            rhos.append(rho)
+      
         
         if return_eigenvalues:
-            return T, eigenvalues
+            return ard, eigenvalues, rhos
         else:
-            return T
+            return ard
         
     def _compute_model_metadata(self ):
 
         qmdata = self.qmdata
         species_pair = np.unique([comb for frame in qmdata.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis = 0)
-
+        max_count = defaultdict(lambda: 0)
+        for species_counts in [np.unique(frame.numbers, return_counts=True) for frame in qmdata.structures]:
+            for s, c in zip(*species_counts):
+                max_count[s] = c if c > max_count[s] else max_count[s]
         # key_names = ['block_type', 'species_i', 'species_j', 'L', 'inversion_sigma']
         # property_names = ['n_i', 'l_i', 'n_j', 'l_j', 'dummy']
         # property_values = {}
@@ -593,7 +591,7 @@ class MLDataset():
             nl2 = np.unique([nlm[:2] for nlm in qmdata.basis[s2]], axis = 0)
 
             if same_species:
-                block_types = [-1,0,1]
+                block_types = [0] if max_count[s1] == 1 else [-1,0,1]
                 orbital_list = [(a, b) for a, b in itertools.product(nl1.tolist(), nl2.tolist()) if a <= b]
             else: 
                 if s1 > s2:
@@ -616,21 +614,16 @@ class MLDataset():
                             key = block_type, s1, n1, l1, s2, n2, l2, L
 
                         keys.append(key)
-                        # if key not in property_values:
-                        #     property_values[key] = []
-                        # property_values[key].append([n1,l1,n2,l2,0])
-
+                        
         blocks = []
-        # keys = []
         dummy_label = Labels(['dummy'], torch.tensor([[0]], device = qmdata.device))
         for k in keys:
-            # keys.append(k)
             blocks.append(
                 TensorBlock(
                     samples = dummy_label,
-                    properties = dummy_label, #Labels(property_names, torch.tensor(property_values[k], device = qmdata.device)),
+                    properties = dummy_label,
                     components = [dummy_label],
-                    values = torch.zeros((1, 1, 1), dtype = torch.float32, device = qmdata.device) #torch.zeros((1, 1, len(property_values[k])), dtype = torch.float32, device = qmdata.device)
+                    values = torch.zeros((1, 1, 1), dtype = torch.float32, device = qmdata.device) 
                 )
             )
 
@@ -684,6 +677,7 @@ class MLDataset():
             'overlapkspace',
             'eigenvalues',
             'atomresolveddensity', 
+            'density_matrix',
             'features'
             ]
 

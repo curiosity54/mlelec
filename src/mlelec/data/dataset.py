@@ -81,6 +81,7 @@ class QMDataset(Dataset):
         self.basis = orbs  # actual orbitals
         self.basis_name = orbs_name
         self._set_nao()
+        self._set_ncore()
 
         self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
         
@@ -329,6 +330,22 @@ class QMDataset(Dataset):
 
     def _set_nao(self):
         self.nao = [sum(len(self.basis[s]) for s in frame.numbers) for frame in self.structures]
+
+    def _set_ncore(self):
+        ncore = {}
+        for s in self.basis:
+            basis = np.array(self.basis[s])
+            nmin = np.min(basis[:,0])
+            ncore[s] = 0
+            for n in np.arange(nmin):
+                for l in range(n):
+                    ncore[s] += 2*(2*l+1)
+            llist = set(basis[np.argwhere(basis[:,0]==nmin)][:, 0, 1])
+            llist_nmin = set(range(max(llist)+1))
+            l_diff = llist_nmin - llist
+            for l in l_diff:
+                ncore[s] += 2*(2*l+1)
+        self.ncore = ncore
 
     def __len__(self):
         return self.nstructs
