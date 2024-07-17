@@ -12,9 +12,9 @@ import metatensor.operations as operations
 import numpy as np
 import torch
 import torch.utils.data as data
+from torch.utils.data import Dataset
 from ase.io import read
 from metatensor import Labels, TensorMap, TensorBlock, load
-from torch.utils.data import Dataset
 from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
 from mlelec.targets import ModelTargets
 
@@ -39,6 +39,7 @@ class precomputed_molecules(Enum):
     ethane = "examples/data/ethane"
     qm7 = "examples/data/qm7"
     qm9 = "examples/data/qm9"
+    acs = "examples/data/acs"
 
 
 class MoleculeDataset(Dataset):
@@ -77,7 +78,7 @@ class MoleculeDataset(Dataset):
         mol_name: Union[precomputed_molecules, str] = "water_1000",
         frame_slice: slice = slice(None),
         target: List[str] = ["fock"], 
-        lb_target: List[str] = None, 
+        lb_target: Optional[List] = None, 
         use_precomputed: bool = True,
         aux: Optional[List] = None,
         lb_aux: Optional[List] = None,
@@ -100,22 +101,26 @@ class MoleculeDataset(Dataset):
         self.frame_slice = frame_slice
         self.target_names = target
         self.basis = basis
-        self.lb_target_names = lb_target
+        if lb_target is not None:
+            self.lb_target_names = lb_target
 
         self.target = {t: [] for t in self.target_names}
-        self.lb_target = {t: [] for t in self.lb_target_names}
+        if lb_target is not None:
+            self.lb_target = {t: [] for t in self.lb_target_names}
         if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
             self.path = precomputed_molecules[mol_name].value
         if target_data is None:
             self.data_path = os.path.join(self.path, basis)
             self.aux_path = os.path.join(self.path, basis)
-            self.lb_data_path = os.path.join(self.path, large_basis)
-            self.lb_aux_path = os.path.join(self.path, large_basis)
-            # allow overwrite of data and aux path if necessary
             if data_path is not None:
                 self.data_path = data_path
             if aux_path is not None:
                 self.aux_path = aux_path
+        if lb_target is not None:
+            self.lb_data_path = os.path.join(self.path, large_basis)
+            self.lb_aux_path = os.path.join(self.path, large_basis)
+            # allow overwrite of data and aux path if necessary
+            
 
         if frames is None:
             if self.path is None and self.data_path is not None:
@@ -130,10 +135,8 @@ class MoleculeDataset(Dataset):
         self.load_structures(frames=frames)
         self.pbc = False
         for f in self.structures:
-            # print(f.pbc, f.cell)
             if f.pbc.any():
                 if not f.cell.any():
-                    # "PBC found but no cell vectors found"
                     f.pbc = False
                 self.pbc = True
             if self.pbc:
@@ -141,21 +144,25 @@ class MoleculeDataset(Dataset):
                     f.cell = [100, 100, 100]  # TODO this better
 
         self.load_target(target_data=target_data)
-        self.load_lb_target()
+        if lb_target is not None:
+            self.load_lb_target()
         self.aux_data_names = aux
-        self.lb_aux_data_names = lb_aux
+        if lb_aux is not None:
+            self.lb_aux_data_names = lb_aux
         if "fock" in target:
             if self.aux_data_names is None:
                 self.aux_data_names = ["overlap", "orbitals"]
+            if lb_aux_data is not None and self.lb_aux_data_names is None:
                 self.lb_aux_data_names = ["overlap", "orbitals"]
             elif "overlap" not in self.aux_data_names:
                 self.aux_data_names.append("overlap")
+            elif lb_aux_data is not None and "overlap" not in self.lb_aux_data_names:
                 self.lb_aux_data_names.append("overlap")
 
         if self.aux_data_names is not None:
             self.aux_data = {t: [] for t in self.aux_data_names}
             self.load_aux_data(aux_data=aux_data)
-
+        if lb_aux is not None and self.lb_aux_data_names is not None:
             self.lb_aux_data = {t: [] for t in self.lb_aux_data_names}
             self.load_lb_aux_data(lb_aux_data=lb_aux_data)
 
@@ -181,15 +188,67 @@ class MoleculeDataset(Dataset):
 
         else:
             for t in self.target_names:
-                print(self.data_path + "/{}.hickle".format(t))
-                self.target[t] = hickle.load(self.data_path + "/{}.hickle".format(t))[
-                    self.frame_slice
-                ]
+                file_path = os.path.join(self.data_path, f"{t}.hickle")
+                print(file_path)
+                data = hickle.load(file_path)[self.frame_slice]
+                
+                if isinstance(data, np.ndarray) and data.dtype == object:
+                    # If data is a numpy array with dtype object, convert each element
+                    self.target[t] = [torch.from_numpy(item).to(device=self.device) 
+                                      if isinstance(item, np.ndarray) else item.to(device=self.device) for item in data]
+                elif isinstance(data, np.ndarray):
+                    # If data is a regular numpy array, convert the entire array
+                    self.target[t] = torch.from_numpy(data).to(device=self.device)
+                elif isinstance(data, list):
+                    # If data is a list, ensure it contains numpy arrays or tensors
+                    for i, item in enumerate(data):
+                        if isinstance(item, np.ndarray):
+                            data[i] = torch.from_numpy(item).to(device=self.device)
+                        elif isinstance(item, torch.Tensor):
+                            data[i] = item.to(device=self.device)
+                        else:
+                            raise TypeError(f"Unsupported data type for target '{t}' at index {i}: {type(item)}")
+                    self.target[t] = data
+                else:
+                    raise TypeError(f"Unsupported data type for target '{t}': {type(data)}")
+
+                # Ensure all items in the target list are tensors if it's a list
+                if isinstance(self.target[t], list):
+                    assert all(isinstance(x, torch.Tensor) for x in self.target[t]), \
+                        f"Not all items in target '{t}' are tensors after conversion."
+
                 
     def load_lb_target(self):
         for t in self.lb_target_names:
-            print(self.lb_data_path + "/{}.hickle".format(t))
-            self.lb_target[t] = hickle.load(self.lb_data_path + "/{}.hickle".format(t))[self.frame_slice]
+            file_path = os.path.join(self.lb_data_path, f"{t}.hickle")
+            print(file_path)
+            data = hickle.load(file_path)[self.frame_slice]
+
+            if isinstance(data, np.ndarray) and data.dtype == object:
+                # If data is a numpy array with dtype object, convert each element
+                self.lb_target[t] = [torch.from_numpy(item).to(device=self.device) 
+                                     if isinstance(item, np.ndarray) else item.to(device=self.device) for item in data]
+            elif isinstance(data, np.ndarray):
+                # If data is a regular numpy array, convert the entire array
+                self.lb_target[t] = torch.from_numpy(data).to(device=self.device)
+            elif isinstance(data, list):
+                # If data is a list, ensure it contains numpy arrays or tensors
+                for i, item in enumerate(data):
+                    if isinstance(item, np.ndarray):
+                        data[i] = torch.from_numpy(item).to(device=self.device)
+                    elif isinstance(item, torch.Tensor):
+                        data[i] = item.to(device=self.device)
+                    else:
+                        raise TypeError(f"Unsupported data type for lb_target '{t}' at index {i}: {type(item)}")
+                self.lb_target[t] = data
+            else:
+                raise TypeError(f"Unsupported data type for lb_target '{t}': {type(data)}")
+
+            # Ensure all items in the lb_target list are tensors if it's a list
+            if isinstance(self.lb_target[t], list):
+                assert all(isinstance(x, torch.Tensor) for x in self.lb_target[t]), \
+                    f"Not all items in lb_target '{t}' are tensors after conversion."
+
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
@@ -205,11 +264,21 @@ class MoleculeDataset(Dataset):
                     self.aux_data[t] = hickle.load(
                         self.aux_path + "/{}.hickle".format(t)
                     )
+                    if isinstance(self.aux_data[t], np.ndarray):
+                        self.aux_data[t] = self.aux_data[t].tolist()
                     # os.join(self.aux_path, "{}.hickle".format(t))
                     if torch.is_tensor(self.aux_data[t]):
                         self.aux_data[t] = self.aux_data[t][self.frame_slice].to(
                             device=self.device
                         )
+                    elif isinstance(self.aux_data[t], list):
+                        self.aux_data[t] = self.aux_data[t][self.frame_slice]
+                        for i in range(len(self.aux_data[t])):
+                            if isinstance(self.aux_data[t][i], np.ndarray):
+                                self.aux_data[t][i] = torch.from_numpy(self.aux_data[t][i]).to(device = self.device)
+                            elif isinstance(self.aux_data[t][i], torch.Tensor):
+                                self.aux_data[t][i] = self.aux_data[t][i].to(device = self.device)
+                            # assert isinstance(self.aux_data[t][i], torch.Tensor)
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
@@ -234,11 +303,21 @@ class MoleculeDataset(Dataset):
                 self.lb_aux_data[t] = hickle.load(
                     self.lb_aux_path + "/{}.hickle".format(t)
                 )
+                if isinstance(self.lb_aux_data[t], np.ndarray):
+                    self.lb_aux_data[t] = self.lb_aux_data[t].tolist()
+                    
                 if torch.is_tensor(self.lb_aux_data[t]):
                     self.lb_aux_data[t] = self.lb_aux_data[t][self.frame_slice].to(
                         device=self.device
                     )
-
+                elif isinstance(self.lb_aux_data[t], list):
+                    self.lb_aux_data[t] = self.lb_aux_data[t][self.frame_slice]
+                    for i in range(len(self.lb_aux_data[t])):
+                        if isinstance(self.lb_aux_data[t][i], np.ndarray):
+                            self.lb_aux_data[t][i] = torch.from_numpy(self.lb_aux_data[t][i]).to(device = self.device)
+                        elif isinstance(self.lb_aux_data[t][i], torch.Tensor):
+                            self.lb_aux_data[t][i] = self.lb_aux_data[t][i].to(device = self.device)
+                        # assert isinstance(self.lb_aux_data[t][i], torch.Tensor)
 
     def shuffle(self, indices: torch.tensor):
         self.structures = [self.structures[i] for i in indices]
@@ -446,6 +525,7 @@ class MLDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        frames = [self.structures[i] for i in idx]
         if not self.model_type == "acdc":
             return self.structures[idx], self.target.tensor[idx]
         else:
@@ -471,13 +551,14 @@ class MLDataset(Dataset):
                 idx = [i.item() for i in idx]
                 y = [self.target.tensor[i] for i in idx]
 
-            return x, y, idx
+            return x, y, idx, frames
 
     def collate_fn(self, batch):
         x = batch[0][0]
         y = batch[0][1]
         idx = batch[0][2]
-        return {"input": x, "output": y, "idx": idx}
+        frames = batch[0][3]
+        return {"input": x, "output": y, "idx": idx, "frames": frames}
 
 
 def get_dataloader(

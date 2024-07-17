@@ -33,11 +33,11 @@ def _lowdin_orthogonalize(
     if isinstance(fock, torch.Tensor):
         ovlp_i12 = isqrtm(ovlp)
         return torch.einsum("ij,jk,kl->il", ovlp_i12, fock, ovlp_i12)
-    elif isinstance(fock, np.ndarray):
+    elif isinstance(fock, np.ndarray) or isinstance(fock, list):
         ortho_focks = []
         for i, f in enumerate(fock):
-            ovlp_i12 = isqrtm(torch.from_numpy(ovlp[i]))
-            ortho_focks.append(torch.einsum("ij,jk,kl->il", ovlp_i12, torch.from_numpy(f), ovlp_i12))
+            ovlp_i12 = isqrtm(ovlp[i])
+            ortho_focks.append(torch.einsum("ij,jk,kl->il", ovlp_i12, f, ovlp_i12))        
         return ortho_focks
 
 
@@ -84,7 +84,8 @@ def fix_orbital_order(
             fixed_matrices.append(fix_one_matrix(matrix[i], f, orbital))
         if isinstance(matrix, np.ndarray):
             return np.asarray(fixed_matrices, dtype = object)
-        return torch.stack(fixed_matrices)
+        return fixed_matrices
+        # return torch.stack(fixed_matrices)
     else:
         return fix_one_matrix(matrix, frames, orbital)
 
@@ -188,7 +189,7 @@ def _orbs_offsets(orbs):
     return orbs_tot, orbs_offset
 
 
-def _atom_blocks_idx(index,frames, orbs_tot):
+def _atom_blocks_idx(index, frames, orbs_tot):
     """position of the hamiltonian subblocks for each atom in each frame"""
     if isinstance(frames, ase.Atoms):
         frames = [frames]
@@ -229,7 +230,6 @@ def _matrix_to_blocks(
     orbitals: dict,
     device: str = None,
 ):
-
     orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
@@ -701,7 +701,6 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
         # nj = key["n_j"]
     except Exception as e:
         print(e)
-
         # block_type, ai, ni, li, aj, nj, lj = key
     inversion_sigma = (-1) ** (li + lj + L)
     if cell_shift is None:

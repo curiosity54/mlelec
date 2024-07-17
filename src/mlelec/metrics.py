@@ -50,8 +50,8 @@ def Custom_loss():
     pass
 
 def mse_qm7(frames, pred, target):
-    evanorm = []
+    norm_loss = []
     for i in range(len(pred)):
-        evanorm.append((torch.linalg.norm(pred[i] - target[i]))**2/(frames[i].get_global_number_of_atoms()**2))
-    return torch.mean(torch.stack(evanorm))
+        norm_loss.append((torch.linalg.norm(pred[i] - target[i]))**2/(frames[i].get_global_number_of_atoms()**2))
+    return torch.mean(torch.stack(norm_loss))
 

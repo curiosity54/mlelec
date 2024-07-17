@@ -106,12 +106,10 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         # device = kwargs.get("device", "cpu")
         model_strategy = model_strategy.lower()
         assert model_strategy in ["coupled", "uncoupled"]
-
         # FIX orbital order for PYSCF # TODO: make rhis optional if not using pyscf
         tensor = twocenter_utils.fix_orbital_order(
             tensor, frames=frames, orbital=orbitals
         )
-
         overs = twocenter_utils.fix_orbital_order(
             overlap, frames=frames, orbital=orbitals
         )
