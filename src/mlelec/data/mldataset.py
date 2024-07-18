@@ -267,6 +267,9 @@ class MLDataset():
             if flat_name == 'fockblocks':
                 items[name] = self.compute_coupled_blocks()
 
+            elif flat_name == 'overlapblocks':
+                items[name] = self.compute_coupled_blocks(use_overlap=True)
+
             elif flat_name == 'fockrealspace':
                 if self.qmdata._ismolecule:
                     l = self.compute_tensors(self.qmdata.fock_realspace)
