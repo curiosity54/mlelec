@@ -208,7 +208,7 @@ def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indice
     return dipoles, eigenvalues
 
 
-def compute_polarisability_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True):
+def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
     # computes polarisability, dipole moment and eigenvalues for each molecule in batch
     polarisability = []
     eigenvalues = []
@@ -255,8 +255,8 @@ def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, or
         batch_overlap = None
     else:
         batch_overlap = [
-            torch.from_numpy(ml_data.molecule_data.aux_data["overlap"][i])
+            ml_data.molecule_data.aux_data["overlap"][i]
             for i in batch_indices]
     batch_mfs = [mfs[i] for i in batch_indices]
-    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap)
+    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal)
     return dipoles, polars, eigenvalues
