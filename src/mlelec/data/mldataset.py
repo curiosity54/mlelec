@@ -545,7 +545,7 @@ class MLDataset():
             n = C.shape[-1]
 
             # Occupations
-            occ = torch.tensor([2.0+0.0j if i <= nelec//2 else 0.0+0.0j for i in range(C.shape[-1])], dtype = torch.complex128)
+            occ = torch.tensor([2.0+0.0j if i < nelec//2 else 0.0+0.0j for i in range(C.shape[-1])], dtype = torch.complex128)
 
             # Compute the one-particle density matrix
             rho = torch.einsum('n,...in,...jn', occ, C, C.conj())
