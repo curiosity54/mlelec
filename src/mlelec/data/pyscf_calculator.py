@@ -347,6 +347,8 @@ def get_scell_phase(frame, kmesh, basis="sto-3g"):
     cell = pbcgto.Cell()
     cell.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
     cell.basis = basis  # check if this is actually needed
+    if basis[:3] == 'gth':
+        cell.pseudo = 'gth-pbe'
     cell.a = frame.cell
     cell.build()
     kpts = cell.make_kpts(kmesh)

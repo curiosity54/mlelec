@@ -83,7 +83,7 @@ def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tens
             pred.shape == target.shape
         ), "Prediction and target must have the same shape"
         # target = target.to(pred)
-        return torch.norm(pred - target) ** 2
+        return torch.sum((pred - target)**2)
     
     elif isinstance(pred, torch.ScriptObject):
         if pred._type().name() == "TensorMap":
@@ -97,7 +97,8 @@ def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tens
                 assert (
                     block.samples == targetblock.samples
                 ), "Prediction and target must have the same samples"
-                losses.append(torch.norm(block.values - targetblock.values)**2 / norm)
+
+                losses.append(torch.sum((block.values - targetblock.values)**2) / norm)
                 # losses.append(torch.sum((block.values - targetblock.values)*(block.values - targetblock.values).conj()))
                 # losses.append(torch.sum((block.values - targetblock.values) ** 2))
             else:

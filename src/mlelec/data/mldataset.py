@@ -298,13 +298,18 @@ class MLDataset():
             
             elif flat_name == 'eigenvalues':
                 if 'atomresolveddensity' not in _item_names:
-                    items[name] = self.compute_eigenvalues(return_eigenvectors = False)
+                    _eval, _evec = self.compute_eigenvalues(return_eigenvectors = True)
+                    items[name] = _eval
+                    items['eigenvectors'] = _evec
 
             elif flat_name == 'atomresolveddensity':
                 if 'eigenvalues' in _item_names:
-                    T, e, rho  = self.compute_atom_resolved_density(return_eigenvalues = True)
+                    T, rho, e, _evec  = self.compute_atom_resolved_density(return_eigenvalues = True,
+                                                                           return_rho = True,
+                                                                           return_eigenvectors = True)
                     items['eigenvalues'] = e
                     items['density_matrix'] = rho
+                    items['eigenvectors'] = _evec
 
                 else:
                     T  = self.compute_atom_resolved_density(return_eigenvalues = False)
@@ -502,7 +507,10 @@ class MLDataset():
         else:
             return eigenvalues_list
         
-    def compute_atom_resolved_density(self, return_eigenvalues: Optional[bool] = True):
+    def compute_atom_resolved_density(self, 
+                                      return_rho: Optional[bool] = False, 
+                                      return_eigenvalues: Optional[bool] = True, 
+                                      return_eigenvectors: Optional[bool] = False):
         #TODO: move to a target class?
 
         # Function to create nested lists
@@ -533,6 +541,7 @@ class MLDataset():
 
         ard = []
         rhos = []
+        evec = []
 
         for ifr, (eval, C, frame, S) in enumerate(zip(eigenvalues, eigenvectors, frames, overlaps)):
 
@@ -565,15 +574,20 @@ class MLDataset():
             ard.append(torch.stack(blocks_flat).norm(dim = (1, 2)))
             rhos.append(rho)
       
-        
+        to_return = [ard]
+        if return_rho:
+            to_return.append(rhos)
         if return_eigenvalues:
-            return ard, eigenvalues, rhos
-        else:
-            return ard
-        
-    def _compute_model_metadata(self ):
+            to_return.append(eigenvalues)
+        if return_eigenvectors:
+            to_return.append(eigenvectors)
 
-        qmdata = self.qmdata
+        return tuple(to_return)
+        
+    def _compute_model_metadata(self, qmdata = None):
+        if qmdata is None:
+            qmdata = self.qmdata
+
         species_pair = np.unique([comb for frame in qmdata.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis = 0)
         max_count = defaultdict(lambda: 0)
         for species_counts in [np.unique(frame.numbers, return_counts=True) for frame in qmdata.structures]:

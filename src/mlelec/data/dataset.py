@@ -96,35 +96,35 @@ class QMDataset(Dataset):
 
         # TODO: move to method
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
-        if fix_p_orbital_order and not self._ismolecule:
-            if fock_kspace is not None:
-                for ifr in range(len(fock_kspace)):
-                    for ik, k in enumerate(fock_kspace[ifr]):
-                        fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-            if overlap_kspace is not None:
-                for ifr in range(len(overlap_kspace)):
-                    for ik, k in enumerate(overlap_kspace[ifr]):
-                        overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-            if fock_realspace is not None:
-                for ifr in range(len(fock_realspace)):
-                    for T in fock_realspace[ifr]:
-                        fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
-            if overlap_realspace is not None:
-                for ifr in range(len(overlap_realspace)):
-                    for T in overlap_realspace[ifr]:
-                        overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
-        
-        elif self._ismolecule:
-            from mlelec.utils.twocenter_utils import fix_orbital_order
-            assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
-            if fix_p_orbital_order:
-                for ifr in range(len(fock_realspace)):
-                        fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
-            if overlap_realspace is not None:
-                assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
-                if fix_p_orbital_order:
+        if fix_p_orbital_order:
+            if not self._ismolecule:
+                if fock_kspace is not None:
+                    for ifr in range(len(fock_kspace)):
+                        for ik, k in enumerate(fock_kspace[ifr]):
+                            fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+                if overlap_kspace is not None:
+                    for ifr in range(len(overlap_kspace)):
+                        for ik, k in enumerate(overlap_kspace[ifr]):
+                            overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
+                if fock_realspace is not None:
+                    for ifr in range(len(fock_realspace)):
+                        for T in fock_realspace[ifr]:
+                            fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
+                if overlap_realspace is not None:
                     for ifr in range(len(overlap_realspace)):
-                            overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
+                        for T in overlap_realspace[ifr]:
+                            overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
+        
+            else:
+                assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
+                print(self.basis)
+                for ifr in range(len(fock_realspace)):
+                    a_ = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
+                    fock_realspace[ifr] = a_
+                if overlap_realspace is not None:
+                    assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
+                    for ifr in range(len(overlap_realspace)):
+                        overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
         # TODO: Move to method
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
