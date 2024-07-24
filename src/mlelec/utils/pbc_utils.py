@@ -108,7 +108,7 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
     orbs_tot, _ = _orbs_offsets(dataset.basis)  # returns orbs_tot,
 
     for A, frame in enumerate(dataset.structures):  # Loop over frames
-        if not dataset._ismolecule:
+        if not dataset.is_molecule:
             if cutoff_was_none:
                 cutoff = dataset.cells[A].rcut * Bohr
                 warnings.warn(f'Automatic choice of the cutoff for structure {A}. rcut = {cutoff:.2f} Angstrom')

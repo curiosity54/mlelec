@@ -28,135 +28,159 @@ from mlelec.features.acdc import compute_features
 import xitorch
 from xitorch.linalg import symeig
 
-class MLDataset():
+
+class Items(NamedTuple):
+    fock_blocks: Optional[TensorMap] = None
+    overlap_blocks: Optional[TensorMap] = None
+    fock_realspace: Optional[List[TensorMap]] = None
+    overlap_realspace: Optional[List[TensorMap]] = None
+    fock_kspace: Optional[TensorMap] = None
+    overlap_kspace: Optional[TensorMap] = None
+    eigenvalues: Optional[List[torch.Tensor]] = None
+    eigenvectors: Optional[List[torch.Tensor]] = None
+    atom_resolved_density: Optional[List[torch.Tensor]] = None
+    density_matrix: Optional[List[torch.Tensor]] = None
+    features: Optional[torch.ScriptObject] = None
+
+class MLDataset:
     '''
-    Goes from DFT data stored in QMDataset to a torch-compatible dataset ready for machine learning.
+    Converts DFT data stored in QMDataset to a torch-compatible dataset ready for machine learning.
     '''
+
     def __init__(
         self,
         qmdata: QMDataset,
-        device: str = None,
+        device: Optional[str] = None,
         model_type: Optional[str] = "acdc",
-        item_names: Optional[Union[str, List]] = 'fock_blocks',
+        item_names: Optional[Union[str, List[str]]] = 'fock_blocks',
         shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
-        # TODO: to kwargs?
         features: Optional[torch.ScriptObject] = None,
         training_strategy: Optional[str] = "two_center",
         hypers_atom: Optional[Dict] = None,
         hypers_pair: Optional[Dict] = None,
         lcut: Optional[int] = None,
         cutoff: Optional[Union[int, float]] = None,
-        sort_orbs: Optional[bool] = True,
-        all_pairs: Optional[bool] = False,
-        skip_symmetry: Optional[bool] = False,
-        orbitals_to_properties: Optional[bool] = True,
+        sort_orbs: bool = True,
+        all_pairs: bool = False,
+        skip_symmetry: bool = False,
+        orbitals_to_properties: bool = True,
+        train_frac: Optional[float] = 0.7,
+        val_frac: Optional[float] = 0.2,
+        test_frac: Optional[float] = 0.1,
         **kwargs,
     ):
-    
-        self.qmdata = qmdata #copy.deepcopy(qmdata) # Is deepcopy required?
-        self.device = self.qmdata.device if device is None else device
-        self.nstructs = len(self.qmdata.structures)
+        self._qmdata = qmdata
+        self.device = device or self.qmdata.device
+        self._cutoff = cutoff
         self.rng = None
         self.kwargs = kwargs
-        self.cutoff = cutoff
-        self.structures = self.qmdata.structures
-        self.natoms_list = [len(frame) for frame in self.structures]
-        self.species = set([tuple(f.numbers) for f in self.structures])
-        self.sort_orbs = sort_orbs
-        self.all_pairs = all_pairs
-        self.skip_symmetry = skip_symmetry
-        self.orbitals_to_properties = orbitals_to_properties
-        self.model_type = model_type  # flag to know if we are using acdc features or want to cycle through positions
-        training_strategy = _flattenname(training_strategy)
+        self._model_type = model_type
+        self._training_strategy = _flattenname(training_strategy)
+        self._sort_orbs = sort_orbs
+        self._all_pairs = all_pairs
+        self._skip_symmetry = skip_symmetry
+        self._orbitals_to_properties = orbitals_to_properties
+        self.train_frac = train_frac
+        self.val_frac = val_frac
+        self.test_frac = test_frac
+        self._shuffle = shuffle
+        self._shuffle_seed = shuffle_seed
 
         self._compute_model_metadata()
-        if lcut < max(self.model_metadata.keys['L']):
+
+        if lcut is not None and lcut < max(self.model_metadata.keys['L']):
             lcut = max(self.model_metadata.keys['L'])
 
-        # Set features
-        self._set_features(features, training_strategy, hypers_atom, hypers_pair, lcut, kwargs.get('calc_features', True))
-        print('Features set')
+        self._set_features(features, hypers_atom, hypers_pair, lcut)
+        self.item_names = [item_names] if isinstance(item_names, str) else item_names
+        if self.model_type == 'acdc' and kwargs.get('calc_features', True):
+            self.item_names.append('features')
+
+        self._set_items(self.item_names)
+
+        self.indices = torch.arange(self.nstructs)
+        self._update_datasets()
+
+    @property
+    def qmdata(self):
+        return self._qmdata
+
+    @property
+    def nstructs(self):
+        return len(self.qmdata.structures)
+
+    @property
+    def structures(self):
+        return self.qmdata.structures
+
+    @property
+    def natoms_list(self):
+        return [len(frame) for frame in self.structures]
+
+    @property
+    def species(self):
+        return {tuple(frame.numbers) for frame in self.structures}
+
+    @property
+    def sort_orbs(self):
+        return self._sort_orbs
+
+    @property
+    def all_pairs(self):
+        return self._all_pairs
+
+    @property
+    def skip_symmetry(self):
+        return self._skip_symmetry
+
+    @property
+    def orbitals_to_properties(self):
+        return self._orbitals_to_properties
+
+    @property
+    def model_type(self):
+        return self._model_type
+
+    @property
+    def training_strategy(self):
+        return self._training_strategy
+
+    @property
+    def cutoff(self):
+        return self._cutoff
+
+    @cutoff.setter
+    def cutoff(self, value):
+        self._cutoff = value
+        self._update_items_on_cutoff_change()
+
+    @property
+    def features(self):
+        return self._features
+
+    @features.setter
+    def features(self, features):
+        self._features = features
+
+    @property
+    def items(self):
+        return self._items
+
+    @items.setter
+    def items(self, items):
+        self._items = items
+
+    def update_splits(self, train_frac=None, val_frac=None, test_frac=None, shuffle=None, shuffle_seed=None):
+        '''
+        Update the fractions and shuffling parameters for splitting the dataset.
+        '''
         
-        # Initialize items
-        if isinstance(item_names, str):
-            item_names = [item_names]
-        if self.model_type =='acdc' and kwargs.get('calc_features', True):
-            item_names.append('features')
-
-        # Set items
-        self._set_items(item_names)
-        print('Items set')
-
-        # TODO: target classes?
-        # Define dictionary of targets
-        # sets the first target as the primary target - # FIXME
-        # self.target_class = ModelTargets(self.qmdata.item_names[0])
-        # self.target = self.target_class.instantiate(
-        #     next(iter(self.qmdata.target.values())),
-        #     frames=self.structures,
-        #     orbitals=self.qmdata.aux_data.get("orbitals", None),
-        #     device=device,
-        #     **kwargs,
-        # )
-
-        # Shuffle indices
-        if shuffle:
-            self._shuffle(shuffle_seed)
-        else:
-            self.indices = torch.arange(self.nstructs)
+        if shuffle is not None:
+            self._shuffle = shuffle
+        if shuffle_seed is not None:
+            self._shuffle_seed = shuffle_seed
         
-        # Train/validation/test fractions
-        train_frac = kwargs.get("train_frac", None)
-        val_frac = kwargs.get("val_frac", None)
-        test_frac = kwargs.get("test_frac", None)
-
-        if train_frac is not None:
-            self._split_indices(train_frac, val_frac, test_frac)
-            self._split_items(self.train_frac, self.val_frac, self.test_frac)
-
-    def _shuffle(self, random_seed: int = None):
-        '''
-        Shuffle structure indices
-        '''
-
-        if random_seed is None:
-            self.rng = torch.default_generator
-        else:
-            self.rng = torch.Generator().manual_seed(random_seed)
-
-        self.indices = torch.randperm(
-            self.nstructs, generator=self.rng
-        ).to(self.device)
-
-    def _get_subset(self, y: TensorMap, indices: torch.tensor):
-        '''
-        Get the subset of the TensorMap whose samples have "structure" in `indices`
-        '''
-        # indices = indices.cpu().numpy()
-        
-        assert isinstance(y, TensorMap)
-        # for k, b in y.items():
-        #     b = b.values.to(device=self.device)
-        return mts.slice(y, axis = "samples", labels = Labels(names = ["structure"], values = indices.reshape(-1, 1)))
-    
-    def _split_by_structure(self, blocks: TensorMap) -> TensorMap:
-        grouped_labels = [mts.Labels(names = 'structure', 
-                                     values = A.reshape(-1, 1)) for A in mts.unique_metadata(blocks, 
-                                                                              axis = 'samples', 
-                                                                              names = 'structure').values]
-        return mts.split(blocks, 'samples', grouped_labels), grouped_labels
-
-    def _split_indices(
-        self,
-        train_frac: float = None,
-        val_frac: Optional[float] = None,
-        test_frac: Optional[float] = None,
-    ):
-        '''
-        Train/validation/test splitting
-        '''
-
         fractions = [train_frac, val_frac, test_frac]
         defined_fractions = [f for f in fractions if f is not None]
         
@@ -188,414 +212,189 @@ class MLDataset():
             "All fractions must be between 0 and 1."
         assert abs(sum([self.train_frac, self.val_frac, self.test_frac]) - 1.0) < 1e-6, \
             "The sum of all fractions must be 1."
-
-        splits = [int(np.rint(s*self.nstructs)) for s in [self.train_frac, self.val_frac, self.test_frac]]
         
-        try:
-            assert sum(splits) == self.nstructs
-        except AssertionError:
-            splits[np.argmax(splits)] += self.nstructs - sum(splits)
+        self._update_datasets()
 
-        self.train_idx, self.val_idx, self.test_idx = torch.split(self.indices, splits)
+    def _shuffle_indices(self):
+        '''
+        Shuffle structure indices
+        '''
+        if self._shuffle:
+            if self._shuffle_seed is None:
+                self.rng = torch.default_generator
+            else:
+                self.rng = torch.Generator().manual_seed(self._shuffle_seed)
+            self.indices = torch.randperm(self.nstructs, generator=self.rng).to(self.device)
+        else:
+            self.indices = torch.arange(self.nstructs)
 
-        if self.test_frac > 0:
-            assert (len(self.test_idx)> 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-            ), "Split indices not generated properly"
+    def _get_subset(self, y: TensorMap, indices: torch.tensor):
+        '''
+        Get the subset of the TensorMap whose samples have "structure" in `indices`
+        '''
+        assert isinstance(y, TensorMap)
+        return mts.slice(y, axis="samples", labels=Labels(names=["structure"], values=indices.reshape(-1, 1)))
+
+    def _split_indices(self):
+        '''
+        Train/validation/test splitting
+        '''
+        if self.nstructs == 1:
+            largest_fraction = max(self.train_frac, self.val_frac, self.test_frac)
+            if largest_fraction == self.train_frac:
+                self.train_idx, self.val_idx, self.test_idx = torch.tensor([0], device=self.device), torch.tensor([], device=self.device), torch.tensor([], device=self.device)
+            elif largest_fraction == self.val_frac:
+                self.train_idx, self.val_idx, self.test_idx = torch.tensor([], device=self.device), torch.tensor([0], device=self.device), torch.tensor([], device=self.device)
+            else:
+                self.train_idx, self.val_idx, self.test_idx = torch.tensor([], device=self.device), torch.tensor([], device=self.device), torch.tensor([0], device=self.device)
+        else:
+            splits = [int(np.rint(s * self.nstructs)) for s in [self.train_frac, self.val_frac, self.test_frac]]
+            if sum(splits) != self.nstructs:
+                splits[np.argmax(splits)] += self.nstructs - sum(splits)
+            self.train_idx, self.val_idx, self.test_idx = torch.split(self.indices, splits)
 
         self.train_frames = [self.structures[i] for i in self.train_idx]
         self.val_frames = [self.structures[i] for i in self.val_idx]
         self.test_frames = [self.structures[i] for i in self.test_idx]
 
-    def _set_features(self, features, training_strategy, hypers_atom, hypers_pair, lcut, calc_features):
-
-        if not calc_features:
-            self.features = None
-            warnings.warn('Features not computed nor set.')
-        elif features is None and self.model_type == "acdc":
+    def _set_features(self, features, hypers_atom, hypers_pair, lcut):
+        if features is None and self.model_type == "acdc":
             assert hypers_atom is not None, "`hypers_atom` must be present when `features` is not provided."
             assert lcut is not None, f"`lcut` must be present when `features` is not provided."
-            
-            if training_strategy == "twocenter":
-                assert hypers_pair is not None, f"`hypers_pair` must be present when `features` is not provided and `training_strategy` is {training_strategy}."
+
+            if self.training_strategy == "twocenter":
+                assert hypers_pair is not None, f"`hypers_pair` must be present when `features` is not provided and `training_strategy` is {self.training_strategy}."
                 assert hypers_pair['cutoff'] == self.cutoff, f"`hypers_pair['cutoff']` must be equal to self.cutoff."
 
-                self.features = compute_features(self.qmdata, 
-                                                 hypers_atom, 
-                                                 hypers_pair = hypers_pair, 
-                                                 lcut = lcut, 
-                                                 all_pairs = self.all_pairs, 
-                                                 device = self.device,
-                                                #  training_strategy = training_strategy, # TODO
-                                                 **self.kwargs)
-                                                 
+                self.features = compute_features(
+                    self.qmdata,
+                    hypers_atom,
+                    hypers_pair=hypers_pair,
+                    lcut=lcut,
+                    all_pairs=self.all_pairs,
+                    device=self.device,
+                    **self.kwargs
+                )
             else:
-                raise NotImplementedError(f"Training strategy {training_strategy} not implemented.")
+                raise NotImplementedError(f"Training strategy {self.training_strategy} not implemented.")
         else:
-            if training_strategy == 'twocenter':
-                assert 'neighbor' in features.sample_names, f"Features must contain 'neighbor' label for {training_strategy}."
-            elif training_strategy == 'one_center':
-                assert 'neighbor' not in features.sample_names, f"Features must not contain 'neighbor' label for {training_strategy}."
-            else:
-                raise NotImplementedError(f"Training strategy {training_strategy} not implemented")
             self.features = features
-        
-        # if not hasattr(self, "train_idx"):
-        #     warnings.warn("No train/val/test split found, deafult split used")
-        #     self._split_indices(train_frac=0.7, val_frac=0.2, test_frac=0.1)
-
-        # self.feature_names = features.keys.values
-        # self.feat_train = self._get_subset(self.features, self.train_idx)
-        # self.feat_val = self._get_subset(self.features, self.val_idx)
-        # self.feat_test = self._get_subset(self.features, self.test_idx)
 
     def _set_items(self, item_names):
-        
         _item_names = [_flattenname(t) for t in item_names]
-        self.item_names = {_flattenname(t): t for t in item_names}
-        
-        # Set targets
+        item_names_dict = {_flattenname(t): t for t in item_names}
 
-        items = {}
+        items_dict = {}
+
         for flat_name in _item_names:
-
-            name = self.item_names[flat_name]
+            name = item_names_dict[flat_name]
 
             if flat_name not in self._implemented_items():
                 warnings.warn(f"Target {name} is not implemented! Skipping it")
                 continue
-            
+
             if flat_name == 'fockblocks':
-                items[name] = self.compute_coupled_blocks()
+                items_dict[name] = self.compute_coupled_blocks()
 
             elif flat_name == 'overlapblocks':
-                items[name] = self.compute_coupled_blocks(use_overlap=True)
+                items_dict[name] = self.compute_coupled_blocks(use_overlap=True)
 
-            elif flat_name == 'fockrealspace':
-                if self.qmdata._ismolecule:
-                    l = self.compute_tensors(self.qmdata.fock_realspace)
-                    items[name] = l
-                else:
-                    items[name] = []
-                    l = self.compute_tensors([torch.stack(list(h.values())) for h in self.qmdata.fock_realspace])
-                    items[name] = [{T: H[iT] for iT, T in enumerate(self.qmdata.fock_realspace[ifr])} for ifr, H in enumerate(l)]
+            elif flat_name in ['fockrealspace', 'overlaprealspace']:
+                items_dict[name] = self._compute_real_space_tensors(name)
 
-            elif flat_name == 'overlaprealspace':
-                if self.qmdata._ismolecule:
-                    l = self.compute_tensors(self.qmdata.overlap_realspace)
-                    items[name] = l
-                else:
-                    items[name] = []
-                    l = self.compute_tensors([torch.stack(list(h.values())) for h in self.qmdata.overlap_realspace])
-                    items[name] = [{T: H[iT] for iT, T in enumerate(self.qmdata.overlap_realspace[ifr])} for ifr, H in enumerate(l)]
+            elif flat_name in ['fockkspace', 'overlapkspace']:
+                items_dict[name] = self._compute_k_space_tensors(name)
 
-            elif flat_name == 'fockkspace':
-                assert not self.qmdata._ismolecule, "k-space Hamiltonian not available for molecules."
-                items[name] = self.compute_tensors(self.qmdata.fock_kspace)
-
-            elif flat_name == 'overlapkspace':
-                assert not self.qmdata._ismolecule, "k-space overlap not available for molecules."
-                items[name] = self.compute_tensors(self.qmdata.overlap_kspace)
-            
             elif flat_name == 'eigenvalues':
                 if 'atomresolveddensity' not in _item_names:
-                    _eval, _evec = self.compute_eigenvalues(return_eigenvectors = True)
-                    items[name] = _eval
-                    items['eigenvectors'] = _evec
+                    _eval, _evec = self.compute_eigenvalues(return_eigenvectors=True)
+                    items_dict[name] = _eval
+                    items_dict['eigenvectors'] = _evec
 
             elif flat_name == 'atomresolveddensity':
                 if 'eigenvalues' in _item_names:
-                    T, rho, e, _evec  = self.compute_atom_resolved_density(return_eigenvalues = True,
-                                                                           return_rho = True,
-                                                                           return_eigenvectors = True)
-                    items['eigenvalues'] = e
-                    items['density_matrix'] = rho
-                    items['eigenvectors'] = _evec
-
+                    T, rho, e, _evec = self.compute_atom_resolved_density(return_eigenvalues=True, return_rho=True, return_eigenvectors=True)
+                    items_dict['eigenvalues'] = e
+                    items_dict['density_matrix'] = rho
+                    items_dict['eigenvectors'] = _evec
                 else:
-                    T  = self.compute_atom_resolved_density(return_eigenvalues = False)
-                items[name] = T
+                    T = self.compute_atom_resolved_density(return_eigenvalues=False)
+                items_dict[name] = T
 
             elif flat_name == 'features':
                 assert self.features is not None, "Features not set, call _set_features() first"
-                items[name] = self.features
-                
+                items_dict[name] = self.features
+
             else:
                 raise ValueError(f"This looks like a bug! {flat_name} is in MLDataset._implemented_items but it is not properly handled in the loop.")
-            
-        self.items = items
 
-    def _split_items(self, train_frac, val_frac, test_frac):
-        try:
-            assert np.isclose(train_frac + val_frac + test_frac, 1, rtol = 1e-6, atol = 1e-5)
-        except AssertionError:
-            test_frac = 1 - (train_frac + val_frac)
-            assert test_frac > 0
-            warnings.warn(f'Selected `test_frac` incorrect. Changed to {test_frac}')
+        self.items = Items(**items_dict)
 
+    def _compute_real_space_tensors(self, name):
+        if name == 'fockrealspace':
+            tensor_list = self.qmdata.fock_realspace
+        else:  # overlaprealspace
+            tensor_list = self.qmdata.overlap_realspace
+        
+        if self.qmdata.is_molecule:
+            return self.compute_tensors(tensor_list)
+        else:
+            tensor_stack = self.compute_tensors([torch.stack(list(h.values())) for h in tensor_list])
+            return [{T: H[iT] for iT, T in enumerate(tensor_list[ifr])} for ifr, H in enumerate(tensor_stack)]
+
+    def _compute_k_space_tensors(self, name):
+        assert not self.qmdata.is_molecule, f"k-space {name} not available for molecules."
+        tensor_list = self.qmdata.fock_kspace if name == 'fockkspace' else self.qmdata.overlap_kspace
+        return self.compute_tensors(tensor_list)
+
+    def _update_items_on_cutoff_change(self):
+        '''
+        Update items affected by compute_tensors and compute_coupled_blocks when cutoff is changed.
+        '''
+        item_names = [name for name in self.item_names if _flattenname(name) in {'fockblocks', 'overlapblocks', 'fockrealspace', 'overlaprealspace', 'fockkspace', 'overlapkspace'}]
+        self._set_items(item_names)
+
+    def _update_datasets(self):
+        '''
+        Update datasets based on current train_frac, val_frac, test_frac, and shuffle properties.
+        '''
+        self._shuffle_indices()
+        self._split_indices()
+        self._split_items()
+
+    def _split_items(self):
         split_items = {}
-        for k, item in self.items.items():
-            
-            if isinstance(item, torch.ScriptObject):
-                if item._type().name() == 'TensorMap':
-                    split_items[k], grouped_labels = self._split_by_structure(item)
+        for k, item in self.items._asdict().items():
+            if isinstance(item, torch.ScriptObject) and item._type().name() == 'TensorMap':
+                split_items[k], grouped_labels = self._split_by_structure(item)
             elif isinstance(item, list) or isinstance(item, torch.Tensor):
                 split_items[k] = item
 
-        try:
-            assert grouped_labels is not None
-        except:
-            grouped_labels = [Labels(names = 'structure', 
-                                     values = A.reshape(-1, 1)) for A in self.indices]
-            
-        # Initialize mentatensor.learn.IndexedDataset
-        _dict = {k: [split_items[k][A] for A in self.train_idx] for k in split_items}
-        _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in self.train_idx]
-        self.train_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
+        grouped_labels = [Labels(names='structure', values=A.reshape(-1, 1)) for A in self.indices]
 
-        _dict = {k: [split_items[k][A] for A in self.val_idx] for k in split_items}
-        _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in self.val_idx]
-        self.val_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
+        self.train_dataset = self._create_indexed_dataset(split_items, self.train_idx, grouped_labels)
+        self.val_dataset = self._create_indexed_dataset(split_items, self.val_idx, grouped_labels)
+        self.test_dataset = self._create_indexed_dataset(split_items, self.test_idx, grouped_labels)
 
-        _dict = {k: [split_items[k][A] for A in self.test_idx] for k in split_items}
-        _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in self.test_idx]
-        self.test_dataset = IndexedDataset(sample_id = _group_lbl, **_dict)
+    def _split_by_structure(self, blocks: TensorMap) -> TensorMap:
+        grouped_labels = [mts.Labels(names='structure', values=A.reshape(-1, 1)) for A in mts.unique_metadata(blocks, axis='samples', names='structure').values]
+        return mts.split(blocks, 'samples', grouped_labels), grouped_labels
 
+    def _create_indexed_dataset(self, split_items, indices, grouped_labels):
+        _dict = {k: [split_items[k][A] for A in indices] for k in split_items}
+        _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in indices]
+        return IndexedDataset(sample_id=_group_lbl, **_dict)
 
-    def _set_model_return(self, model_return: str = "blocks"):
-        ## Helper function to set output in __get_item__ for model training
-        assert model_return in ["blocks", "tensor"], "model_target must be one of [blocks, tensor]"
-        self.model_return = model_return
+    def _compute_model_metadata(self, basis=None):
+        if basis is None:
+            basis = self.qmdata.basis
 
-    def __len__(self):
-        return self.nstructs
-
-    # def __getitem__(self, idx):
-    #     if not self.model_type == "acdc":
-    #         return self.structures[idx], self.target.tensor[idx]
-    #     else:
-    #         assert self.features is not None, "Features not set, call _set_features() first"
-    #         x = mts.slice(self.features, axis="samples", labels=Labels(names=["structure"], values = idx.reshape(-1, 1)))
-
-    #         if self.model_return == "blocks":
-    #             y = mts.slice(self.target.blocks, axis="samples", labels = Labels(names=["structure"], values = idx.reshape(-1, 1)))
-    #         else:
-    #             idx = [i.item() for i in idx]
-    #             y = self.target.tensor[idx]
- 
-    #         return x, y, idx
-
-    def collate_fn(self, batch):
-        x = batch[0][0]
-        y = batch[0][1]
-        idx = batch[0][2]
-        return {"input": x, "output": y, "idx": idx}
-    
-    def compute_tensors(self, tensors: Union[torch.Tensor, List]):
-        
-        out_tensors = []
-
-        for ifr, tensor in enumerate(tensors):
-
-            shape = tensor.shape
-            leading_shape = shape[:-2]
-            indices = itertools.product(*[range(dim) for dim in leading_shape])
-            
-            dtype = tensor.dtype
-            
-            out_tensor = torch.empty_like(tensor)
-
-            frame = self.qmdata.structures[ifr]
-            natm = len(frame)
-            basis = [len(self.qmdata.basis[s]) for s in frame.numbers]
-            basis = itertools.product(basis, basis)
-            posit = itertools.product(range(natm), range(natm))
-            mask = frame.get_all_distances(mic = True) <= self.cutoff
-            mask_tensor = [torch.ones(size, dtype = dtype, device = self.device) if mask[p] else torch.zeros(size, dtype = dtype, device = self.device) for p, size in zip(posit, basis)]
-            mask = torch.vstack([torch.hstack([mask_tensor[natm*i+j] for j in range(natm)]) for i in range(natm)])
-    
-            for index in indices:
-
-                M = tensor[index].clone().to(device = self.device)
-                out_tensor[index] = M*mask
-            
-            out_tensors.append(out_tensor)
-
-            mask_tensor = None
-            mask = None
-        
-        return out_tensors
-    
-    def compute_coupled_blocks(self, matrix = None, use_overlap = False):
-        #TODO: move to a target class?
-        if use_overlap:
-            target = 'overlap'
-        else:
-            target = 'fock'
-
-        blocks = get_targets(self.qmdata, 
-                             cutoff = self.cutoff, 
-                             target = target, 
-                             all_pairs = self.all_pairs, 
-                             sort_orbs = self.sort_orbs, 
-                             skip_symmetry = self.skip_symmetry,
-                             device = self.device, 
-                             matrix = matrix,
-                             orbitals_to_properties = self.orbitals_to_properties,
-                             return_uncoupled = False)
-        
-        return blocks
-
-    def compute_eigenvalues(self, return_eigenvectors = False):
-        #TODO: move to a target class?
-
-        if self.qmdata._ismolecule:
-            As = self.qmdata.fock_realspace
-            Ms = self.qmdata.overlap_realspace
-        else:
-            As = self.qmdata.fock_kspace
-            Ms = self.qmdata.overlap_kspace
-
-        eigenvalues_list = []
-        if return_eigenvectors:
-            eigenvectors_list = []
-
-        # Iterate through structures
-        for ifr, (A, M) in enumerate(zip(As, Ms)):
-        
-            shape = A.shape        
-            # assert shape[-2] == shape[-1], "Matrices are not square!"
-        
-            # if M is not None:
-            #     assert M.shape == shape, "Overlaps do not have the same shape as Matrices!"
-            
-            # Loop through all dimensions but the last two
-            leading_shape = shape[:-2]
-            indices = itertools.product(*[range(dim) for dim in leading_shape])
-
-            # Preallocate output tensor for eigenvalues
-            eigenvalues_shape = leading_shape + (shape[-1],)
-            eigenvalues = torch.empty(eigenvalues_shape, dtype = torch.float64)
-
-            # Preallocate output tensor for eigenvectors
-            if return_eigenvectors:
-                eigenvectors_shape = leading_shape + (shape[-1], shape[-1])
-                eigenvectors = torch.empty(eigenvectors_shape, dtype = torch.complex128)
-
-            # Iterate over all possible indices of the leading dimensions
-            for index in indices:
-
-                # Define xitorch LinarOperators
-                Ax = xitorch.LinearOperator.m(A[index])
-                Mx = xitorch.LinearOperator.m(M[index]) if M is not None else None
-
-                # Compute eigenvalues and eigenvectors
-                eigvals, eigvecs = symeig(Ax, M = Mx)
-
-                # Store eigenvalues
-                eigenvalues[index] = eigvals
-
-                if return_eigenvectors:
-                    # Store eigenvectors
-                    eigenvectors[index] = eigvecs
-            
-            eigenvalues_list.append(eigenvalues)
-            if return_eigenvectors:
-                eigenvectors_list.append(eigenvectors)
-
-        if return_eigenvectors:
-            return eigenvalues_list, eigenvectors_list
-        else:
-            return eigenvalues_list
-        
-    def compute_atom_resolved_density(self, 
-                                      return_rho: Optional[bool] = False, 
-                                      return_eigenvalues: Optional[bool] = True, 
-                                      return_eigenvectors: Optional[bool] = False):
-        #TODO: move to a target class?
-
-        # Function to create nested lists
-        def create_nested_list(shape):
-            if len(shape) == 0:
-                return None
-            return [create_nested_list(shape[1:]) for _ in range(shape[0])]
-        
-        # Function to set value in nested list by indices
-        def set_nested_list_value(nested_list, indices, value):
-            for idx in indices[:-1]:
-                nested_list = nested_list[idx]
-            nested_list[indices[-1]] = value
-
-        if self.qmdata._ismolecule:
-            overlaps = self.qmdata.overlap_realspace
-        else:
-            overlaps = self.qmdata.overlap_kspace
-
-        use_overlap = False        
-        # if Ms is not None:
-        #     use_overlap = True
-
-        eigenvalues, eigenvectors = self.compute_eigenvalues(return_eigenvectors = True)
-        
-        frames = self.qmdata.structures
-        basis = self.qmdata.basis
-
-        ard = []
-        rhos = []
-        evec = []
-
-        for ifr, (eval, C, frame, S) in enumerate(zip(eigenvalues, eigenvectors, frames, overlaps)):
-
-            natm = len(frame)
-            ncore = sum(self.qmdata.ncore[s] for s in frame.numbers)
-            nelec = sum(frame.numbers) - ncore
-            split_idx = [len(basis[s]) for s in frame.numbers]
-            needed = True if len(np.unique(split_idx)) > 1 else False
-            max_dim = np.max(split_idx)
-            n = C.shape[-1]
-
-            # Occupations
-            occ = torch.tensor([2.0+0.0j if i < nelec//2 else 0.0+0.0j for i in range(C.shape[-1])], dtype = torch.complex128)
-
-            # Compute the one-particle density matrix
-            rho = torch.einsum('n,...in,...jn', occ, C, C.conj())
-            
-            slices = torch.split(rho, split_idx, dim=0)
-            blocks = [torch.split(slice_, split_idx, dim=1) for slice_ in slices]
-            blocks_flat = [block for sublist in blocks for block in sublist]
-            
-            if needed:
-                squared_blocks = []
-                for block in blocks_flat:
-                    pad_size = (0, max_dim - block.size(1), 0, max_dim - block.size(0))
-                    squared_block = torch.nn.functional.pad(block, pad_size, "constant", 0)
-                    squared_blocks.append(squared_block)
-                blocks_flat = squared_blocks
-
-            ard.append(torch.stack(blocks_flat).norm(dim = (1, 2)))
-            rhos.append(rho)
-      
-        to_return = [ard]
-        if return_rho:
-            to_return.append(rhos)
-        if return_eigenvalues:
-            to_return.append(eigenvalues)
-        if return_eigenvectors:
-            to_return.append(eigenvectors)
-
-        return tuple(to_return)
-        
-    def _compute_model_metadata(self, qmdata = None):
-        if qmdata is None:
-            qmdata = self.qmdata
-
-        species_pair = np.unique([comb for frame in qmdata.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis = 0)
+        species_pair = np.unique([comb for frame in self.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis=0)
         max_count = defaultdict(lambda: 0)
-        for species_counts in [np.unique(frame.numbers, return_counts=True) for frame in qmdata.structures]:
+        for species_counts in [np.unique(frame.numbers, return_counts=True) for frame in self.structures]:
             for s, c in zip(*species_counts):
                 max_count[s] = c if c > max_count[s] else max_count[s]
-        # key_names = ['block_type', 'species_i', 'species_j', 'L', 'inversion_sigma']
-        # property_names = ['n_i', 'l_i', 'n_j', 'l_j', 'dummy']
-        # property_values = {}
+
         key_names = ['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j', 'L']
         if self.orbitals_to_properties:
             key_names += ['inversion_sigma']
@@ -604,22 +403,22 @@ class MLDataset():
         for s1, s2 in species_pair:
             same_species = s1 == s2
 
-            nl1 = np.unique([nlm[:2] for nlm in qmdata.basis[s1]], axis = 0)
-            nl2 = np.unique([nlm[:2] for nlm in qmdata.basis[s2]], axis = 0)
+            nl1 = np.unique([nlm[:2] for nlm in basis[s1]], axis=0)
+            nl2 = np.unique([nlm[:2] for nlm in basis[s2]], axis=0)
 
             if same_species:
-                block_types = [0] if max_count[s1] == 1 else [-1,0,1]
+                block_types = [0] if max_count[s1] == 1 else [-1, 0, 1]
                 orbital_list = [(a, b) for a, b in itertools.product(nl1.tolist(), nl2.tolist()) if a <= b]
-            else: 
+            else:
                 if s1 > s2:
                     continue
                 block_types = [2]
                 orbital_list = itertools.product(nl1, nl2)
-            
+
             for block_type in block_types:
                 for (n1, l1), (n2, l2) in orbital_list:
-                    for L in range(abs(l1-l2), l1+l2+1):
-                        sigma = (-1)**(l1+l2+L)
+                    for L in range(abs(l1 - l2), l1 + l2 + 1):
+                        sigma = (-1) ** (l1 + l2 + L)
 
                         if s1 == s2 and n1 == n2 and l1 == l2:
                             if ((sigma == -1 and block_type in (0, 1)) or (sigma == 1 and block_type == -1)) and not self.skip_symmetry:
@@ -631,24 +430,149 @@ class MLDataset():
                             key = block_type, s1, n1, l1, s2, n2, l2, L
 
                         keys.append(key)
-                        
+
         blocks = []
-        dummy_label = Labels(['dummy'], torch.tensor([[0]], device = qmdata.device))
+        dummy_label = Labels(['dummy'], torch.tensor([[0]], device=self.device))
         for k in keys:
             blocks.append(
                 TensorBlock(
-                    samples = dummy_label,
-                    properties = dummy_label,
-                    components = [dummy_label],
-                    values = torch.zeros((1, 1, 1), dtype = torch.float32, device = qmdata.device) 
+                    samples=dummy_label,
+                    properties=dummy_label,
+                    components=[dummy_label],
+                    values=torch.zeros((1, 1, 1), dtype=torch.float32, device=self.device)
                 )
             )
 
-        self.model_metadata = mts.sort(TensorMap(Labels(key_names, torch.tensor(keys, device = qmdata.device)), blocks))
+        self.model_metadata = mts.sort(TensorMap(Labels(key_names, torch.tensor(keys, device=self.device)), blocks))
         if self.orbitals_to_properties:
             self.model_metadata = self.model_metadata.keys_to_properties(['n_i', 'l_i', 'n_j', 'l_j'])
 
+    def compute_tensors(self, tensors: Union[torch.Tensor, List]):
+        out_tensors = []
 
+        for ifr, tensor in enumerate(tensors):
+            shape = tensor.shape
+            leading_shape = shape[:-2]
+            indices = itertools.product(*[range(dim) for dim in leading_shape])
+            dtype = tensor.dtype
+            out_tensor = torch.empty_like(tensor)
+
+            frame = self.qmdata.structures[ifr]
+            natm = len(frame)
+            basis = [len(self.qmdata.basis[s]) for s in frame.numbers]
+            basis = itertools.product(basis, basis)
+            posit = itertools.product(range(natm), range(natm))
+            mask = frame.get_all_distances(mic=True) <= self.cutoff
+            mask_tensor = [torch.ones(size, dtype=dtype, device=self.device) if mask[p] else torch.zeros(size, dtype=dtype, device=self.device) for p, size in zip(posit, basis)]
+            mask = torch.vstack([torch.hstack([mask_tensor[natm * i + j] for j in range(natm)]) for i in range(natm)])
+
+            for index in indices:
+                M = tensor[index].clone().to(device=self.device)
+                out_tensor[index] = M * mask
+
+            out_tensors.append(out_tensor)
+
+        return out_tensors
+
+    def compute_coupled_blocks(self, matrix=None, use_overlap=False):
+        target = 'overlap' if use_overlap else 'fock'
+        return get_targets(
+            self.qmdata,
+            cutoff=self.cutoff,
+            target=target,
+            all_pairs=self.all_pairs,
+            sort_orbs=self.sort_orbs,
+            skip_symmetry=self.skip_symmetry,
+            device=self.device,
+            matrix=matrix,
+            orbitals_to_properties=self.orbitals_to_properties,
+            return_uncoupled=False
+        )
+
+    def compute_eigenvalues(self, return_eigenvectors=False):
+        if self.qmdata.is_molecule:
+            As = self.qmdata.fock_realspace
+            Ms = self.qmdata.overlap_realspace
+        else:
+            As = self.qmdata.fock_kspace
+            Ms = self.qmdata.overlap_kspace
+
+        eigenvalues_list = []
+        eigenvectors_list = []
+
+        for ifr, (A, M) in enumerate(zip(As, Ms)):
+            shape = A.shape
+            leading_shape = shape[:-2]
+            indices = itertools.product(*[range(dim) for dim in leading_shape])
+
+            eigenvalues = torch.empty(leading_shape + (shape[-1],), dtype=torch.float64)
+            eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]), dtype=torch.complex128) if return_eigenvectors else None
+
+            for index in indices:
+                Ax = xitorch.LinearOperator.m(A[index])
+                Mx = xitorch.LinearOperator.m(M[index]) if M is not None else None
+                eigvals, eigvecs = symeig(Ax, M=Mx)
+                eigenvalues[index] = eigvals
+                if return_eigenvectors:
+                    eigenvectors[index] = eigvecs
+
+            eigenvalues_list.append(eigenvalues)
+            if return_eigenvectors:
+                eigenvectors_list.append(eigenvectors)
+
+        return (eigenvalues_list, eigenvectors_list) if return_eigenvectors else eigenvalues_list
+
+    def compute_atom_resolved_density(self, return_rho=False, return_eigenvalues=True, return_eigenvectors=False):
+        if self.qmdata.is_molecule:
+            overlaps = self.qmdata.overlap_realspace
+        else:
+            overlaps = self.qmdata.overlap_kspace
+
+        eigenvalues, eigenvectors = self.compute_eigenvalues(return_eigenvectors=True)
+        frames = self.qmdata.structures
+        basis = self.qmdata.basis
+
+        ard = []
+        rhos = []
+        evec = []
+
+        for ifr, (eval, C, frame, S) in enumerate(zip(eigenvalues, eigenvectors, frames, overlaps)):
+            natm = len(frame)
+            ncore = sum(self.qmdata.ncore[s] for s in frame.numbers)
+            nelec = sum(frame.numbers) - ncore
+
+            split_idx = [len(basis[s]) for s in frame.numbers]
+            needed = True if len(np.unique(split_idx)) > 1 else False
+            max_dim = np.max(split_idx)
+
+            occ = torch.tensor([2.0 + 0.0j if i < nelec // 2 else 0.0 + 0.0j for i in range(C.shape[-1])], dtype=torch.complex128)
+            rho = torch.einsum('n,...in,...jn->ij...', occ, C, C.conj())
+
+            slices = torch.split(rho, split_idx, dim=0)
+            blocks = [torch.split(slice_, split_idx, dim=1) for slice_ in slices]
+            blocks_flat = [block for sublist in blocks for block in sublist]
+
+            if needed:
+                squared_blocks = []
+                for block in blocks_flat:
+                    pad_size = (0, max_dim - block.size(1), 0, max_dim - block.size(0))
+                    squared_block = torch.nn.functional.pad(block, pad_size, "constant", 0)
+                    squared_blocks.append(squared_block)
+                blocks_flat = squared_blocks
+
+            ard.append(torch.stack(blocks_flat).norm(dim=(0,1)).T)
+            rhos.append(torch.einsum('ij...->...ij', rho))
+
+        to_return = [ard]
+        if return_rho:
+            to_return.append(rhos)
+        if return_eigenvalues:
+            to_return.append(eigenvalues)
+        if return_eigenvectors:
+            to_return.append(eigenvectors)
+
+        return tuple(to_return)
+    
     def group_and_join(self,
         batch: List[NamedTuple],
         fields_to_join: Optional[List[str]] = None,
@@ -683,7 +607,7 @@ class MLDataset():
                 data.append(field)
 
         return namedtuple("Batch", names)(*data)        
-    
+
     def _implemented_items(self):
         return [
             'fockblocks', 
@@ -700,6 +624,7 @@ class MLDataset():
 
 def _flattenname(string):
     return ''.join(''.join(string.split('_')).split(' ')).lower()
+
 
 def _approximation_error(matrix: torch.Tensor, s_matrix: torch.Tensor) -> torch.Tensor:
     norm_of_matrix = torch.norm(matrix)

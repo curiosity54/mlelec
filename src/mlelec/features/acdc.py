@@ -145,14 +145,14 @@ def pair_features(
         return rho0_ij
 
     blocks = []
+    keys = []
     for key, block in rho0_ij.items():
         same_species = key['species_center'] == key['species_neighbor']
         sample_labels = []
         value_indices = []
 
-        # negative_list = []
         for isample, sample in enumerate(block.samples):
-            ifr, i, j, x, y, z = sample.values[:6] # [sample[lab] for lab in ['structure', 'center', 'neighbor', 'cell_shift_a', 'cell_shift_b', 'cell_shift_c']]
+            ifr, i, j, x, y, z = sample.values[:6].tolist()
             same_atoms = i == j
             is_central_cell = x == 0 and y == 0 and z == 0
             
@@ -171,21 +171,19 @@ def pair_features(
                         continue
                     
                     sample_labels.append([ifr, j, i, x, y, z, -1])
-                    # negative_list.append([j, i, -x, -y, -z])
-
-                    # neg_label = Labels(["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                                    #    values = torch.tensor([ifr, j, i, -x, -y, -z]).reshape(1, -1))[0]
+                   
                     neg_label = torch.tensor([ifr, j, i, -x, -y, -z])
                     mappedidx = block.samples.position(neg_label)
                     
                     assert isinstance(mappedidx, int), (mappedidx, neg_label, key)
                     value_indices.append(mappedidx)
-        
 
+        if not len(sample_labels):
+            continue
+
+        keys.append(key.values)
         sample_labels = torch.tensor(sample_labels)
         
-        # FIXME: hack to sort the block while waiting for the metatensor.torch.sort to be fixed
-
         torch_block = TensorBlock(
                 values = block.values[value_indices],
                 samples = Labels(
@@ -210,7 +208,7 @@ def pair_features(
         #     ), axes = 'samples')
         # )
 
-    rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
+    rho0_ij = TensorMap(keys = Labels(rho0_ij.keys.names, torch.stack(keys)), blocks = blocks)
     
     if isinstance(order_nu, list):
         assert (
