@@ -17,7 +17,10 @@ import os
 import sys
 import io
 from contextlib import redirect_stderr
+
 import warnings
+warnings.simplefilter('always', DeprecationWarning)
+
 import torch.utils.data as data
 import copy
 from collections import defaultdict
@@ -27,7 +30,7 @@ from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform
 
 from mlelec.data.pyscf_calculator import get_scell_phase, _instantiate_pyscf_mol
 
-class QMDataset():
+class QMDataset:
     '''
     Class containing information about the quantum chemistry calculation and its results.
     '''
@@ -36,7 +39,7 @@ class QMDataset():
         self,
         frames,
         # frame_slice: slice = slice(None),
-        kmesh: Union[List[int], List[List[int]]] = [1, 1, 1],
+        kmesh: Union[List[int], List[List[int]]] = None,
         fock_kspace: Union[List, torch.tensor, np.ndarray] = None,
         fock_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
         overlap_kspace: Union[List, torch.tensor, np.ndarray] = None,
@@ -51,6 +54,16 @@ class QMDataset():
         apply_condon_shortley = False,
     ):
     
+
+        # TODO: probably to remove soon. Keeping the warning for now to avoid silly mistakes
+        if fix_p_orbital_order or apply_condon_shortley:
+            warnings.warn(
+                "The `fix_p_orbital_order` and `apply_condon_shortley` options have been moved to MLDataset.",
+                DeprecationWarning
+            )
+        fix_p_orbital_order = False
+        apply_condon_shortley = False
+
         self._device = device
         self._basis = orbs 
         self._basis_name = orbs_name
@@ -66,76 +79,6 @@ class QMDataset():
         self._ncore = self._set_ncore()
 
         self._initialize_pyscf_objects()
-        
-        
-        ########################################################################################################################
-        ########################################################################################################################
-        # TODO: move to MLDataset
-        # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
-        if fix_p_orbital_order:
-            if not self.is_molecule:
-                if fock_kspace is not None:
-                    for ifr in range(len(fock_kspace)):
-                        for ik, k in enumerate(fock_kspace[ifr]):
-                            fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-                if overlap_kspace is not None:
-                    for ifr in range(len(overlap_kspace)):
-                        for ik, k in enumerate(overlap_kspace[ifr]):
-                            overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.basis)
-                if fock_realspace is not None:
-                    for ifr in range(len(fock_realspace)):
-                        for T in fock_realspace[ifr]:
-                            fock_realspace[ifr][T] = fix_orbital_order(fock_realspace[ifr][T], frames[ifr], self.basis)
-                if overlap_realspace is not None:
-                    for ifr in range(len(overlap_realspace)):
-                        for T in overlap_realspace[ifr]:
-                            overlap_realspace[ifr][T] = fix_orbital_order(overlap_realspace[ifr][T], frames[ifr], self.basis)
-        
-            else:
-                assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
-                for ifr in range(len(fock_realspace)):
-                    fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
-                if overlap_realspace is not None:
-                    # assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
-                    for ifr in range(len(overlap_realspace)):
-                        overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
-
-        # TODO: move to MLDataset
-        # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
-        if apply_condon_shortley:
-            if fock_kspace is not None:
-                for ifr in range(len(fock_kspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for ik, k in enumerate(fock_kspace[ifr]):
-                        fock_kspace[ifr][ik] = k*cs
-            if overlap_kspace is not None:
-                for ifr in range(len(overlap_kspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for ik, k in enumerate(overlap_kspace[ifr]):
-                        overlap_kspace[ifr][ik] = k*cs
-            if fock_realspace is not None:
-                for ifr in range(len(fock_realspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for T in fock_realspace[ifr]:
-                        fock_realspace[ifr][T] = fock_realspace[ifr][T]*cs
-            if overlap_realspace is not None:
-                for ifr in range(len(overlap_realspace)):
-                    cs = np.array([(-1)**((np.array(self.basis[n])[:,2] > 0)*(np.abs(np.array(self.basis[n])[:,2]))) \
-                                   for n in self.structures[ifr].numbers]).flatten()[:, np.newaxis]
-                    cs = cs@cs.T
-                    for T in overlap_realspace[ifr]:
-                        overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
-        ########################################################################################################################
-        ########################################################################################################################
-
-        
-
         
         # Assign/compute Hamiltonians and Overlaps
         self._set_matrices(
@@ -201,6 +144,11 @@ class QMDataset():
         return self._kmesh
     
     def _set_kmesh(self, kmesh):
+        if self.is_molecule:
+            return None
+        else:
+            if kmesh is None:
+                kmesh = [1, 1, 1]
         if isinstance(kmesh[0], list):
             assert (
                 len(kmesh) == self.nstructs
