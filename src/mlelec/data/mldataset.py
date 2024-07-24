@@ -53,7 +53,7 @@ class MLDataset:
         device: Optional[str] = None,
         model_type: Optional[str] = "acdc",
         item_names: Optional[Union[str, List[str]]] = 'fock_blocks',
-        shuffle: bool = False,
+        shuffle: Optional[bool] = False,
         shuffle_seed: Optional[int] = None,
         features: Optional[torch.ScriptObject] = None,
         training_strategy: Optional[str] = "two_center",
@@ -61,13 +61,14 @@ class MLDataset:
         hypers_pair: Optional[Dict] = None,
         lcut: Optional[int] = None,
         cutoff: Optional[Union[int, float]] = None,
-        sort_orbs: bool = True,
-        all_pairs: bool = False,
-        skip_symmetry: bool = False,
-        orbitals_to_properties: bool = True,
+        sort_orbs: Optional[bool] = True,
+        all_pairs: Optional[bool] = False,
+        skip_symmetry: Optional[bool] = False,
+        orbitals_to_properties: Optional[bool] = True,
         train_frac: Optional[float] = 0.7,
         val_frac: Optional[float] = 0.2,
         test_frac: Optional[float] = 0.1,
+        model_basis: Optional[Dict] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -86,6 +87,7 @@ class MLDataset:
         self.test_frac = test_frac
         self._shuffle = shuffle
         self._shuffle_seed = shuffle_seed
+        self._model_basis = model_basis or qmdata.basis
 
         self._compute_model_metadata()
 
@@ -170,6 +172,15 @@ class MLDataset:
     @items.setter
     def items(self, items):
         self._items = items
+
+    @property
+    def model_basis(self):
+        return self._model_basis
+    
+    @model_basis.setter
+    def model_basis(self, basis):
+        self._model_basis = basis
+        self._compute_model_metadata()
 
     def update_splits(self, train_frac=None, val_frac=None, test_frac=None, shuffle=None, shuffle_seed=None):
         '''
@@ -385,9 +396,9 @@ class MLDataset:
         _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in indices]
         return IndexedDataset(sample_id=_group_lbl, **_dict)
 
-    def _compute_model_metadata(self, basis=None):
-        if basis is None:
-            basis = self.qmdata.basis
+    def _compute_model_metadata(self):
+        
+        basis = self.model_basis
 
         species_pair = np.unique([comb for frame in self.structures for comb in itertools.combinations_with_replacement(np.unique(frame.numbers), 2)], axis=0)
         max_count = defaultdict(lambda: 0)
