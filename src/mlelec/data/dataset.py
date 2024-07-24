@@ -94,10 +94,9 @@ class QMDataset():
             else:
                 assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
                 for ifr in range(len(fock_realspace)):
-                    a_ = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
-                    fock_realspace[ifr] = a_
+                    fock_realspace[ifr] = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
                 if overlap_realspace is not None:
-                    assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
+                    # assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
                     for ifr in range(len(overlap_realspace)):
                         overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
