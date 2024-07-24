@@ -117,7 +117,6 @@ class QMDataset(Dataset):
         
             else:
                 assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
-                print(self.basis)
                 for ifr in range(len(fock_realspace)):
                     a_ = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
                     fock_realspace[ifr] = a_
