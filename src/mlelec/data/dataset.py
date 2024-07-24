@@ -32,7 +32,7 @@ class QMDataset():
     def __init__(
         self,
         frames,
-        frame_slice: slice = slice(None),
+        # frame_slice: slice = slice(None),
         kmesh: Union[List[int], List[List[int]]] = [1, 1, 1],
         fock_kspace: Union[List, torch.tensor, np.ndarray] = None,
         fock_realspace: Union[Dict, torch.tensor, np.ndarray] = None,
@@ -46,33 +46,32 @@ class QMDataset():
         dimension: int = 3,
         fix_p_orbital_order = False,
         apply_condon_shortley = False,
-        ismolecule=False,
     ):
     
-        self.dimension = dimension
-        self.wrap_frames(frames)
-        self.frame_slice = frame_slice
-        self.nstructs = len(frames)
+        self._dimension = dimension
+        self._structures = self._wrap_frames(frames)
+
+        # if self.dimension==0:
+        #     assert not frames[0].pbc.any()
+        #     self.is_molecule = True
+        # self.wrap_frames(frames, dimension)
+
+        # self.frame_slice = frame_slice
+        # self.nstructs = len(frames)
         self.set_kmesh(kmesh)
-        
-  
+          
         self.device = device
         self.basis = orbs  # actual orbitals
         self.basis_name = orbs_name
         self._set_nao()
         self._set_ncore()
 
-        self.dimension = dimension # TODO: would be better to use frame.pbc, but rascaline does not allow it
-        
-        self._ismolecule = ismolecule
-        if self.dimension==0:
-            assert not frames[0].pbc.any()
-            self._ismolecule = True
-
-        # TODO: move to method
+        ########################################################################################################################
+        ########################################################################################################################
+        # TODO: move to MLDataset
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
         if fix_p_orbital_order:
-            if not self._ismolecule:
+            if not self.is_molecule:
                 if fock_kspace is not None:
                     for ifr in range(len(fock_kspace)):
                         for ik, k in enumerate(fock_kspace[ifr]):
@@ -100,7 +99,7 @@ class QMDataset():
                     for ifr in range(len(overlap_realspace)):
                         overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
-        # TODO: Move to method
+        # TODO: move to MLDataset
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
         if apply_condon_shortley:
             if fock_kspace is not None:
@@ -131,6 +130,8 @@ class QMDataset():
                     cs = cs@cs.T
                     for T in overlap_realspace[ifr]:
                         overlap_realspace[ifr][T] = overlap_realspace[ifr][T]*cs
+        ########################################################################################################################
+        ########################################################################################################################
 
         self.cells = []
         self.phase_matrices = []
@@ -138,7 +139,7 @@ class QMDataset():
         stderr_capture = io.StringIO()
         
         with redirect_stderr(stderr_capture):
-            if self._ismolecule ==False:
+            if self.is_molecule ==False:
                 for ifr, structure in enumerate(self.structures):
                     cell, scell, phase = get_scell_phase(
                         structure, self.kmesh[ifr], basis=self.basis_name
@@ -153,7 +154,56 @@ class QMDataset():
         except:
             sys.stderr.write(stderr_capture.getvalue())
 
-        # TODO: move to method
+        
+        # Assign/compute Hamiltonians and Overlaps
+        self._set_matrices(
+            fock_realspace = fock_realspace,
+            fock_kspace = fock_kspace,
+            overlap_realspace = overlap_realspace,
+            overlap_kspace = overlap_kspace,
+                           )
+                
+    ##########################################################################################################
+    
+    @property
+    def dimension(self):
+        return self._dimension
+    
+    @property
+    def is_molecule(self):
+        return self._dimension == 0
+
+    @property
+    def structures(self):
+        return self._structures
+    
+    def _wrap_frames(self, frames):
+        for f in frames:
+            if self.dimension == 2:
+                f.pbc = [True, True, False]
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif self.dimension == 3:
+                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.pbc = True
+            elif self.dimension == 0: # Handle molecules 
+                f.pbc = False    
+            else:
+                raise NotImplementedError('dimension must be 0, 2 or 3')
+        return frames
+    
+    @property
+    def nstructs(self):
+        return len(self.structures)
+
+    def _set_matrices(
+            self,
+            fock_realspace = None,
+            fock_kspace = None,
+            overlap_realspace = None,
+            overlap_kspace = None,
+            ):
+        
         # Assign/compute Hamiltonian
         if (fock_kspace is not None) and (fock_realspace is None):
             self.set_fock_kspace(fock_kspace)
@@ -161,17 +211,15 @@ class QMDataset():
             # self.fock_realspace = self.compute_matrices_realspace(self.fock_kspace)
         elif (fock_kspace is None) and (fock_realspace is not None):
             self.fock_realspace = self._set_matrices_realspace(fock_realspace)
-            if not self._ismolecule:
+            if not self.is_molecule:
                 self.fock_kspace = self.bloch_sum(self.fock_realspace, is_tensor = True)
         elif (fock_kspace is None) and (fock_realspace is None):
             warnings.warn("Target not provided.")
-            # raise IOError("At least one between fock_realspace and fock_kspace must be provided.")
         elif (fock_kspace is not None) and (fock_realspace is not None):
             raise NotImplementedError("TBI: check consistency.")
         else:
             raise NotImplementedError("Weird condition not handled")
         
-        # TODO: move to method
         # Assign/compute Overlap
         if (overlap_kspace is not None) and (overlap_realspace is None):
             self.set_overlap_kspace(overlap_kspace)
@@ -179,7 +227,7 @@ class QMDataset():
          # self.overlap_realspace = self.compute_matrices_realspace(self.overlap_kspace)
         elif (overlap_kspace is None) and (overlap_realspace is not None):
             self.overlap_realspace = self._set_matrices_realspace(overlap_realspace)
-            if not self._ismolecule:
+            if not self.is_molecule:
                 self.overlap_kspace = self.bloch_sum(self.overlap_realspace, is_tensor = True)
         elif (overlap_kspace is None) and (overlap_realspace is None):
             warnings.warn("Overlap matrices not provided")
@@ -189,6 +237,7 @@ class QMDataset():
             raise NotImplementedError("TBI: check consistency.")
         else:
             raise NotImplementedError("Weird condition not handled")
+        
         
     def wrap_frames(self, frames, dimension):
         for f in frames:
@@ -224,7 +273,7 @@ class QMDataset():
 
     def _set_matrices_realspace(self, matrices_realspace):
         if not isinstance(matrices_realspace[0], dict):
-            assert self._ismolecule, "matrices_realspace should be a dictionary of translated unless molecule"
+            assert self.is_molecule, "matrices_realspace should be a dictionary of translated unless molecule"
             return matrices_realspace
         
         _matrices_realspace = []
