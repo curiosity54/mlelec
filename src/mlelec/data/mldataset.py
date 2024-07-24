@@ -394,35 +394,6 @@ class MLDataset:
         tensor_list = self.fock_kspace if name == 'fockkspace' else self.overlap_kspace
         return self.compute_tensors(tensor_list)
     
-    # def _fix_orbital_order(self):
-    #     if self.fix_p_orbital_order and not self._orbital_order_fixed:
-    #         frames = self.qmdata.structures
-    #         if not self.qmdata.is_molecule:
-    #             if self.qmdata.fock_kspace is not None:
-    #                 for ifr in range(len(self.qmdata.fock_kspace)):
-    #                     for ik, k in enumerate(self.qmdata.fock_kspace[ifr]):
-    #                         self.qmdata.fock_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.qmdata.basis)
-    #             if self.qmdata.overlap_kspace is not None:
-    #                 for ifr in range(len(self.qmdata.overlap_kspace)):
-    #                     for ik, k in enumerate(self.qmdata.overlap_kspace[ifr]):
-    #                         self.qmdata.overlap_kspace[ifr][ik] = fix_orbital_order(k, frames[ifr], self.qmdata.basis)
-    #             if self.qmdata.fock_realspace is not None:
-    #                 for ifr in range(len(self.qmdata.fock_realspace)):
-    #                     for T in self.qmdata.fock_realspace[ifr]:
-    #                         self.qmdata.fock_realspace[ifr][T] = fix_orbital_order(self.qmdata.fock_realspace[ifr][T], frames[ifr], self.qmdata.basis)
-    #             if self.qmdata.overlap_realspace is not None:
-    #                 for ifr in range(len(self.qmdata.overlap_realspace)):
-    #                     for T in self.qmdata.overlap_realspace[ifr]:
-    #                         self.qmdata.overlap_realspace[ifr][T] = fix_orbital_order(self.qmdata.overlap_realspace[ifr][T], frames[ifr], self.qmdata.basis)
-    #         else:
-    #             assert self.qmdata.fock_realspace is not None, "For molecules, fock_realspace must be provided."
-    #             for ifr in range(len(self.qmdata.fock_realspace)):
-    #                 self.qmdata.fock_realspace[ifr] = fix_orbital_order(self.qmdata.fock_realspace[ifr], frames[ifr], self.qmdata.basis)
-    #             if self.qmdata.overlap_realspace is not None:
-    #                 for ifr in range(len(self.qmdata.overlap_realspace)):
-    #                     self.qmdata.overlap_realspace[ifr] = fix_orbital_order(self.qmdata.overlap_realspace[ifr], frames[ifr], self.qmdata.basis)
-    #         self._orbital_order_fixed = True
-
     def _update_items_on_cutoff_change(self):
         '''
         Update items affected by compute_tensors and compute_coupled_blocks when cutoff is changed.
