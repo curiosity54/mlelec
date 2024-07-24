@@ -23,7 +23,10 @@ import copy
 from collections import defaultdict
 from pathlib import Path
 from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, fix_orbital_order
-from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform, fourier_transform
+from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform
+
+from mlelec.data.pyscf_calculator import get_scell_phase, _instantiate_pyscf_mol
+
 class QMDataset():
     '''
     Class containing information about the quantum chemistry calculation and its results.
@@ -48,24 +51,23 @@ class QMDataset():
         apply_condon_shortley = False,
     ):
     
+        self._device = device
+        self._basis = orbs 
+        self._basis_name = orbs_name
+
         self._dimension = dimension
         self._structures = self._wrap_frames(frames)
 
-        # if self.dimension==0:
-        #     assert not frames[0].pbc.any()
-        #     self.is_molecule = True
-        # self.wrap_frames(frames, dimension)
-
+        # TODO: is this necessary?
         # self.frame_slice = frame_slice
-        # self.nstructs = len(frames)
-        self.set_kmesh(kmesh)
-          
-        self.device = device
-        self.basis = orbs  # actual orbitals
-        self.basis_name = orbs_name
-        self._set_nao()
-        self._set_ncore()
 
+        self._kmesh = self._set_kmesh(kmesh)
+        self._nao = self._set_nao()
+        self._ncore = self._set_ncore()
+
+        self._initialize_pyscf_objects()
+        
+        
         ########################################################################################################################
         ########################################################################################################################
         # TODO: move to MLDataset
@@ -133,38 +135,37 @@ class QMDataset():
         ########################################################################################################################
         ########################################################################################################################
 
-        self.cells = []
-        self.phase_matrices = []
-        self.supercells = []
-        stderr_capture = io.StringIO()
         
-        with redirect_stderr(stderr_capture):
-            if self.is_molecule ==False:
-                for ifr, structure in enumerate(self.structures):
-                    cell, scell, phase = get_scell_phase(
-                        structure, self.kmesh[ifr], basis=self.basis_name
-                    )
-                    self.cells.append(cell)
-        self.set_kpts()
-        try:
-            assert stderr_capture.getvalue() == '''WARNING!
-  Very diffused basis functions are found in the basis set. They may lead to severe
-  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
-  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
-        except:
-            sys.stderr.write(stderr_capture.getvalue())
 
         
         # Assign/compute Hamiltonians and Overlaps
-        self._set_matrices(
-            fock_realspace = fock_realspace,
-            fock_kspace = fock_kspace,
-            overlap_realspace = overlap_realspace,
-            overlap_kspace = overlap_kspace,
-                           )
+        # self._set_matrices(
+        #     fock_realspace = fock_realspace,
+        #     fock_kspace = fock_kspace,
+        #     overlap_realspace = overlap_realspace,
+        #     overlap_kspace = overlap_kspace,
+        #                    )
                 
     ##########################################################################################################
     
+    @property
+    def device(self):
+        return self._device
+    
+    @device.setter
+    def device(self, value):
+        if value not in ['cpu', 'cuda']:
+            raise ValueError("device must be either cpu or cuda")
+        self._device = value
+
+    @property
+    def basis(self):
+        return self._basis
+    
+    @property
+    def basis_name(self):
+        return self._basis_name
+
     @property
     def dimension(self):
         return self._dimension
@@ -195,6 +196,121 @@ class QMDataset():
     @property
     def nstructs(self):
         return len(self.structures)
+    
+    @property
+    def kmesh(self):
+        return self._kmesh
+    
+    def _set_kmesh(self, kmesh):
+        if isinstance(kmesh[0], list):
+            assert (
+                len(kmesh) == self.nstructs
+            ), "If kmesh is a list, it must have the same length as the number of structures"
+            _kmesh = kmesh
+        else:
+            _kmesh = [
+                kmesh for _ in range(self.nstructs)
+            ] 
+
+        return _kmesh
+
+    @property
+    def nao(self):
+        return self._nao
+    
+    def _set_nao(self):
+        return [sum(len(self._basis[s]) for s in frame.numbers) for frame in self._structures]
+    
+    @property
+    def ncore(self):
+        return self._ncore
+    
+    def _set_ncore(self):
+        ncore = {}
+        for s in self._basis:
+            basis = np.array(self._basis[s])
+            nmin = np.min(basis[:,0])
+            ncore[s] = 0
+            for n in np.arange(nmin):
+                for l in range(n):
+                    ncore[s] += 2*(2*l+1)
+            llist = set(basis[np.argwhere(basis[:,0]==nmin)][:, 0, 1])
+            llist_nmin = set(range(max(llist)+1))
+            l_diff = llist_nmin - llist
+            for l in l_diff:
+                ncore[s] += 2*(2*l+1)
+        return ncore
+    
+    def _initialize_pyscf_objects(self):
+        if self.is_molecule:
+            self._mols = self._initialize_pyscf_mol()
+            self._cells = None
+        else:
+            self._mols = None
+            self._cells = self._initialize_pyscf_cell()
+            self._set_kpts()
+
+    def _initialize_pyscf_cell(self):
+        cells = []
+        
+        _stderr_capture = io.StringIO()
+        
+        with redirect_stderr(_stderr_capture):
+            for ifr, structure in enumerate(self._structures):
+                cell, _, _ = get_scell_phase(structure, self._kmesh[ifr], basis=self._basis_name)
+                cells.append(cell)
+        try:
+            assert _stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(_stderr_capture.getvalue())
+
+        return cells
+
+    def _initialize_pyscf_mol(self):
+        mols = []
+        _stderr_capture = io.StringIO()
+        
+        with redirect_stderr(_stderr_capture):
+            for structure in self._structures:
+                mols.append(_instantiate_pyscf_mol(structure, basis = self._basis_name))
+        try:
+            assert _stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(_stderr_capture.getvalue())
+
+        return mols
+
+    @property
+    def cells(self):
+        if self.is_molecule:
+            raise AttributeError('This system is not periodic')
+        return self._cells
+    
+    @property
+    def mols(self):
+        if not self.is_molecule:
+            raise AttributeError('This system is not a molecule')
+        return self._mols
+    
+    @property
+    def kpts_rel(self):
+        return self._kpts_rel
+    
+    @property
+    def kpts_abs(self):
+        return self._kpts_abs
+       
+    def _set_kpts(self):
+        self._kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
+        self._kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
+    
+    
 
     def _set_matrices(
             self,
@@ -238,38 +354,10 @@ class QMDataset():
         else:
             raise NotImplementedError("Weird condition not handled")
         
-        
-    def wrap_frames(self, frames, dimension):
-        for f in frames:
-            if self.dimension == 2:
-                f.pbc = [True, True, False]
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif self.dimension == 3:
-                f.wrap(center = (0,0,0), eps = 1e-60)
-                f.pbc = True
-            elif self.dimension == 0: # Handle molecules 
-                f.pbc = False    
-            else:
-                raise NotImplementedError('dimension must be 0, 2 or 3')
-        self.structures = frames
 
-    def set_kmesh(self, kmesh):
-        self.kmesh = kmesh
-        self.kmesh_is_list = False
-        if isinstance(kmesh[0], list):
-            self.kmesh_is_list = True
-            assert (
-                len(self.kmesh) == self.nstructs
-            ), "If kmesh is a list, it must have the same length as the number of structures"
-        else:
-            self.kmesh = [
-                kmesh for _ in range(self.nstructs)
-            ]  # currently easiest to do
 
-    def set_kpts(self):
-        self.kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
-        self.kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
+
+   
 
     def _set_matrices_realspace(self, matrices_realspace):
         if not isinstance(matrices_realspace[0], dict):
@@ -379,24 +467,9 @@ class QMDataset():
     # def baseline_with_nsc_fock(self):
     #     for cell in self.cells:
 
-    def _set_nao(self):
-        self.nao = [sum(len(self.basis[s]) for s in frame.numbers) for frame in self.structures]
     
-    def _set_ncore(self):
-        ncore = {}
-        for s in self.basis:
-            basis = np.array(self.basis[s])
-            nmin = np.min(basis[:,0])
-            ncore[s] = 0
-            for n in np.arange(nmin):
-                for l in range(n):
-                    ncore[s] += 2*(2*l+1)
-            llist = set(basis[np.argwhere(basis[:,0]==nmin)][:, 0, 1])
-            llist_nmin = set(range(max(llist)+1))
-            l_diff = llist_nmin - llist
-            for l in l_diff:
-                ncore[s] += 2*(2*l+1)
-        self.ncore = ncore
+    
+
 
     def __len__(self):
         return self.nstructs
@@ -884,14 +957,7 @@ def get_dataloader(
         return test_loader
 
 
-from mlelec.data.pyscf_calculator import kpoint_to_translations, translations_to_kpoint
-from mlelec.data.pyscf_calculator import (
-    get_scell_phase,
-    map_supercell_to_relativetrans,
-    translation_vectors_for_kmesh,
-    _map_transidx_to_relative_translation,
-    map_mic_translations,
-)
+
 
 
 # class PeriodicDataset(Dataset):
