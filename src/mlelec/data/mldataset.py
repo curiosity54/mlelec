@@ -1,9 +1,7 @@
 from typing import Dict, List, Optional, Union, Tuple, NamedTuple
 from collections import namedtuple
 import warnings
-import copy
 from collections import defaultdict
-from pathlib import Path
 import itertools
 
 import numpy as np
@@ -11,17 +9,14 @@ import numpy as np
 from ase.io import read
 
 import torch
-from torch.utils.data import Dataset
-import torch.utils.data as data
 
 import metatensor.torch as mts
 from metatensor.torch import TensorMap, Labels, TensorBlock
 from metatensor.learn import IndexedDataset
 
-from mlelec.targets import ModelTargets
 from mlelec.utils.target_utils import get_targets
 from mlelec.utils.twocenter_utils import fix_orbital_order
-from mlelec.data.dataset import QMDataset
+from mlelec.data.qmdataset import QMDataset
 from mlelec.features.acdc import compute_features
 
 import xitorch
@@ -54,7 +49,7 @@ class MLDataset:
         item_names: Optional[Union[str, List[str]]] = 'fock_blocks',
         shuffle: Optional[bool] = False,
         shuffle_seed: Optional[int] = None,
-        features: Optional[torch.ScriptObject] = None,
+        features: Optional[Union[str, torch.ScriptObject]] = None,
         training_strategy: Optional[str] = "two_center",
         hypers_atom: Optional[Dict] = None,
         hypers_pair: Optional[Dict] = None,
@@ -98,7 +93,10 @@ class MLDataset:
         if lcut is not None and lcut < max(self.model_metadata.keys['L']):
             lcut = max(self.model_metadata.keys['L'])
 
+        if isinstance(features, str):
+            features = self.load_features(features, self.device)
         self._set_features(features, hypers_atom, hypers_pair, lcut)
+
         self.item_names = [item_names] if isinstance(item_names, str) else item_names
         if self.model_type == 'acdc' and kwargs.get('calc_features', True):
             self.item_names.append('features')
@@ -109,6 +107,30 @@ class MLDataset:
 
         self.indices = torch.arange(self.nstructs)
         self._update_datasets()
+
+    def __repr__(self):
+        return (f"MLDataset(\n"
+                f"  qmdata: {self.qmdata},\n"
+                f"  device: {self.device},\n"
+                f"  model_type: {self.model_type},\n"
+                f"  item_names: {self.item_names},\n"
+                f"  shuffle: {self._shuffle},\n"
+                f"  shuffle_seed: {self._shuffle_seed},\n"
+                f"  features: {self.features is not None},\n"
+                f"  items: {self.items is not None},\n"
+                f"  training_strategy: {self.training_strategy},\n"
+                f"  cutoff: {self.cutoff},\n"
+                f"  sort_orbs: {self.sort_orbs},\n"
+                f"  all_pairs: {self.all_pairs},\n"
+                f"  skip_symmetry: {self.skip_symmetry},\n"
+                f"  orbitals_to_properties: {self.orbitals_to_properties},\n"
+                f"  train_frac: {self.train_frac},\n"
+                f"  val_frac: {self.val_frac},\n"
+                f"  test_frac: {self.test_frac},\n"
+                f"  fix_p_orbital_order: {self.fix_p_orbital_order},\n"
+                f"  apply_condon_shortley: {self.apply_condon_shortley}\n"
+                f")")
+
 
     @property
     def qmdata(self):
@@ -296,6 +318,25 @@ class MLDataset:
                 raise NotImplementedError(f"Training strategy {self.training_strategy} not implemented.")
         else:
             self.features = features
+
+    @staticmethod
+    def load_features(file_path: str, device: Optional[str] = None):
+        """
+        Load features from a file.
+
+        Args:
+            file_path (str): Path to the file containing the features.
+            device (str, optional): Device to use for the features.
+
+        Returns:
+            torch.ScriptObject: Loaded features.
+        """
+
+        features = mts.load(file_path)
+        if device is not None:
+            features = features.to(device = device)
+
+        return features
 
     def _set_items(self, item_names):
         _item_names = [_flattenname(t) for t in item_names]
@@ -662,6 +703,8 @@ class MLDataset:
             'density_matrix',
             'features'
             ]
+    
+    
 
 def _flattenname(string):
     return ''.join(''.join(string.split('_')).split(' ')).lower()
