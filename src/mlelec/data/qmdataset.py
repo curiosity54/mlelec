@@ -25,7 +25,7 @@ class QMDataset:
         fock_realspace: Optional[Union[Dict, torch.Tensor, np.ndarray]] = None,
         overlap_kspace: Optional[Union[List, torch.Tensor, np.ndarray]] = None,
         overlap_realspace: Optional[Union[Dict, torch.Tensor, np.ndarray]] = None,
-        device: str = "cuda",
+        device: str = "cpu",
         orbs_name: str = "sto-3g",
         orbs: List = None,
         dimension: int = 3,
@@ -75,7 +75,7 @@ class QMDataset:
 
     @classmethod
     def from_file(cls, frames_path: str, fock_realspace_path: Optional[str] = None, fock_kspace_path: Optional[str] = None, 
-                  overlap_realspace_path: Optional[str] = None, overlap_kspace_path: Optional[str] = None, device: str = "cuda", 
+                  overlap_realspace_path: Optional[str] = None, overlap_kspace_path: Optional[str] = None, device: str = "cpu", 
                   orbs_name: str = "sto-3g", orbs: List = None, dimension: int = 3, frame_slice: Optional[Union[slice, str]] = None) -> 'QMDataset':
         """
         Create a QMDataset instance by loading frames and matrices from files.
