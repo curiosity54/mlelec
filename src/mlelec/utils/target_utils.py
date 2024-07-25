@@ -5,7 +5,7 @@ import torch
 import metatensor.torch as mts
 from metatensor.torch import TensorMap, Labels
 
-from mlelec.data.dataset import QMDataset
+from mlelec.data.qmdataset import QMDataset
 from mlelec.utils.pbc_utils import matrix_to_blocks
 from mlelec.utils.twocenter_utils import _to_coupled_basis
 

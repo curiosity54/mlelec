@@ -543,7 +543,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features
 
-from mlelec.data.dataset import QMDataset
+from mlelec.data.qmdataset import QMDataset
 def compute_features(dataset: QMDataset,
                      hypers_atom: dict,
                      lcut: int,

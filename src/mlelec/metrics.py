@@ -8,7 +8,7 @@ import torch
 from metatensor.torch import TensorMap
 
 from mlelec.utils.pbc_utils import blocks_to_matrix, inverse_fourier_transform
-from mlelec.data.dataset import QMDataset
+from mlelec.data.qmdataset import QMDataset
 from mlelec.utils.symmetry import ClebschGordanReal
 
 # def L2_kspace_loss(pred: Union[TensorMap], 
