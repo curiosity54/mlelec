@@ -33,6 +33,22 @@ class MSELoss(BaseLoss):
                 ), "Prediction and target must have the same samples"
                 losses.append(torch.norm(block.values - targetblock.values)**2)
 
+        elif isinstance(predictions, dict):
+            assert isinstance(targets, dict), "Target must be a dictionary"
+            losses = []
+            for key, p in predictions.items():
+                t = targets[key]
+                losses.append(torch.norm(p - t)**2)
+
+        elif isinstance(predictions, list):
+
+            losses = []
+            for p, t in zip(predictions, targets):
+                losses.append(torch.norm(p - t)**2)
+
+       
+        return sum(losses)
+
 class CustomDerivedLoss(BaseLoss):
     def compute(self, predictions, targets, **kwargs):
         derived_predictions = kwargs.get('derived_predictions')
@@ -61,6 +77,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             apply_norm=apply_norm,
             **kwargs
         )
+        self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
         self.loss_fn = loss_fn
         self.derived_pred_kwargs = kwargs
@@ -83,6 +100,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         predictions = self.forward(features, targets)
         derived_predictions = self.compute_derived_predictions(predictions, **self.derived_pred_kwargs)
         loss = self.loss_fn.compute(predictions, targets, derived_predictions=derived_predictions)
+
         self.log('train_loss', loss)
         return loss
 
@@ -92,6 +110,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         predictions = self.forward(features, targets)
         derived_predictions = self.compute_derived_predictions(predictions, **self.derived_pred_kwargs)
         loss = self.loss_fn.compute(predictions, targets, derived_predictions=derived_predictions)
+
         self.log('val_loss', loss)
         return loss
 
@@ -100,6 +119,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         targets = batch.fock_blocks
         predictions = self.forward(features, targets)
         derived_predictions = self.compute_derived_predictions(predictions, **self.derived_pred_kwargs)
+
         loss = self.loss_fn.compute(predictions, targets, derived_predictions=derived_predictions)
         self.log('test_loss', loss)
         return loss
