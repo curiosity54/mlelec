@@ -166,7 +166,7 @@ class QMDataset:
                 except:
                     raise ValueError(f"Unsupported file type: {file_path}")
 
-        elif file_path.endswith('.hkl'):
+        elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
             matrix = hkl.load(file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
