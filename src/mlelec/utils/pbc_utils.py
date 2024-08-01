@@ -1193,29 +1193,40 @@ def blocks_to_matrix_working(blocks, dataset, device=None, cg = None, all_pairs 
 
     return reconstructed_matrices
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, check_hermiticity = True):
+def blocks_to_matrix(blocks, 
+                     basis,
+                     frames, 
+                     device = None, 
+                     cg = None, 
+                     all_pairs = False, 
+                     sort_orbs = True, 
+                     detach = False, 
+                     check_hermiticity = True):
 
     if device is None:
-        device = dataset.device
+        device = 'cpu'
+        # device = dataset.device
+    # basis = dataset.basis
+    # frames = dataset.structures
         
     if "L" in blocks.keys.names:
         from mlelec.utils.twocenter_utils import _to_uncoupled_basis
-        blocks = _to_uncoupled_basis(blocks, cg = cg, device = device)
+        blocks = _to_uncoupled_basis(blocks, cg = cg) #, device = device)
 
-    orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
-    atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
+    orbs_tot, orbs_offset = _orbs_offsets(basis)
+    atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
     orbs_mult = {
         species: 
                 {tuple(k): v
             for k, v in zip(
                 *np.unique(
-                    np.asarray(dataset.basis[species])[:, :2],
+                    np.asarray(basis[species])[:, :2],
                     axis=0,
                     return_counts=True,
                 )
             )
         }
-        for species in dataset.basis
+        for species in basis
     }
 
     reconstructed_matrices = []
@@ -1230,8 +1241,8 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
     if not all_pairs:
         bt2_factor_p=1
 
-    for A in range(len(dataset.structures)):
-        norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+    for A in range(len(frames)):
+        norbs = np.sum([orbs_tot[ai] for ai in frames[A].numbers])
         reconstructed_matrices.append({})
 
     # loops over block types
@@ -1311,7 +1322,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
-                norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+                norbs = np.sum([orbs_tot[ai] for ai in frames[A].numbers])
                 reconstructed_matrices[A][T] = torch.zeros(norbs, norbs, device = device)
                 reconstructed_matrices[A][mT] = torch.zeros(norbs, norbs, device = device)
 
