@@ -9,20 +9,26 @@ def compute_eigenvalues(As, Ms, return_eigenvectors=False):
     eigenvectors_list = []
 
     for ifr, (A, M) in enumerate(zip(As, Ms)):
-        shape = A.shape
-        leading_shape = shape[:-2]
-        indices = itertools.product(*[range(dim) for dim in leading_shape])
+        # shape = A.shape
+        # leading_shape = shape[:-2]
+        # indices = itertools.product(*[range(dim) for dim in leading_shape])
 
-        eigenvalues = torch.empty(leading_shape + (shape[-1],), dtype=torch.float64)
-        eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]), dtype=torch.complex128) if return_eigenvectors else None
+        # eigenvalues = torch.empty(leading_shape + (shape[-1],), dtype=torch.float64)
+        # eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]), dtype=torch.complex128) if return_eigenvectors else None
 
-        for index in indices:
-            Ax = xitorch.LinearOperator.m(A[index])
-            Mx = xitorch.LinearOperator.m(M[index]) if M is not None else None
-            eigvals, eigvecs = symeig(Ax, M=Mx)
-            eigenvalues[index] = eigvals
-            if return_eigenvectors:
-                eigenvectors[index] = eigvecs
+        Ax = xitorch.LinearOperator.m(A)
+        Mx = xitorch.LinearOperator.m(M)
+
+        eigenvalues, eigenvectors = symeig(Ax, M = Mx)
+
+        # for index in indices:
+        #     print(index)
+        #     Ax = xitorch.LinearOperator.m(A[index])
+        #     Mx = xitorch.LinearOperator.m(M[index]) if M is not None else None
+        #     eigvals, eigvecs = symeig(Ax, M=Mx)
+        #     eigenvalues[index] = eigvals
+        #     if return_eigenvectors:
+        #         eigenvectors[index] = eigvecs
 
         eigenvalues_list.append(eigenvalues)
         if return_eigenvectors:
@@ -35,11 +41,12 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore):
     rhos = []
 
     for C, frame in zip(eigenvectors, frames):
+        
         ncore_val = sum(ncore[s] for s in frame.numbers)
         nelec = sum(frame.numbers) - ncore_val
 
         split_idx = [len(basis[s]) for s in frame.numbers]
-        needed = True if len(np.unique(split_idx)) > 1 else False
+        needed = len(np.unique(split_idx)) > 1
         max_dim = np.max(split_idx)
 
         occ = torch.tensor([2.0 + 0.0j if i < nelec // 2 else 0.0 + 0.0j for i in range(C.shape[-1])], dtype=torch.complex128)

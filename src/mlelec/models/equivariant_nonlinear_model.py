@@ -157,6 +157,23 @@ class MLP(nn.Module):
             torch.Tensor: Output tensor.
         """
         return self.mlp(x)
+    
+def compute_ncore(basis_dict):
+    # Same function as in QMDataset. TODO: avoid code duplication
+    ncore = {}
+    for s in basis_dict:
+        basis = np.array(basis_dict[s])
+        nmin = np.min(basis[:, 0])
+        ncore[s] = 0
+        for n in np.arange(nmin):
+            for l in range(n):
+                ncore[s] += 2 * (2 * l + 1)
+        llist = set(basis[np.argwhere(basis[:, 0] == nmin)][:, 0, 1])
+        llist_nmin = set(range(max(llist) + 1))
+        l_diff = llist_nmin - llist
+        for l in l_diff:
+            ncore[s] += 2 * (2 * l + 1)
+    return ncore
 
 class EquivariantNonlinearModel(nn.Module):
     """
@@ -184,7 +201,7 @@ class EquivariantNonlinearModel(nn.Module):
         self.target_blocks = mldata.model_metadata
         self.frames = mldata.structures
         self.orbitals = mldata.model_basis
-        self.ncore = mldata.qmdata.ncore
+        self.ncore = compute_ncore(self.orbitals)
         self.is_molecule = mldata.qmdata.is_molecule
         self.apply_norm = apply_norm
         self.device = mldata.device

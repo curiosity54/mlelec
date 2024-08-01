@@ -1,8 +1,12 @@
 # equivariant_nonlinear_lightning.py
 
 import lightning as pl
-import torch
+
 import numpy as np
+
+import torch
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 from mlelec.models.equivariant_nonlinear_model import EquivariantNonlinearModel
 from mlelec.data.derived_properties import compute_eigenvalues, compute_atom_resolved_density
 from mlelec.utils.pbc_utils import blocks_to_matrix
@@ -132,6 +136,9 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         activation: Union[str, callable] = 'SiLU',
         apply_norm: bool = True,
         learning_rate: float = 1e-3,
+        lr_scheduler_patience: int=10,
+        lr_scheduler_factor: float=0.1,
+        lr_scheduler_min_lr: float=1e-6,
         loss_fn: BaseLoss = MSELoss(),
         is_indirect: bool = False,
         **kwargs,
@@ -148,6 +155,9 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         self.model = self.model.double()
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
+        self.lr_scheduler_patience = lr_scheduler_patience
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_min_lr = lr_scheduler_min_lr
         self.loss_fn = loss_fn
         self.derived_pred_kwargs = kwargs
         self.qmdata = mldata.qmdata
@@ -223,7 +233,14 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        scheduler = {
+                'scheduler': ReduceLROnPlateau(optimizer, patience=self.lr_scheduler_patience, factor=self.lr_scheduler_factor, min_lr=self.lr_scheduler_min_lr),
+                'monitor': 'train_loss',
+                'interval': 'epoch',
+                'frequency': 1
+            }
+        return [optimizer], [scheduler]
 
     def compute_derived_predictions(self, predictions, batch, **kwargs):
         # Compute derived predictions based on keyword arguments.
@@ -231,6 +248,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         basis = self.model.orbitals
         frames = self.model.frames
         ncore = self.model.ncore
+        batch_frames = [frames[i] for i in batch.sample_id]
 
         HT = blocks_to_matrix(predictions, basis, frames, device = self.device, detach = False, check_hermiticity=False)
         # TODO: The next line needs to be handled inside blocks_to_matrix!
@@ -238,11 +256,11 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             H = [HT[i][0,0,0] for i in batch.sample_id]
             S = batch.overlap_realspace
         else:
-            HT = [HT[i] for i in batch.sample_id]
             # Bloch sums. TODO: Not very nice to use QMDataset methods here?
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
+            H = [H[i] for i in batch.sample_id]
             S = batch.overlap_kspace
-
+            
         to_return = {}
         target_atom_resolved_density = kwargs.get('atom_resolved_density', False)
         target_eigenvalues = kwargs.get("eigenvalues", False)
@@ -250,7 +268,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             eigsys = compute_eigenvalues(H, S, return_eigenvectors=target_atom_resolved_density)
             if target_atom_resolved_density:
                 eigenvalues, eigenvectors = eigsys
-                atom_resolved_density, _ = compute_atom_resolved_density(eigenvectors, frames, basis, ncore)
+                atom_resolved_density, _ = compute_atom_resolved_density(eigenvectors, batch_frames, basis, ncore)
                 to_return['atom_resolved_density'] = atom_resolved_density
             else:
                 eigenvalues = eigsys
@@ -263,8 +281,8 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 # Maybe move to separate file
 
 import lightning as pl
-from metatensor.learn import DataLoader
 from mlelec.data.mldataset import MLDataset
+import metatensor.torch as mts
 
 class MLDatasetDataModule(pl.LightningDataModule):
     def __init__(self, mldata: MLDataset, batch_size=32, shuffle=False):
@@ -277,10 +295,10 @@ class MLDatasetDataModule(pl.LightningDataModule):
         self.shuffle = shuffle
 
     def train_dataloader(self):
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.collate_fn)
+        return mts.learn.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.collate_fn)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return mts.learn.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return mts.learn.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)

@@ -75,7 +75,7 @@ class QMDataset:
 
     @classmethod
     def from_file(cls, frames_path: str, fock_realspace_path: Optional[str] = None, fock_kspace_path: Optional[str] = None, 
-                  overlap_realspace_path: Optional[str] = None, overlap_kspace_path: Optional[str] = None, device: str = "cpu", 
+                  overlap_realspace_path: Optional[str] = None, overlap_kspace_path: Optional[str] = None, kmesh_path: Optional[str] = None, device: str = "cpu", 
                   orbs_name: str = "sto-3g", orbs: List = None, dimension: int = 3, frame_slice: Optional[Union[slice, str]] = None) -> 'QMDataset':
         """
         Create a QMDataset instance by loading frames and matrices from files.
@@ -86,6 +86,7 @@ class QMDataset:
             fock_kspace_path (Optional[str]): Path to the file containing the Fock kspace matrices.
             overlap_realspace_path (Optional[str]): Path to the file containing the overlap realspace matrices.
             overlap_kspace_path (Optional[str]): Path to the file containing the overlap kspace matrices.
+            kmesh_path (Optional[str]): Path to the file containing the kmeshes for periodic calculations.
             device (str): Device to use for the dataset.
             orbs_name (str): Basis set name.
             orbs (List): Basis set orbitals.
@@ -97,6 +98,9 @@ class QMDataset:
         """
         if isinstance(frame_slice, str):
             frame_slice = parse_slice(frame_slice)
+
+        if kmesh_path is not None:
+            kmesh = np.loadtxt(kmesh_path, dtype=np.int32).tolist()[frame_slice]
         
         frames = cls.load_frames(frames_path)
         frames = frames[frame_slice]
@@ -118,7 +122,7 @@ class QMDataset:
             overlap_kspace = overlap_kspace[frame_slice]
 
         return cls(frames=frames, fock_realspace=fock_realspace, fock_kspace=fock_kspace, 
-                   overlap_realspace=overlap_realspace, overlap_kspace=overlap_kspace, 
+                   overlap_realspace=overlap_realspace, overlap_kspace=overlap_kspace, kmesh = kmesh, 
                    device=device, orbs_name=orbs_name, orbs=orbs, dimension=dimension)
 
 
@@ -154,15 +158,10 @@ class QMDataset:
         elif file_path.endswith('.npy'):
             matrix = np.load(file_path, allow_pickle=True)
             if isinstance(matrix, np.ndarray) and matrix.dtype == object:
+                # Ragged array or list of dictionaries
                 try:
                     # Dictionary
-                    matrix = matrix.item()
-                except ValueError: # can only convert an array of size 1 to a Python scalar
-                    try:
-                        # List of numpy arrays
-                        matrix = matrix.astype(np.float64)
-                    except ValueError: # can only convert an array of size 1 to a Python scalar
-                        matrix = [np.array(m) for m in list(matrix)]
+                    matrix = matrix.tolist()
                 except:
                     raise ValueError(f"Unsupported file type: {file_path}")
 
@@ -290,9 +289,14 @@ class QMDataset:
             for ifr, structure in enumerate(self._structures):
                 cell, _, _ = get_scell_phase(structure, self._kmesh[ifr], basis=self._basis_name)
                 cells.append(cell)
-        stderr_output = _stderr_capture.getvalue()
-        if stderr_output:
-            sys.stderr.write(stderr_output)
+        try:
+            assert _stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(_stderr_capture.getvalue())
+
         return cells
 
     def _initialize_pyscf_mol(self) -> List:
@@ -301,9 +305,13 @@ class QMDataset:
         with redirect_stderr(_stderr_capture):
             for structure in self._structures:
                 mols.append(_instantiate_pyscf_mol(structure, basis=self._basis_name))
-        stderr_output = _stderr_capture.getvalue()
-        if stderr_output:
-            sys.stderr.write(stderr_output)
+        try:
+            assert _stderr_capture.getvalue() == '''WARNING!
+  Very diffused basis functions are found in the basis set. They may lead to severe
+  linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+        except:
+            sys.stderr.write(_stderr_capture.getvalue())
         return mols
 
     @property
@@ -418,12 +426,14 @@ class QMDataset:
     def compute_matrices_realspace(self, matrices_kspace: Any):
         raise NotImplementedError("This must happen when the targets are computed!")
 
+    # TODO: move outside this class
     def bloch_sum(
         self,
         matrices_realspace: List[Dict],
         is_tensor: bool = True,
         structure_ids: Optional[List[int]] = None
     ) -> List[Optional[torch.Tensor]]:
+        
         matrices_kspace = []
         structure_ids = structure_ids or range(len(matrices_realspace))
         for ifr, H in zip(structure_ids, matrices_realspace):
@@ -436,12 +446,14 @@ class QMDataset:
                 matrices_kspace.append(None)
         return matrices_kspace
 
+    # TODO: move outside this class
     def _stack_tensors(self, H: Dict, is_tensor: bool) -> torch.Tensor:
         if is_tensor:
             return torch.stack(list(H.values())).to(device=self.device)
         else:
             return torch.from_numpy(np.array(list(H.values()))).to(device=self.device)
 
+    # TODO: move outside this class
     def _convert_keys_to_tensor(self, H: Dict, is_tensor: bool) -> torch.Tensor:
         if is_tensor:
             return torch.tensor(list(H.keys()), dtype=torch.float64, device=self.device)

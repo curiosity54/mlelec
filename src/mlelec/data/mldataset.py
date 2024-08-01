@@ -419,9 +419,9 @@ class MLDataset:
             self.overlap_realspace = [dict((k, apply_fixes(v, frames[i], self.qmdata.basis)) for k, v in d.items()) for i, d in enumerate(self.qmdata.overlap_realspace)] if self.qmdata.overlap_realspace is not None else None
             self.aux_overlap_realspace = [dict((k, apply_fixes(v, frames[i], self.model_basis)) for k, v in d.items()) for i, d in enumerate(self.aux_overlap_realspace)] if self.aux_overlap_realspace is not None else None
 
-            self.fock_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d)) for i, d in enumerate(self.qmdata.fock_kspace)] if self.qmdata.fock_kspace is not None else None
-            self.overlap_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d)) for i, d in enumerate(self.qmdata.overlap_kspace)] if self.qmdata.overlap_kspace is not None else None
-            self.aux_overlap_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.model_basis), d)) for i, d in enumerate(self.aux_overlap_kspace)] if self.aux_overlap_kspace is not None else None
+            self.fock_kspace = [torch.stack(list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d))) for i, d in enumerate(self.qmdata.fock_kspace)] if self.qmdata.fock_kspace is not None else None
+            self.overlap_kspace = [torch.stack(list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d))) for i, d in enumerate(self.qmdata.overlap_kspace)] if self.qmdata.overlap_kspace is not None else None
+            self.aux_overlap_kspace = [torch.stack(list(map(lambda k: apply_fixes(k, frames[i], self.model_basis), d))) for i, d in enumerate(self.aux_overlap_kspace)] if self.aux_overlap_kspace is not None else None
 
         if not self.fix_p_orbital_order and not self.apply_condon_shortley:
             self.fock_realspace = self.qmdata.fock_realspace
