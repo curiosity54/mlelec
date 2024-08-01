@@ -16,15 +16,35 @@ class BaseLoss(ABC):
     def compute(self, predictions, targets, **kwargs):
         pass
 
+def compute_difference(tensor1, tensor2):
+    """
+    Compute the difference between two tensors, masking the larger one to match the size of the smaller one.
+    
+    Args:
+        tensor1 (torch.Tensor): The first tensor (smaller or same size).
+        tensor2 (torch.Tensor): The second tensor (larger or same size).
+    
+    Returns:
+        torch.Tensor: The difference tensor.
+    """
+    # Get the shape of the smaller tensor
+    small_shape = tensor1.shape
+    # Slice the larger tensor to match the smaller tensor's shape
+    slices = tuple(slice(0, dim) for dim in small_shape)
+    # Compute the difference
+    tensor_diff = tensor1 - tensor2[slices]
+    return tensor_diff
+
 class MSELoss(BaseLoss):
     def compute(self, predictions, targets, **kwargs):
         """L2 loss function"""
         if isinstance(predictions, torch.Tensor):
             assert isinstance(targets, torch.Tensor)
-            assert (
-                predictions.shape == targets.shape
-            ), "Prediction and targets must have the same shape"
-            return torch.norm(predictions - targets) ** 2
+            # assert (
+            #     predictions.shape == targets.shape
+            # ), "Prediction and targets must have the same shape"
+            diff = compute_difference(predictions, targets)
+            return torch.norm(diff) ** 2
         
         elif isinstance(predictions, torch.ScriptObject):
             if predictions._type().name() == "TensorMap":
@@ -48,7 +68,8 @@ class MSELoss(BaseLoss):
 
             losses = []
             for p, t in zip(predictions, targets):
-                losses.append(torch.norm(p - t)**2)
+                diff = compute_difference(p, t)
+                losses.append(torch.norm(diff)**2)
 
        
         return sum(losses)
@@ -62,7 +83,7 @@ class RMSE(BaseLoss):
                 predictions.shape == targets.shape
             ), "Prediction and targets must have the same shape"
             # return torch.norm(predictions - targets) ** 2
-            diff = predictions - targets
+            diff = compute_difference(predictions, targets)
             return np.sqrt(torch.mean(diff*diff.conj()).detach())
         
         elif isinstance(predictions, torch.ScriptObject):
@@ -82,14 +103,14 @@ class RMSE(BaseLoss):
             se = []
             for key, p in predictions.items():
                 t = targets[key]
-                diff = p - t
+                diff = compute_difference(p, t)
                 se.append((diff*diff.conj()).flatten())
 
         elif isinstance(predictions, list):
 
             se = []
             for p, t in zip(predictions, targets):
-                diff = p - t
+                diff = compute_difference(p, t)
                 se.append((diff*diff.conj()).flatten())
 
 

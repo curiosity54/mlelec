@@ -67,6 +67,8 @@ class MLDataset:
         model_basis: Optional[Dict] = None,
         fix_p_orbital_order: Optional[bool] = False,
         apply_condon_shortley: Optional[bool] = False,
+        aux_overlap_realspace: Optional[Union[List,torch.Tensor]] = None,
+        aux_overlap_kspace: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -89,6 +91,8 @@ class MLDataset:
         self.fix_p_orbital_order = fix_p_orbital_order
         self._orbital_order_fixed = False
         self.apply_condon_shortley = apply_condon_shortley
+        self.aux_overlap_realspace = aux_overlap_realspace
+        self.aux_overlap_kspace = aux_overlap_kspace
 
         self._compute_model_metadata()
 
@@ -396,23 +400,28 @@ class MLDataset:
         '''
         frames = self.qmdata.structures
 
-        def apply_fixes(tensor, frame):
+        def apply_fixes(tensor, frame, basis):
             if self.fix_p_orbital_order:
-                tensor = fix_orbital_order(tensor.clone(), frame, self.qmdata.basis)
+                tensor = fix_orbital_order(tensor.clone(), frame, basis)
             if self.apply_condon_shortley:
-                cs = np.concatenate([(-1)**((np.array(self.qmdata.basis[n])[:,2] > 0)*(np.abs(np.array(self.qmdata.basis[n])[:,2]))) for n in frame.numbers]).flatten()[:, np.newaxis]
+                cs = np.concatenate([(-1)**((np.array(basis[n])[:,2] > 0)*(np.abs(np.array(basis[n])[:,2]))) for n in frame.numbers]).flatten()[:, np.newaxis]
                 cs = cs @ cs.T
                 tensor = tensor * cs
             return tensor
 
         if self.qmdata.is_molecule:
-            self.fock_realspace = [apply_fixes(T, frames[i]) for i, T in enumerate(self.qmdata.fock_realspace)] if self.qmdata.fock_realspace is not None else None
-            self.overlap_realspace = [apply_fixes(T, frames[i]) for i, T in enumerate(self.qmdata.overlap_realspace)] if self.qmdata.overlap_realspace is not None else None
+            self.fock_realspace = [apply_fixes(T, frames[i], self.qmdata.basis) for i, T in enumerate(self.qmdata.fock_realspace)] if self.qmdata.fock_realspace is not None else None
+            self.overlap_realspace = [apply_fixes(T, frames[i], self.qmdata.basis) for i, T in enumerate(self.qmdata.overlap_realspace)] if self.qmdata.overlap_realspace is not None else None
+            self.aux_overlap_realspace = [apply_fixes(T, frames[i], self.model_basis) for i, T in enumerate(self.aux_overlap_realspace)] if self.aux_overlap_realspace is not None else None
+
         else:
-            self.fock_realspace = [dict((k, apply_fixes(v, frames[i])) for k, v in d.items()) for i, d in enumerate(self.qmdata.fock_realspace)] if self.qmdata.fock_realspace is not None else None
-            self.overlap_realspace = [dict((k, apply_fixes(v, frames[i])) for k, v in d.items()) for i, d in enumerate(self.qmdata.overlap_realspace)] if self.qmdata.overlap_realspace is not None else None
-            self.fock_kspace = [list(map(lambda k: apply_fixes(k, frames[i]), d)) for i, d in enumerate(self.qmdata.fock_kspace)] if self.qmdata.fock_kspace is not None else None
-            self.overlap_kspace = [list(map(lambda k: apply_fixes(k, frames[i]), d)) for i, d in enumerate(self.qmdata.overlap_kspace)] if self.qmdata.overlap_kspace is not None else None
+            self.fock_realspace = [dict((k, apply_fixes(v, frames[i], self.qmdata.basis)) for k, v in d.items()) for i, d in enumerate(self.qmdata.fock_realspace)] if self.qmdata.fock_realspace is not None else None
+            self.overlap_realspace = [dict((k, apply_fixes(v, frames[i], self.qmdata.basis)) for k, v in d.items()) for i, d in enumerate(self.qmdata.overlap_realspace)] if self.qmdata.overlap_realspace is not None else None
+            self.aux_overlap_realspace = [dict((k, apply_fixes(v, frames[i], self.model_basis)) for k, v in d.items()) for i, d in enumerate(self.aux_overlap_realspace)] if self.aux_overlap_realspace is not None else None
+
+            self.fock_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d)) for i, d in enumerate(self.qmdata.fock_kspace)] if self.qmdata.fock_kspace is not None else None
+            self.overlap_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.qmdata.basis), d)) for i, d in enumerate(self.qmdata.overlap_kspace)] if self.qmdata.overlap_kspace is not None else None
+            self.aux_overlap_kspace = [list(map(lambda k: apply_fixes(k, frames[i], self.model_basis), d)) for i, d in enumerate(self.aux_overlap_kspace)] if self.aux_overlap_kspace is not None else None
 
         if not self.fix_p_orbital_order and not self.apply_condon_shortley:
             self.fock_realspace = self.qmdata.fock_realspace
@@ -421,21 +430,35 @@ class MLDataset:
             self.overlap_kspace = self.qmdata.overlap_kspace
 
     def _compute_real_space_tensors(self, name):
+        basis = self.qmdata.basis
         if name == 'fockrealspace':
             tensor_list = self.fock_realspace
-        else:  # overlaprealspace
-            tensor_list = self.overlap_realspace
-        
+        elif name == 'overlaprealspace':  # overlaprealspace
+            if self.aux_overlap_realspace is None:
+                tensor_list = self.overlap_realspace
+            else:
+                tensor_list = self.aux_overlap_realspace
+                basis = self.model_basis
+
         if self.qmdata.is_molecule:
-            return self.compute_tensors(tensor_list)
+            return self.compute_tensors(tensor_list, basis)
         else:
-            tensor_stack = self.compute_tensors([torch.stack(list(h.values())) for h in tensor_list])
+            tensor_stack = self.compute_tensors([torch.stack(list(h.values())) for h in tensor_list], basis)
             return [{T: H[iT] for iT, T in enumerate(tensor_list[ifr])} for ifr, H in enumerate(tensor_stack)]
 
     def _compute_k_space_tensors(self, name):
         assert not self.qmdata.is_molecule, f"k-space {name} not available for molecules."
-        tensor_list = self.fock_kspace if name == 'fockkspace' else self.overlap_kspace
-        return self.compute_tensors(tensor_list)
+        basis = self.qmdata.basis
+        if name == 'fockkspace':
+            tensor_list = self.fock_kspace 
+        elif name == 'overlapkspace': 
+            if self.aux_overlap_kspace is None:
+                tensor_list = self.overlap_kspace
+            else:
+                tensor_list = self.aux_overlap_kspace
+                basis = self.model_basis
+
+        return self.compute_tensors(tensor_list, basis)
     
     def _update_items_on_cutoff_change(self):
         '''
@@ -537,7 +560,7 @@ class MLDataset:
         if self.orbitals_to_properties:
             self.model_metadata = self.model_metadata.keys_to_properties(['n_i', 'l_i', 'n_j', 'l_j'])
 
-    def compute_tensors(self, tensors: Union[torch.Tensor, List]):
+    def compute_tensors(self, tensors: Union[torch.Tensor, List], basis_dict: dict):
         out_tensors = []
 
         for ifr, tensor in enumerate(tensors):
@@ -549,7 +572,7 @@ class MLDataset:
 
             frame = self.qmdata.structures[ifr]
             natm = len(frame)
-            basis = [len(self.qmdata.basis[s]) for s in frame.numbers]
+            basis = [len(basis_dict[s]) for s in frame.numbers]
             basis = itertools.product(basis, basis)
             posit = itertools.product(range(natm), range(natm))
             mask = frame.get_all_distances(mic=True) <= self.cutoff
