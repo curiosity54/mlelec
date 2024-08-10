@@ -101,6 +101,8 @@ class QMDataset:
 
         if kmesh_path is not None:
             kmesh = np.loadtxt(kmesh_path, dtype=np.int32).tolist()[frame_slice]
+        else:
+            kmesh = None
         
         frames = cls.load_frames(frames_path)
         frames = frames[frame_slice]
@@ -153,18 +155,34 @@ class QMDataset:
         Returns:
             Union[Dict, List, torch.Tensor]: Loaded matrix.
         """
+        def convert_to_tensor(item):
+            if isinstance(item, np.ndarray):
+                # If it's an ndarray of objects, recursively convert elements
+                if item.dtype == np.object_:
+                    return torch.tensor([convert_to_tensor(subitem) for subitem in item],
+                                        dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64)
+                else:
+                    return torch.tensor(item, 
+                                        dtype=torch.complex128 if np.issubdtype(item.dtype, np.complexfloating) else torch.float64)
+            elif isinstance(item, list):
+                # Convert lists to tensors
+                return torch.tensor(item, dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64)
+            else:
+                # Convert single elements
+                return torch.tensor(item, dtype=torch.complex128 if isinstance(item, complex) else torch.float64)
+
         if file_path.endswith('.pt'):
             matrix = torch.load(file_path, map_location=device)
         elif file_path.endswith('.npy'):
             matrix = np.load(file_path, allow_pickle=True)
             if isinstance(matrix, np.ndarray) and matrix.dtype == object:
-                # Ragged array or list of dictionaries
-                try:
-                    # Dictionary
-                    matrix = matrix.tolist()
-                except:
-                    raise ValueError(f"Unsupported file type: {file_path}")
-
+                # Handle potential ragged arrays or list of dictionaries
+                if any(isinstance(item, (list, np.ndarray)) and len(item) != len(matrix[0]) for item in matrix):
+                    matrix = [convert_to_tensor(item).to(device) for item in matrix]
+                else:
+                    matrix = convert_to_tensor([list(item) for item in matrix]).to(device)
+            else:
+                matrix = torch.from_numpy(matrix).to(device)
         elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
             matrix = hkl.load(file_path)
         else:
@@ -180,6 +198,44 @@ class QMDataset:
             return torch.from_numpy(matrix).to(device)
         else:
             return matrix.to(device)
+    # def load_matrix(file_path: str, device: str) -> Union[Dict, List, torch.Tensor]:
+    #     """
+    #     Load a matrix from a file.
+
+    #     Args:
+    #         file_path (str): Path to the file containing the matrix.
+    #         device (str): Device to use for the matrix.
+
+    #     Returns:
+    #         Union[Dict, List, torch.Tensor]: Loaded matrix.
+    #     """
+    #     if file_path.endswith('.pt'):
+    #         matrix = torch.load(file_path, map_location=device)
+    #     elif file_path.endswith('.npy'):
+    #         matrix = np.load(file_path, allow_pickle=True)
+    #         if isinstance(matrix, np.ndarray) and matrix.dtype == object:
+    #             # Ragged array or list of dictionaries
+    #             try:
+    #                 # Dictionary
+    #                 matrix = matrix.tolist()
+    #             except:
+    #                 raise ValueError(f"Unsupported file type: {file_path}")
+
+    #     elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
+    #         matrix = hkl.load(file_path)
+    #     else:
+    #         raise ValueError(f"Unsupported file type: {file_path}")
+
+    #     if isinstance(matrix, dict):
+    #         return {k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in matrix.items()}
+    #     elif isinstance(matrix, list) and isinstance(matrix[0], dict):
+    #         return [{k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in sub_matrix.items()} for sub_matrix in matrix]
+    #     elif isinstance(matrix, list):
+    #         return [torch.tensor(m, device=device) if isinstance(m, np.ndarray) else m.to(device) for m in matrix]
+    #     elif isinstance(matrix, np.ndarray):
+    #         return torch.from_numpy(matrix).to(device)
+    #     else:
+    #         return matrix.to(device)
 
     @property
     def device(self) -> str:
