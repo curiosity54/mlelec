@@ -76,3 +76,4 @@ notebooks/lightning_logs
 **/events*
 **/hparams*
 **/epoch*
+notebooks/features
