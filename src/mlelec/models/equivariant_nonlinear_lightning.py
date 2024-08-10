@@ -249,16 +249,17 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         frames = self.model.frames
         ncore = self.model.ncore
         batch_frames = [frames[i] for i in batch.sample_id]
+        frames_dict = {A: f for A, f in zip(batch.sample_id, batch_frames)}
 
-        HT = blocks_to_matrix(predictions, basis, frames, device = self.device, detach = False, check_hermiticity=False)
+        HT = blocks_to_matrix(predictions, basis, frames_dict, device = self.device, detach = False, check_hermiticity=False)
         # TODO: The next line needs to be handled inside blocks_to_matrix!
         if self.is_molecule:
-            H = [HT[i][0,0,0] for i in batch.sample_id]
+            H = [h[0,0,0] for h in HT]
             S = batch.overlap_realspace
         else:
             # Bloch sums. TODO: Not very nice to use QMDataset methods here?
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
-            H = [H[i] for i in batch.sample_id]
+            # H = [H[i] for i in batch.sample_id]
             S = batch.overlap_kspace
             
         to_return = {}
@@ -285,7 +286,7 @@ from mlelec.data.mldataset import MLDataset
 import metatensor.torch as mts
 
 class MLDatasetDataModule(pl.LightningDataModule):
-    def __init__(self, mldata: MLDataset, batch_size=32, shuffle=False):
+    def __init__(self, mldata: MLDataset, batch_size=32, shuffle=False, num_workers=0):
         super().__init__()
         self.collate_fn = mldata.group_and_join
         self.train_dataset = mldata.train_dataset
@@ -293,12 +294,13 @@ class MLDatasetDataModule(pl.LightningDataModule):
         self.test_dataset = mldata.test_dataset
         self.batch_size = batch_size
         self.shuffle = shuffle
+        self.num_workers = num_workers
 
     def train_dataloader(self):
         return mts.learn.DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=self.shuffle, collate_fn=self.collate_fn)
 
     def val_dataloader(self):
-        return mts.learn.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return mts.learn.DataLoader(self.val_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.num_workers)
 
     def test_dataloader(self):
-        return mts.learn.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn)
+        return mts.learn.DataLoader(self.test_dataset, batch_size=self.batch_size, collate_fn=self.collate_fn, num_workers=self.num_workers)

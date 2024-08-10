@@ -1195,7 +1195,7 @@ def blocks_to_matrix_working(blocks, dataset, device=None, cg = None, all_pairs 
 
 def blocks_to_matrix(blocks, 
                      basis,
-                     frames, 
+                     frames_dict, 
                      device = None, 
                      cg = None, 
                      all_pairs = False, 
@@ -1208,13 +1208,22 @@ def blocks_to_matrix(blocks,
         # device = dataset.device
     # basis = dataset.basis
     # frames = dataset.structures
+
+    frames = list(frames_dict.values())
         
     if "L" in blocks.keys.names:
         from mlelec.utils.twocenter_utils import _to_uncoupled_basis
         blocks = _to_uncoupled_basis(blocks, cg = cg) #, device = device)
 
     orbs_tot, orbs_offset = _orbs_offsets(basis)
-    atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
+    # TODO: this is a quick hack. Fix in future version
+    atom_blocks_idx_ = _atom_blocks_idx(frames, orbs_tot)
+    atom_blocks_idx = {}
+    A_dict = {i: A for i, A in enumerate(frames_dict)}
+    for (iA, i, j) in atom_blocks_idx_:
+        A = A_dict[iA]
+        atom_blocks_idx[(A, i, j)] = atom_blocks_idx_[iA, i, j]
+
     orbs_mult = {
         species: 
                 {tuple(k): v
@@ -1229,7 +1238,6 @@ def blocks_to_matrix(blocks,
         for species in basis
     }
 
-    reconstructed_matrices = []
     
     # bt1
     bt1factor = ISQRT_2
@@ -1241,9 +1249,10 @@ def blocks_to_matrix(blocks,
     if not all_pairs:
         bt2_factor_p=1
 
-    for A in range(len(frames)):
-        norbs = np.sum([orbs_tot[ai] for ai in frames[A].numbers])
-        reconstructed_matrices.append({})
+    reconstructed_matrices = {}
+    for A, frame in frames_dict.items():
+        norbs = np.sum([orbs_tot[ai] for ai in frame.numbers])
+        reconstructed_matrices[A] = {}
 
     # loops over block types
     for key, block in blocks.items():
@@ -1322,7 +1331,7 @@ def blocks_to_matrix(blocks,
             
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
-                norbs = np.sum([orbs_tot[ai] for ai in frames[A].numbers])
+                norbs = np.sum([orbs_tot[ai] for ai in frames_dict[A].numbers])
                 reconstructed_matrices[A][T] = torch.zeros(norbs, norbs, device = device)
                 reconstructed_matrices[A][mT] = torch.zeros(norbs, norbs, device = device)
 
@@ -1403,14 +1412,13 @@ def blocks_to_matrix(blocks,
                     matrix_T[ipsi_jphi_slice ] -= bv.T
          
     if check_hermiticity:
-        for A, matrix in enumerate(reconstructed_matrices):
+        for A, matrix in reconstructed_matrices.items():
             Ts = list(matrix.keys())
             for T in Ts:
                 mT = tuple(-t for t in T)
-            
                 assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
 
-    return reconstructed_matrices
+    return list(reconstructed_matrices.values())
 
 def blocks_to_matrix_OLD(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, sample_id = None):
 
