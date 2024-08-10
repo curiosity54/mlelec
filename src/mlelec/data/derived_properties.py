@@ -49,7 +49,7 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore):
         needed = len(np.unique(split_idx)) > 1
         max_dim = np.max(split_idx)
 
-        occ = torch.tensor([2.0 + 0.0j if i < nelec // 2 else 0.0 + 0.0j for i in range(C.shape[-1])], dtype=torch.complex128)
+        occ = torch.tensor([2 if i < nelec // 2 else 0 for i in range(C.shape[-1])]).to(dtype = C.dtype)
         rho = torch.einsum('n,...in,...jn->ij...', occ, C, C.conj())
 
         slices = torch.split(rho, split_idx, dim=0)
