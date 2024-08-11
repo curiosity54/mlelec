@@ -58,7 +58,7 @@ def fix_orbital_order(
 
 
 def unfix_orbital_order(
-    matrix: Union[torch.tensor, np.ndarray],
+    matrix: Union[List, torch.tensor, np.ndarray],
     frames: Union[List, ase.Atoms],
     orbital: dict,
 ):
@@ -86,13 +86,19 @@ def unfix_orbital_order(
     if isinstance(frames, list):
         if len(frames) == 1:
             matrix = matrix.reshape(1, *matrix.shape)
-        assert len(matrix.shape) == 3  # (nframe, nao, nao)
+        for m in matrix:
+            assert len(m.shape) == 2  # (nframe, nao, nao)
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
+        
         if isinstance(matrix, np.ndarray):
             return np.asarray(fixed_matrices)
-        return torch.stack(fixed_matrices)
+        else:
+            try:
+                return torch.stack(fixed_matrices)
+            except:
+                return fixed_matrices
     else:
         return unfix_one_matrix(matrix, frames, orbital)
 
@@ -107,13 +113,13 @@ def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
 
 
 def _components_idx(l):
-    """Returns the m \in {-l,...,l} indices"""
+    """Returns the m in {-l,...,l} indices"""
     return torch.arange(-l, l + 1, dtype = torch.int32).reshape(2 * l + 1, 1)
     # return np.arange(-l, l + 1, dtype=int).reshape(2 * l + 1, 1)
 
 
 def _components_idx_2d(li, lj):
-    """Returns the 2D outerproduct of m_i \in {-l_i,... , l_i} and m_j \in {-l_j,... , l_j} to index the (l_i, l_j) block of the hamiltonian
+    """Returns the 2D outerproduct of m_i in {-l_i,... , l_i} and m_j in {-l_j,... , l_j} to index the (l_i, l_j) block of the hamiltonian
     in the uncoupled basis"""
     # return np.asarray(
     #     np.meshgrid(_components_idx(li), _components_idx(lj)), dtype=int

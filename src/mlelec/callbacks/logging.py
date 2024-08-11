@@ -7,6 +7,7 @@ class LoggingCallback(pl.Callback):
         self.val_loss = None
         self.rmse_eigenvalues = None
         self.rmse_ard = None
+        self.rmse_dipoles = None
         self.log_every_n_epochs = log_every_n_epochs
 
     def on_fit_start(self, trainer, pl_module):
@@ -25,10 +26,12 @@ class LoggingCallback(pl.Callback):
         val_loss = trainer.callback_metrics.get('val_loss')
         rmse_eigenvalues = trainer.callback_metrics.get('rmse_eigenvalues')
         rmse_ard = trainer.callback_metrics.get('rmse_atom_resolved_density')
+        rmse_dipoles = trainer.callback_metrics.get('rmse_dipoles')
         if val_loss:
             self.val_loss = val_loss.item()
             self.rmse_eigenvalues = rmse_eigenvalues
             self.rmse_ard = rmse_ard
+            self.rmse_dipoles = rmse_dipoles
 
     def on_train_epoch_end(self, trainer, pl_module):
         epoch = trainer.current_epoch + 1
@@ -51,7 +54,7 @@ class LoggingCallback(pl.Callback):
                 if train_loss:
                     self.train_loss = train_loss.item()
                 print(f"Epoch {epoch}, Train Loss: {self.train_loss}, Validation Loss: {val_loss}, "
-                      f"RMSE Eigenvalues: {self.rmse_eigenvalues}, RMSE ARD: {self.rmse_ard}")
+                      f"RMSE Eigenvalues: {self.rmse_eigenvalues}, RMSE ARD: {self.rmse_ard}, , RMSE Dipoles: {self.rmse_dipoles}")
                 self.train_loss = None  # Reset train_loss after printing
         elif log_train:
             # Log train loss

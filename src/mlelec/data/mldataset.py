@@ -22,7 +22,7 @@ from mlelec.features.acdc import compute_features
 import xitorch
 from xitorch.linalg import symeig
 
-from mlelec.data.derived_properties import compute_eigenvalues, compute_atom_resolved_density
+from mlelec.data.derived_properties import compute_eigenvalues, compute_atom_resolved_density, compute_dipoles
 
 
 class Items(NamedTuple):
@@ -37,6 +37,7 @@ class Items(NamedTuple):
     atom_resolved_density: Optional[List[torch.Tensor]] = None
     density_matrix: Optional[List[torch.Tensor]] = None
     features: Optional[torch.ScriptObject] = None
+    dipoles: Optional[List[torch.Tensor]] = None
 
 class MLDataset:
     '''
@@ -65,6 +66,7 @@ class MLDataset:
         val_frac: Optional[float] = 0.2,
         test_frac: Optional[float] = 0.1,
         model_basis: Optional[Dict] = None,
+        model_basis_name: Optional[str] = None,
         fix_p_orbital_order: Optional[bool] = False,
         apply_condon_shortley: Optional[bool] = False,
         aux_overlap_realspace: Optional[Union[List,torch.Tensor]] = None,
@@ -88,6 +90,7 @@ class MLDataset:
         self._shuffle = shuffle
         self._shuffle_seed = shuffle_seed
         self._model_basis = model_basis or qmdata.basis
+        self._model_basis_name = model_basis_name or qmdata.basis_name
         self.fix_p_orbital_order = fix_p_orbital_order
         self._orbital_order_fixed = False
         self.apply_condon_shortley = apply_condon_shortley
@@ -215,6 +218,10 @@ class MLDataset:
     def model_basis(self, basis):
         self._model_basis = basis
         self._compute_model_metadata()
+
+    @property
+    def model_basis_name(self):
+        return self._model_basis_name
 
     def update_splits(self, train_frac=None, val_frac=None, test_frac=None, shuffle=None, shuffle_seed=None):
         '''
@@ -377,13 +384,17 @@ class MLDataset:
 
             elif flat_name == 'atomresolveddensity':
                 if 'eigenvalues' in _item_names:
-                    T, rho, e, _evec = self.compute_atom_resolved_density(return_eigenvalues=True, return_rho=True, return_eigenvectors=True)
+                    T, rho, e, _evec = self.compute_atom_resolved_density(return_eigenvalues=True, return_rho=True, return_eigenvectors=True, use_overlaps=True)
                     items_dict['eigenvalues'] = e
                     items_dict['density_matrix'] = rho
                     items_dict['eigenvectors'] = _evec
                 else:
-                    T = self.compute_atom_resolved_density(return_eigenvalues=False)
+                    T = self.compute_atom_resolved_density(return_eigenvalues=False, use_overlaps=True)
                 items_dict[name] = T
+            
+            elif flat_name == 'dipoles':
+                dipoles = self.compute_dipoles()
+                items_dict['dipoles'] = dipoles
 
             elif flat_name == 'features':
                 assert self.features is not None, "Features not set, call _set_features() first"
@@ -644,6 +655,17 @@ class MLDataset:
             Ms = self.qmdata.overlap_kspace
 
         return compute_eigenvalues(As, Ms, return_eigenvectors)
+    
+    def compute_dipoles(self):
+        assert self.qmdata.is_molecule, "PySCF dipoles are ill-defined for periodic systems"
+        return compute_dipoles(self.qmdata.fock_realspace, 
+                               self.qmdata.overlap_realspace, 
+                               mols=self.qmdata.mols, 
+                               unfix=self.fix_p_orbital_order,
+                               frames=self.structures,
+                               basis=self.qmdata.basis,
+                               basis_name=self.qmdata.basis_name,
+                               requires_grad=False)
 
     # def compute_atom_resolved_density(self, return_rho=False, return_eigenvalues=True, return_eigenvectors=False):
        
@@ -690,13 +712,17 @@ class MLDataset:
 
     #     return tuple(to_return)
 
-    def compute_atom_resolved_density(self, return_rho=False, return_eigenvalues=True, return_eigenvectors=False):
+    def compute_atom_resolved_density(self, return_rho=False, return_eigenvalues=True, return_eigenvectors=False, use_overlaps=False):
         eigenvalues, eigenvectors = self.compute_eigenvalues(return_eigenvectors=True)
         frames = self.qmdata.structures
         basis = self.qmdata.basis
         ncore = self.qmdata.ncore
+        if use_overlaps:
+            S = self.qmdata.overlap_realspace if self.qmdata.is_molecule else self.qmdata.overlap_kspace
+        else:
+            S = None
 
-        ard, rhos = compute_atom_resolved_density(eigenvectors, frames, basis, ncore)
+        ard, rhos = compute_atom_resolved_density(eigenvectors, frames, basis, ncore, S)
 
         to_return = [ard]
         if return_rho:
@@ -754,7 +780,8 @@ class MLDataset:
             'eigenvalues',
             'atomresolveddensity', 
             'density_matrix',
-            'features'
+            'features',
+            'dipoles'
             ]
     
     

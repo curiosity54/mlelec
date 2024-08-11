@@ -36,11 +36,13 @@ def compute_eigenvalues(As, Ms, return_eigenvectors=False):
 
     return (eigenvalues_list, eigenvectors_list) if return_eigenvectors else eigenvalues_list
 
-def compute_atom_resolved_density(eigenvectors, frames, basis, ncore):
+def compute_atom_resolved_density(eigenvectors, frames, basis, ncore, overlaps = None):
     ard = []
     rhos = []
 
-    for C, frame in zip(eigenvectors, frames):
+    use_S = overlaps is not None
+
+    for i, (C, frame) in enumerate(zip(eigenvectors, frames)):
         
         ncore_val = sum(ncore[s] for s in frame.numbers)
         nelec = sum(frame.numbers) - ncore_val
@@ -50,7 +52,11 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore):
         max_dim = np.max(split_idx)
 
         occ = torch.tensor([2 if i < nelec // 2 else 0 for i in range(C.shape[-1])]).to(dtype = C.dtype)
-        rho = torch.einsum('n,...in,...jn->ij...', occ, C, C.conj())
+        if use_S:
+            S = overlaps[i]
+            rho = torch.einsum('n,...in,...jn,...jk->ik...', occ, C, C.conj(), S)           
+        else:
+            rho = torch.einsum('n,...in,...jn->ij...', occ, C, C.conj())
 
         slices = torch.split(rho, split_idx, dim=0)
         blocks = [torch.split(slice_, split_idx, dim=1) for slice_ in slices]
@@ -64,7 +70,65 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore):
                 squared_blocks.append(squared_block)
             blocks_flat = squared_blocks
 
-        ard.append(torch.einsum('i...->...i', torch.stack(blocks_flat).norm(dim=(1,2))))
+        ard.append(torch.einsum('i...->...i', (torch.stack(blocks_flat)**2).sum(dim=(1,2))))
+        # ard.append(torch.einsum('i...->...i', torch.stack(blocks_flat).norm(dim=(1,2))))
         rhos.append(torch.einsum('ij...->...ij', rho))
 
     return ard, rhos
+
+
+import os
+os.environ["PYSCFAD_BACKEND"] = "torch"
+from pyscf.scf import hf
+from pyscfad.ml.scf import hf as hf_ad
+from pyscfad import ops
+from mlelec.data.pyscf_calculator import _instantiate_pyscf_mol
+from mlelec.utils.twocenter_utils import unfix_orbital_order
+
+def compute_dipoles(focks, overlaps, mols = None, frames = None, basis = None, basis_name = None, requires_grad=True, unfix=True):
+    if mols is not None:
+        l = len(mols)
+    else:
+        assert frames is not None and basis_name is not None, "frames and basis_name must be provided when mols is None"
+        l = len(frames)
+    assert (
+        l == len(focks) == len(overlaps)
+    ), "Length of frames/mols, fock_predictions, and overlaps must be the same"
+
+    dipoles = []
+    mols = [_instantiate_pyscf_mol(frame, basis = basis_name) for frame in frames] if mols is None else mols   
+    device = focks[0].device
+    
+    if unfix:
+        assert frames is not None, "frames are required when unfixing orbital order"
+        assert basis is not None, "basis is required when unfixing orbital order" 
+        focks = unfix_orbital_order(focks, frames, basis)
+
+    for H_, S, mol in zip(focks, overlaps, mols):
+
+        if requires_grad:
+            mf = hf_ad.SCF(mol)
+            H = torch.autograd.Variable(H_, requires_grad=True)
+        else:
+            H = H_
+            mf = hf.SCF(mol)
+
+        mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H), M=xitorch.LinearOperator.m(S))
+        if not requires_grad:
+            mo_energy = mo_energy.numpy()
+        mo_occ = mf.get_occ(mo_energy)
+        mo_occ = ops.convert_to_tensor(mo_occ).to(device=device)
+
+        dm1 = mf.make_rdm1(mo_coeff, mo_occ)
+
+        dip = mf.dip_moment(dm=dm1, verbose=0)
+
+        if requires_grad:
+            dipoles.append(dip.to(device=device))
+        else:
+            dipoles.append(torch.from_numpy(dip).to(device=device))
+
+    try:
+        return torch.stack(dipoles)
+    except:
+        return dipoles

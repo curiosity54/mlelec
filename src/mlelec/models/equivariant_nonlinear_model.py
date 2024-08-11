@@ -201,6 +201,7 @@ class EquivariantNonlinearModel(nn.Module):
         self.target_blocks = mldata.model_metadata
         self.frames = mldata.structures
         self.orbitals = mldata.model_basis
+        self.basis_name = mldata.model_basis_name
         self.ncore = compute_ncore(self.orbitals)
         self.is_molecule = mldata.qmdata.is_molecule
         self.apply_norm = apply_norm
