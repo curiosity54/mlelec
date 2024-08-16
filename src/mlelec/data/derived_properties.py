@@ -103,30 +103,30 @@ def compute_dipoles(focks, overlaps, mols = None, frames = None, basis = None, b
         assert frames is not None, "frames are required when unfixing orbital order"
         assert basis is not None, "basis is required when unfixing orbital order" 
         focks = unfix_orbital_order(focks, frames, basis)
-
-    for H_, S, mol in zip(focks, overlaps, mols):
-
-        if requires_grad:
-            mf = hf_ad.SCF(mol)
-            H = torch.autograd.Variable(H_, requires_grad=True)
-        else:
-            H = H_
-            mf = hf.SCF(mol)
-
-        mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H), M=xitorch.LinearOperator.m(S))
+    
+    for H, S, mol in zip(focks, overlaps, mols):
+        mf = hf_ad.SCF(mol)
+        mo_energy, mo_coeff = mf.eig(H, S) 
+        # mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H), M=xitorch.LinearOperator.m(S))
+        # print(requires_grad)
+        # print('mo_energy', mo_energy)   
+        # print('mo_coeff', mo_coeff)
         if not requires_grad:
-            mo_energy = mo_energy.numpy()
+            mo_energy = mo_energy.detach()
+            mo_coeff = mo_coeff.detach()
+        
+        mo_energy = mo_energy.to(device=device) 
+        mo_coeff = mo_coeff.to(device=device) 
         mo_occ = mf.get_occ(mo_energy)
         mo_occ = ops.convert_to_tensor(mo_occ).to(device=device)
 
-        dm1 = mf.make_rdm1(mo_coeff, mo_occ)
-
-        dip = mf.dip_moment(dm=dm1, verbose=0)
+        dm1 = mf.make_rdm1(mo_coeff, mo_occ).to(device=device)
+        dip = mf.dip_moment(dm=dm1, verbose=0).to(device=device)
 
         if requires_grad:
-            dipoles.append(dip.to(device=device))
+            dipoles.append(dip)
         else:
-            dipoles.append(torch.from_numpy(dip).to(device=device))
+            dipoles.append(dip.detach())
 
     try:
         return torch.stack(dipoles)

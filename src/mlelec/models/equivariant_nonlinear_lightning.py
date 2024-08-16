@@ -237,13 +237,15 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 
             features = batch.features
             targets = batch.fock_blocks
+            # predictions = self.forward(features, targets)
             predictions = self.forward(features, self.metadata)
             derived_predictions = self.compute_derived_predictions(predictions, batch, **self.derived_pred_kwargs)
 
             loss = self.compute_weighted_loss(derived_predictions, batch)
 
             # Perform backward pass
-            self.manual_backward(loss)
+            loss.backward()
+            # self.manual_backward(loss)
             return loss
 
         if self.optimizer.lower() == 'lbfgs':
@@ -311,22 +313,27 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         Returns:
             torch.Tensor: The weighted sum of losses.
         """
+        # print(derived_predictions, )
         loss_contributions = []
         if compute_metrics:
             derived_metrics = {}
 
         for k, p in derived_predictions.items():
             t = batch._asdict()[k]
+            # print(t, 't')
             loss_contributions.append(self.loss_fn.compute(p, t))
             if compute_metrics:
                 derived_metrics[f'rmse_{k}'] = RMSE().compute(p, t)
 
         # Convert loss contributions to a tensor
+
+        # print(loss_contributions, 'lc') 
+
         loss_contributions = torch.stack(loss_contributions)
 
         # Compute the weighted sum of losses
         weighted_loss = torch.sum(self.current_weights * loss_contributions)
-
+        
         # Accumulate the losses for the current epoch
         self.current_epoch_losses.append(loss_contributions.detach())
 
@@ -366,7 +373,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
                 atom_resolved_density, _ = compute_atom_resolved_density(eigenvectors, batch_frames, basis, ncore)
                 to_return['atom_resolved_density'] = atom_resolved_density
             elif property.lower() == 'dipoles':
-                dipoles = compute_dipoles(H, S, frames=batch_frames, basis_name=basis_name, basis=basis, unfix=True)
+                dipoles = compute_dipoles(H, S, frames=batch_frames, basis_name=basis_name, basis=basis, unfix=True, requires_grad=True)
                 to_return['dipoles'] = dipoles
             elif property.lower() == 'polarizability' or property.lower() == 'polarisability':
                 raise NotImplementedError('polarizability not implemented yet')
