@@ -16,9 +16,11 @@ class ModelTargets:  # generic class for different targets
         self.target_class = globals()[name]  # find target class from string
         # print(self.target_class)
 
+
     def instantiate(self, tensor: torch.tensor, **kwargs):
         self.target = self.target_class(
             tensor, **kwargs
+
         )  # instantiate target class with required arguments
         return self.target
 
@@ -90,8 +92,10 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def __init__(
         self,
         tensor,
+        overlap,
         orbitals,
         frames,
+        orthogonal,
         model_strategy: str = "coupled",
         device="cpu",
         **kwargs,
@@ -99,16 +103,20 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         # device = kwargs.get("device", "cpu")
         model_strategy = model_strategy.lower()
         assert model_strategy in ["coupled", "uncoupled"]
-
         # FIX orbital order for PYSCF # TODO: make rhis optional if not using pyscf
         tensor = twocenter_utils.fix_orbital_order(
             tensor, frames=frames, orbital=orbitals
         )
+        overs = twocenter_utils.fix_orbital_order(
+            overlap, frames=frames, orbital=orbitals
+        )
+        if orthogonal:
+            tensor = twocenter_utils._lowdin_orthogonalize(tensor, overs)
 
-        super().__init__(tensor, orbitals, frames, device=device)
-        assert torch.allclose(
-            self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
-        ), "Only symmetric Hamiltonians supported for now"
+        super().__init__(tensor, overs, orbitals, frames, orthogonal, device=device)
+        # assert torch.allclose(
+        #     self.tensor, self.tensor.transpose(-1, -2), atol=1e-6
+        # ), "Only symmetric Hamiltonians supported for now"
         self.model_strategy = model_strategy
         self._to_blocks()
         if self.model_strategy == "coupled":
@@ -138,13 +146,12 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         # project onto another basis
         pass
 
-    def _set_blocks(self, blocks):            
-        from metatensor import TensorMap      
-        assert isinstance(blocks, TensorMap)  
-        self.blocks = blocks                  
-        self.block_keys = blocks.keys         
-                                            
-
+    def _set_blocks(self, blocks):
+        from metatensor import TensorMap
+        assert isinstance(blocks, TensorMap)
+        self.blocks = blocks
+        self.block_keys = blocks.keys
+        
 # class Eigenvalues:  # eigval of a second rank tensor
 #    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
 #        self.tensor = tensor

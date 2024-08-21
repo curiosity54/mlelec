@@ -18,12 +18,47 @@ SQRT_2 = 2 ** (0.5)
 ISQRT_2 = 1 / SQRT_2
 
 
+def isqrtm(A: torch.Tensor) -> torch.Tensor:
+    eva, eve = torch.linalg.eigh(A)
+    idx = eva > 1e-15
+    return eve[:, idx] @ torch.diag(eva[idx] ** (-0.5)) @ eve[:, idx].T
+
+def isqrtp(A):
+    eva, eve = torch.linalg.eigh(A)
+    idx = eva > 1e-15
+    return eve[:, idx] @ torch.diag(eva[idx] ** (0.5)) @ eve[:, idx].T
+
+
+def _lowdin_orthogonalize(
+    fock: torch.Tensor, ovlp: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    if isinstance(fock, torch.Tensor):
+        ovlp_i12 = isqrtm(ovlp)
+        return torch.einsum("ij,jk,kl->il", ovlp_i12, fock, ovlp_i12)
+    elif isinstance(fock, np.ndarray) or isinstance(fock, list):
+        ortho_focks = []
+        for i, f in enumerate(fock):
+            ovlp_i12 = isqrtm(ovlp[i])
+            ortho_focks.append(torch.einsum("ij,jk,kl->il", ovlp_i12, f, ovlp_i12))        
+        return ortho_focks
+
+
 def fix_orbital_order(
     matrix: Union[torch.tensor, np.ndarray],
     frames: Union[List, ase.Atoms],
     orbital: dict,
 ):
-    """Fix the l=1 matrix components from [x,y,z] to [-1, 0,1], handles single and multiple frames"""
+    """Fix the l=1 matrix components from [x,y,z] to [-1,0,1], for the 
+    fock and overlap matrices obtained from `PySCF`, handles single and
+    multiple frames.
+
+    Args:
+        matrix (Union[torch.tensor, np.ndarray]): the matrix to fix.
+        frames (Union[List, ase.Atoms]): frames corresponding to the matrix.
+        orbital (dict): dictionary of orbitals for each atom type in the frames.
+
+    Returns:
+        fixed_matrices: Matrix with fixed l=1 components."""
 
     def fix_one_matrix(
         matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict
@@ -45,13 +80,14 @@ def fix_orbital_order(
         return matrix[idx][:, idx]
 
     if isinstance(frames, list):
-        assert len(matrix.shape) == 3  # (nframe, nao, nao)
+        # assert len(matrix.shape) == 3  # (nframe, nao, nao)
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(fix_one_matrix(matrix[i], f, orbital))
         if isinstance(matrix, np.ndarray):
-            return np.asarray(fixed_matrices)
-        return torch.stack(fixed_matrices)
+            return np.asarray(fixed_matrices, dtype = object)
+        return fixed_matrices
+        # return torch.stack(fixed_matrices)
     else:
         return fix_one_matrix(matrix, frames, orbital)
 
@@ -61,7 +97,19 @@ def unfix_orbital_order(
     frames: Union[List, ase.Atoms],
     orbital: dict,
 ):
-    """Fix the l=1 matrix components from [-1,0,1] to [x,y,z], handles single and multiple frames"""
+    """
+    Fix back the l=1 matrix components from [-1,0,1] to [x,y,z], for the
+    fock and overlap matrices to put it back in a `PySCF` calculation if
+    needed.
+    
+    Args:
+        matrix (Union[torch.tensor, np.ndarray]): the matrix to fix.
+        frames (Union[List, ase.Atoms]): frames corresponding to the matrix.
+        orbital (dict): dictionary of orbitals for each atom type in the frames.
+        
+    Returns:
+        fixed_matrices: Matrix with fixed l=1 components.
+    """
 
     def unfix_one_matrix(
         matrix: Union[torch.tensor, np.ndarray], frame: ase.Atoms, orbital: dict
@@ -85,7 +133,7 @@ def unfix_orbital_order(
     if isinstance(frames, list):
         if len(frames) == 1:
             matrix = matrix.reshape(1, *matrix.shape)
-        assert len(matrix.shape) == 3  # (nframe, nao, nao)
+        # assert len(matrix.shape) == 3  # (nframe, nao, nao)
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
@@ -137,12 +185,16 @@ def _orbs_offsets(orbs):
     return orbs_tot, orbs_offset
 
 
-def _atom_blocks_idx(frames, orbs_tot):
+def _atom_blocks_idx(index, frames, orbs_tot):
     """position of the hamiltonian subblocks for each atom in each frame"""
     if isinstance(frames, ase.Atoms):
         frames = [frames]
     atom_blocks_idx = {}
-    for A, f in enumerate(frames):
+    for i, f in enumerate(frames):
+        if isinstance(index, torch.Tensor):
+            A = index[i].item()
+        elif isinstance(index, list):
+            A = index[i]
         ki = 0
         for i, ai in enumerate(f.numbers):
             kj = 0
@@ -441,9 +493,9 @@ def _matrix_to_blocks(
 def _to_matrix(
     blocks: TensorMap,
     frames: List[ase.Atoms],
+    index: torch.tensor,
     orbitals: Dict[int, List[Tuple[int, int, int]]],
     hermitian: bool = True,
-    # vectorized: bool = True,
     NH=False,
     device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
@@ -451,6 +503,7 @@ def _to_matrix(
     return _blocks_to_matrix(
         blocks=blocks,
         frames=frames,
+        index=index,
         orbitals=orbitals,
         hermitian=hermitian,
         device=device,
@@ -461,6 +514,7 @@ def _to_matrix(
 def _blocks_to_matrix(
     blocks: TensorMap,
     frames: Union[ase.Atoms, List[ase.Atoms]],
+    index: torch.tensor,
     orbitals: Dict[int, List[Tuple[int, int, int]]],
     device=None,
     hermitian: bool = True,
@@ -480,18 +534,21 @@ def _blocks_to_matrix(
     orbs_tot, orbs_offset = _orbs_offsets(orbitals)
 
     # indices of the block for each atom
-    atom_blocks_idx = _atom_blocks_idx(frames, orbs_tot)
+    atom_blocks_idx = _atom_blocks_idx(index, frames, orbs_tot)
 
     if device is None:
         device = blocks.block(0).values.device
 
-    matrices = []
-    for f in frames:
+    matrices = {}
+    for f, f_id in zip(frames, index):
         norbs = 0
         for ai in f.numbers:
             norbs += orbs_tot[ai]
         matrix = torch.zeros(norbs, norbs, device=device)
-        matrices.append(matrix)
+        if isinstance(f_id, torch.Tensor):
+            matrices[f_id.item()] = matrix
+        elif isinstance(f_id, int):
+            matrices[f_id] = matrix
 
     # loops over block types
     for idx, block in blocks.items():
@@ -510,7 +567,6 @@ def _blocks_to_matrix(
         ki_offset = orbs_offset[(ai, ni, li)]
         kj_offset = orbs_offset[(aj, nj, lj)]
         same_koff = ki_offset == kj_offset
-
         # loops over samples (structure, i, j)
         for sample, block_data in zip(block.samples, block.values):
             A = sample["structure"]
@@ -560,8 +616,11 @@ def _blocks_to_matrix(
     if len(matrices) == 1:
         return matrices[0]
     else:
-        return torch.stack(matrices)
-
+        try:
+            return torch.stack(matrices)
+        except:
+            dense_mat = [matrices[k] for k in matrices.keys()]
+            return dense_mat
 
 def _fill_NH(
     type: int,
@@ -597,6 +656,8 @@ def _fill_NH(
             matrix[jjslice, iislice] += values
         else:
             matrix[jjslice, iislice] -= values
+
+
 
 def _fill(
     type: int,
@@ -973,7 +1034,6 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
         # nj = key["n_j"]
     except Exception as e:
         print(e)
-
         # block_type, ai, ni, li, aj, nj, lj = key
     inversion_sigma = (-1) ** (li + lj + L)
     if cell_shift is None:
@@ -1155,7 +1215,7 @@ def rotate_matrix(
 
     coupled_blocks = _to_coupled_basis(_to_blocks(matrix, frame, orbitals))
     wd_real = {}
-    for l in set(bc.keys["L"]): # FIXME: what is bc?
+    for l in set(bc.keys["L"]): # FIXME: what is bc = blocks_coupled 
         wd_real[l] = (
             _wigner_d_real(l, *rotation_angles)
             .type(torch.float)
@@ -1181,20 +1241,6 @@ def rotate_matrix(
     return rot_matrix
 
 
-def discard_nonhermiticity(matrices, retain="upper"):
-    """For each T, create a hermitian target with the upper triangle reflected across the diagonal
-    retain = "upper" or "lower"
-    target :str to specify which matrices to discard nonhermiticity from
-    """
-    retain = retain.lower()
-    retain_upper = retain == "upper"
-    fixed = np.zeros_like(matrices)
-    for i, mat in enumerate(matrices):
-        assert (
-            len(mat.shape) == 2
-        ), "matrix to discard non-hermiticity from must be a 2D matrix"
-        fixed[i] = _reflect_hermitian(mat, retain_upper=retain_upper)
-    return fixed
 import scipy
 import ase 
 def compute_eigenval(fock, overlap, eV=False):

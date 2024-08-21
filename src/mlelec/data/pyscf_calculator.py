@@ -304,7 +304,9 @@ def map_mic_translations(
     return unique_Ls
 
 
+
 def translation_vectors_for_kmesh(cell, kmesh, R_vec_rel = None, wrap_around = False, return_rel = False):
+
     from pyscf import lib
 
     """
@@ -314,6 +316,7 @@ def translation_vectors_for_kmesh(cell, kmesh, R_vec_rel = None, wrap_around = F
     identical to the k-point mesh of primitive cell
     """
     latt_vec = cell.lattice_vectors()
+
     if R_vec_rel is None:
         R_rel_a = np.arange(kmesh[0])
         R_rel_b = np.arange(kmesh[1])
@@ -330,6 +333,7 @@ def translation_vectors_for_kmesh(cell, kmesh, R_vec_rel = None, wrap_around = F
                     if R_vec_rel[i][a] >= (kmesh[a] + 1) // 2:
                         R_vec_rel[i][a] -= kmesh[a]
         R_vec_rel = np.array(R_vec_rel)
+
     if return_rel:
         return R_vec_rel
     R_vec_abs = np.dot(R_vec_rel, latt_vec)

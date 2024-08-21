@@ -9,13 +9,23 @@ from mlelec.utils.twocenter_utils import (
     _to_matrix,
 )
 
+
 import metatensor.torch as mts
+import metatensor
 from metatensor.torch import Labels, TensorMap, TensorBlock
 import mlelec.metrics as mlmetrics
 from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
 import warnings
 
+
+
+def drop_zero_blocks(tensor):
+    for i1,b1 in tensor.items():
+        if b1.values.shape[0] == 0:
+            tensor = metatensor.drop_blocks(tensor, Labels(i1.names, i1.values.reshape(1,-1)))
+    return tensor
+            
 
 def norm_over_components(x):
     x = x.swapaxes(1, 2)
@@ -305,6 +315,7 @@ class LinearTargetModel(nn.Module):
         features: TensorMap = None,
         return_type: str = "tensor",
         batch_indices=None,
+        ridge_fit: bool = False,
         **kwargs,
     ):
         return_choice = [
@@ -323,32 +334,58 @@ class LinearTargetModel(nn.Module):
             elif isinstance(loss_fn, str):
                 try:
                     loss_fn = getattr(mlmetrics, loss_fn.capitalize())
-                except:
+                except AttributeError as e:
                     raise NotImplementedError(
                         f"Selected loss function {loss_fn} not implemented"
-                    )
+                    ) from e
 
         pred_blocks = []
         for i, (targ_key, submodel) in enumerate(self.submodels.items()):
-            # try:
-            feat = map_targetkeys_to_featkeys(
-                features, self.dataset.target.block_keys[i]
-            )
-            nsamples, ncomp, nprops = feat.values.shape
-            featval = feat.values
-            # featval = feat.values.reshape(-1, feat.values.shape[-1])
-            # except ValueError:
-            # print("Key not found in features - skipped")
+            if ridge_fit:
+                weights = self.ridge_weights.get(targ_key)
+            else:
+                weights = None
 
-            pred = submodel(featval)
-            pred_block = TensorBlock(
-                values=pred.reshape((nsamples, ncomp, 1)),
-                samples=feat.samples,
-                components=feat.components,
-                properties=self.dummy_property,
-            )
-            pred_blocks.append(pred_block)
-        pred_tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
+            if weights is None:
+                feat = map_targetkeys_to_featkeys(
+                    features, self.dataset.target.block_keys[i]
+                )
+                nsamples, ncomp, nprops = feat.values.shape
+                featval = feat.values
+
+                pred = submodel(featval)
+                pred_block = TensorBlock(
+                    values=pred.reshape((nsamples, ncomp, 1)),
+                    samples=feat.samples,
+                    components=feat.components,
+                    properties=self.dummy_property,
+                )
+                pred_blocks.append(pred_block)
+
+            else:
+                # print("in the weights != None loop now")
+                for w_layer in submodel.children():
+                    assert w_layer.weight.data.shape == weights.shape
+                    w_layer.weight.data = torch.from_numpy(weights).to(self.device)
+    
+                feat = map_targetkeys_to_featkeys(
+                    features, self.dataset.target.block_keys[i]
+                )
+                nsamples, ncomp, nprops = feat.values.shape
+                featval = feat.values
+                # if nsamples != 0:
+                pred = submodel(featval)
+                pred_block = TensorBlock(
+                    values=pred.reshape((nsamples, ncomp, 1)),
+                    samples=feat.samples,
+                    components=feat.components,
+                    properties=self.dummy_property,
+                )
+                pred_blocks.append(pred_block)
+
+        tmap = TensorMap(self.dataset.target.block_keys, pred_blocks)
+        pred_tmap = drop_zero_blocks(tmap)
+        # print(pred_tmap.block(0).values)
         if return_type == "coupled_blocks":
             return pred_tmap
         elif return_type == "uncoupled_blocks":
@@ -357,6 +394,7 @@ class LinearTargetModel(nn.Module):
             )
             return self.reconstructed_uncoupled
         elif return_type == "tensor":
+            # print(pred_tmap.block(block_type=2, species_i=7, n_i=1, l_i=0, species_j=8, n_j=1, l_j=0, L=0).samples.values.shape)
             self.reconstructed_uncoupled = _to_uncoupled_basis(
                 pred_tmap, device=self.device
             )
@@ -370,19 +408,17 @@ class LinearTargetModel(nn.Module):
                         ]
                     )
                 )
-                # print(batch_indices)
-                # fr_idx = [list(i)[0] for i in fr_idx]
-                # print(batch_indices)
                 batch_indices = list(batch_indices[0])
-                # print(batch_indices)
             batch_frames = [self.dataset.target.frames[i] for i in batch_indices]
-            # batch_frames = self.dataset.target.frames
+
             self.reconstructed_tensor = _to_matrix(
                 self.reconstructed_uncoupled,
                 batch_frames,
+                batch_indices,
                 self.dataset.target.orbitals,
                 device=self.device,
             )
+            #print(self.reconstructed_tensor)
             return self.reconstructed_tensor
         elif return_type == "loss":
             loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
@@ -390,7 +426,7 @@ class LinearTargetModel(nn.Module):
             raise NotImplementedError("return_type not implemented")
         return loss
 
-    def fit_ridge_analytical(self, alphas = np.logspace(-15, -1, 40),set_bias=False) -> None:
+    def fit_ridge_analytical(self, cv=3, alphas = np.logspace(-15, -1, 40),set_bias=False) -> None:
         from sklearn.linear_model import RidgeCV
 
         # set_bias will set bias=True for the invariant model
@@ -400,15 +436,15 @@ class LinearTargetModel(nn.Module):
         self.ridges = []
         # kernels = []
         for k, block in self.dataset.target_train.items():
-            blockval = torch.linalg.norm(block.values)
+            #blockval = torch.linalg.norm(block.values)
             bias = False
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
-                sample_names = block.samples.names
+                #sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.dataset.feat_train, k)
 
-                targetnorm = torch.linalg.norm(block.values)
+                #targetnorm = torch.linalg.norm(block.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
                 assert np.all(block.samples.values == feat.samples.values), (
@@ -440,7 +476,7 @@ class LinearTargetModel(nn.Module):
                 # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
                 # ridge = ridge.fit(x,y)
                 ridge = RidgeCV(
-                    alphas=alphas, fit_intercept=bias
+                    alphas=alphas, cv=cv,fit_intercept=bias
                 ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 pred = ridge.predict(x)
@@ -465,10 +501,11 @@ class LinearTargetModel(nn.Module):
                         properties=block.properties,
                     )
                 )
+        self.ridge_weights = {}  # Store weights after fit
+        for idx_key, ridge in self.ridges.items():
+            self.ridge_weights[str(idx_key)] = ridge.coef_
 
-                # block.copy())
-
-        pred_tmap = TensorMap(self.dataset.target.blocks.keys, pred_blocks)
+        pred_tmap = TensorMap(self.dataset.target_train.keys, pred_blocks)
         self.recon_blocks = pred_tmap  # return_matrix=return_matrix)
 
         return self.recon_blocks, self.ridges
