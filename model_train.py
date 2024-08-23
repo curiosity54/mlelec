@@ -118,7 +118,7 @@ def loss_fn_combined(
     weight_polar = 1.0,
     weight_dipole = 1.0):
     
-    pred_dipole, pred_polar, pred_eigval = compute_batch_polarisability(ml_data, pred_focks, indices, mfs)
+    pred_dipole, pred_polar, pred_eigval = compute_batch_polarisability(ml_data, pred_focks, indices, mfs, device=DEVICE)
 
     loss_polar = loss_fn(frames, pred_polar, polar)/var_polar
     loss_dipole = loss_fn(frames, pred_dipole, dipole)/var_dipole
@@ -398,7 +398,7 @@ with io.capture_output() as captured:
         ml_data.feat_train, return_type="tensor", batch_indices=batch_indices
     )
     train_dipole_pred, train_polar_pred, train_eva_pred = compute_batch_polarisability(
-        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
+        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
     )
 
 train_error_pol = mlmetrics.mse_qm7(ml_data.train_frames,
@@ -420,7 +420,7 @@ with io.capture_output() as captured:
         ml_data.feat_test, return_type="tensor", batch_indices=ml_data.test_idx,
     )
     test_dip_pred, test_polar_pred, test_eva_pred = compute_batch_polarisability(
-        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
+        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
     )
 
 error_dip = mlmetrics.mse_qm7(ml_data.test_frames,

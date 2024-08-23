@@ -134,7 +134,7 @@ class LinearTargetModel(nn.Module):
     def __init__(
         self,
         dataset: MLDataset,
-        device="cpu",
+        device=None,
         **kwargs,
     ):
         self.dataset = dataset
