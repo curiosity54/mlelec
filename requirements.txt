@@ -1,4 +1,5 @@
 metatensor=0.1.0 #0.2.0dev11
+metatensor-operations=0.2.2
 rascaline=0.1.0.dev491 
 torch 
 numpy 
