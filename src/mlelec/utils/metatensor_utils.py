@@ -114,6 +114,8 @@ class TensorBuilderPerSamples:
             if isinstance(data, np.ndarray):
                 data = torch.from_numpy(data).to(device=self.device)
             assert isinstance(data, torch.Tensor), "Data must be numpy.ndarray or torch.tensor."
+        if data.device!=self.device:
+            data.to(self.device)
         assert data.shape[-1] == self._properties.values.shape[0], "The property dimension of data does not match."
         
         for i in range(len(self._components)):
@@ -245,3 +247,44 @@ def labels_where(labels, selection, return_idx = False):
     if return_idx:
         return labels, torch.where(mask)[0]
     return labels
+
+def drop_blocks(tensor, keys):
+    device = tensor.keys[0].values.device
+    tensor_keys = tensor.keys.values.tolist()
+    to_remove_indices: List[int] = [tensor_keys.index(i) for i in keys.values.tolist()]
+
+    # Create the new TensorMap
+    new_blocks: List[TensorBlock] = []
+    new_keys_values = []
+    for i in range(len(tensor_keys)):
+        if i in to_remove_indices:
+            continue
+        #print(len(new_blocks), len(new_keys_values))
+        new_keys_values.append(torch.tensor(tensor_keys[i], device= device))
+        block = tensor[i]
+
+        #if copy:
+        #    new_blocks.append(block.copy())
+        #else:
+            # just increase the reference count on everything
+        new_block = TensorBlock(
+            values=block.values,
+            samples=block.samples,
+            components=block.components,
+            properties=block.properties,
+        )
+
+        new_blocks.append(new_block)
+
+    if len(new_keys_values) != 0:
+        new_keys = Labels(tensor.keys.names, torch.vstack(new_keys_values))
+    else:
+        print('Here',tensor_keys[0])
+        new_keys = Labels(
+            names=tensor.keys.names,
+            values=torch.empty_like(
+               torch.tensor(tensor_keys[0]).unsqueeze(0), device = device
+            
+        ))
+    #print(new_keys,len(new_keys),len(new_blocks))
+    return TensorMap(keys=new_keys, blocks=new_blocks)

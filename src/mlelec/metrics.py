@@ -228,6 +228,11 @@ def Eigval_loss(
         return sum([torch.sum((p - t)**2) for p, t in zip(pred, target)])
         # return sum([torch.sum((p - t - (p.mean() - t.mean())) ** 2) for p, t in zip(pred, target)])
 
+def mse_qm7(frames, pred, target):
+    norm_loss = []
+    for i in range(len(pred)):
+        norm_loss.append((torch.linalg.norm(pred[i] - target[i]))**2/(frames[i].get_global_number_of_atoms()**2))
+    return torch.mean(torch.stack(norm_loss))
 
 def Custom_loss():
     pass

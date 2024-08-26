@@ -25,7 +25,7 @@ from mlelec.features.acdc_utils import (
 )
 from mlelec.targets import SingleCenter, TwoCenter
 from mlelec.data.dataset import MLDataset
-
+from collections import defaultdict 
 # TODO: use rascaline.clebsch_gordan.combine_single_center_to_nu when support for multiple centers is added
 
 use_native = True  # True for rascaline
@@ -141,12 +141,18 @@ def pair_features(
     rho0_ij = fix_gij(rho0_ij)
     rho0_ij = acdc_standardize_keys(rho0_ij)
 
+    rho0_ij=rho0_ij.to(device=device)
+
     if return_rho0ij:
         return rho0_ij
 
     blocks = []
-    for key, block in rho0_ij.items():
+    keys = rho0_ij.keys.values.tolist()
+    popkeys=[]
+    for idx_, (key, block) in enumerate(rho0_ij.items()):
         same_species = key['species_center'] == key['species_neighbor']
+#        if same_species == True and key['species_center'] ==8:
+#            print(block.values.shape, block.samples)
         sample_labels = []
         value_indices = []
 
@@ -182,12 +188,13 @@ def pair_features(
                     value_indices.append(mappedidx)
         
 
-        sample_labels = torch.tensor(sample_labels)
+        sample_labels = torch.tensor(sample_labels,dtype=torch.int32, device=device)
         
         # FIXME: hack to sort the block while waiting for the metatensor.torch.sort to be fixed
-
-        torch_block = TensorBlock(
-                values = block.values[value_indices],
+        #print(sample_labels.shape, len(block.samples.names), block.samples.names,key)
+        try: 
+            torch_block = TensorBlock(
+                values = block.values[value_indices].to(device),
                 samples = Labels(
                     block.samples.names + ['sign'],
                     sample_labels,
@@ -195,6 +202,9 @@ def pair_features(
                 components = block.components,
                 properties = block.properties,
             )
+        except Exception as e:
+            #print(e, 'Exception here ?')
+            popkeys.append(idx_)         
         
         blocks.append(mts.sort_block(torch_block))
         
@@ -209,7 +219,9 @@ def pair_features(
         #         properties = block.properties,
         #     ), axes = 'samples')
         # )
-
+    for kpop in popkeys[::-1]:
+        keys.pop(kpop)
+    keys_ = Labels(rho0_ij.keys.names, torch.tensor(keys, device=device, dtype=torch.int32))
     rho0_ij = TensorMap(keys = rho0_ij.keys, blocks = blocks)
     
     if isinstance(order_nu, list):
@@ -282,7 +294,6 @@ def pair_features(
 def twocenter_features_periodic_NH(
     single_center: TensorMap, pair: TensorMap, all_pairs = False, device = 'cpu'
 ) -> TensorMap:
-    from collections import defaultdict
 
     keys = []
     blocks = []
@@ -407,12 +418,14 @@ def twocenter_features_periodic_NH(
     )
 
 
-# retain only positive shifts in the end
 def twocenter_hermitian_features(
     single_center: TensorMap,
     pair: TensorMap,
+    all_pairs=False, 
+    device=None
 ) -> TensorMap:
     # actually special class of features for Hermitian (rank2 tensor)
+    print(device, 'twocenter-her')
     keys = []
     blocks = []
     if single_center is not None:
@@ -432,79 +445,172 @@ def twocenter_hermitian_features(
                 samples_array = b.samples.values
                 samples_array = torch.hstack([samples_array, samples_array[:, -1:]])
             blocks.append(
-                TensorBlock(
-                    samples = Labels(
-                        names = b.samples.names + ["neighbor"],
-                        values = samples_array,
-                    ),
-                    components = b.components,
-                    properties = b.properties,
-                    values = b.values,
-                )
-            )
+            TensorBlock(
+                samples = Labels(
+                    names = b.samples.names + ["neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                    values = torch.nn.functional.pad(samples_array, (0, 3, 0, 0)),
+                ),
+                components = b.components,
+                properties = b.properties,
+                values = b.values,
+            ).to(device = device)
+        )
+            #blocks.append(
+            #    TensorBlock(
+            #        samples = Labels(
+            #            names = b.samples.names + ["neighbor"],
+            #            values = samples_array,
+            #        ),
+            #        components = b.components,
+            #        properties = b.properties,
+            #        values = b.values,
+            #    ).to(device=device)
+            #)
 
     for k, b in pair.items():
         if k["species_center"] == k["species_neighbor"]:
             # off-site, same species
             
-            idx_up = torch.where(b.samples["center"] < b.samples["neighbor"])[0]
-            if len(idx_up) == 0:
-                continue
-            
-            idx_lo = torch.where(b.samples["center"] > b.samples["neighbor"])[0]
+            ######----------------------------OLD--------------------------------------------------
+            #idx_up = torch.where(b.samples["center"] < b.samples["neighbor"])[0]
+            #if len(idx_up) == 0:
+            #    continue
+            #
+            #idx_lo = torch.where(b.samples["center"] > b.samples["neighbor"])[0]
 
             # we need to find the "ji" position that matches each "ij" sample.
             # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
-            smp_up, smp_lo = 0, 0
-            for smp_up in range(len(idx_up)):
-                # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
-                ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
-                for smp_lo in range(smp_up, len(idx_lo)):
-                    ij_lo = b.samples.view(["neighbor", "center"]).values[idx_lo[smp_lo]]
-                    # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
+            #smp_up, smp_lo = 0, 0
+            #for smp_up in range(len(idx_up)):
+            #    # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
+            #    ij = b.samples.view(["center", "neighbor"]).values[idx_up[smp_up]]
+            #    for smp_lo in range(smp_up, len(idx_lo)):
+            #        ij_lo = b.samples.view(["neighbor", "center"]).values[idx_lo[smp_lo]]
+            #        # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
 
-                    if (b.samples["structure"][idx_up[smp_up]] != b.samples["structure"][idx_lo[smp_lo]]):
-                        raise ValueError(f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}")
-                    
-                    if tuple(ij) == tuple(ij_lo):
-                        idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
-                        break
+            #        if (b.samples["structure"][idx_up[smp_up]] != b.samples["structure"][idx_lo[smp_lo]]):
+            #            raise ValueError(f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}")
+            #        
+            #        if tuple(ij) == tuple(ij_lo):
+            #            idx_lo[smp_up], idx_lo[smp_lo] = idx_lo[smp_lo], idx_lo[smp_up]
+            #            break
+            ######----------------------
+            atom_i = b.samples["center"]
+            atom_j = b.samples["neighbor"]
+            Tx = b.samples["cell_shift_a"]
+            Ty = b.samples["cell_shift_b"]
+            Tz = b.samples["cell_shift_c"]
+            cell_is_zero = ((Tx == 0) & (Ty == 0) & (Tz == 0))
+            positive_sign = b.samples["sign"] == 1
+
+            if all_pairs:
+                different_atoms = (atom_i != atom_j)
+                avoid_double_counting_atoms = True
+            else:
+                different_atoms = (atom_i < atom_j)
+                avoid_double_counting_atoms = atom_i <= atom_j
+
+            idx_ij = torch.where(positive_sign & ((cell_is_zero & different_atoms) | (~cell_is_zero & avoid_double_counting_atoms)))[0]
+
+            if len(idx_ij) == 0:
+                continue
+
+            samplecopy = b.samples.values[:, :]
+            block_values = b.values
+
+            f_ijT = {1: defaultdict(lambda: torch.zeros(block_values.shape[1:], device = device)), 
+                     -1: defaultdict(lambda: torch.zeros(block_values.shape[1:], device = device))}
+
+            for idx, AijTs in enumerate(samplecopy.tolist()):
+                A, i, j, Tx, Ty, Tz, sign = AijTs
+
+                bv = block_values[idx]
+                if sign == 1:   
+                    f_ijT[1][A, i, j, Tx, Ty, Tz] += bv
+                    f_ijT[-1][A, i, j, Tx, Ty, Tz] += bv
+                else:
+                    f_ijT[1][A, j, i, Tx, Ty, Tz] += bv
+                    f_ijT[-1][A, j, i, Tx, Ty, Tz] -= bv
+
+            # for I in f_ijT[1]:
+                # print(f_ijT[1][I].norm().item())
+
+            samplelist = samplecopy[idx_ij][:,:-1]
+            values_plus1 = []
+            values_minus1 = []
+            [(values_plus1.append(f_ijT[1][tuple(AijT)]/np.sqrt(2)), values_minus1.append(f_ijT[-1][tuple(AijT)]/np.sqrt(2)))  for AijT in samplelist.tolist()]
+
 
             keys.append(tuple(k) + (1,))
             keys.append(tuple(k) + (-1,))
 
             blocks.append(
                 TensorBlock(
-                    samples = Labels(names = b.samples.names, values = b.samples.values[idx_up]),
-                    components = b.components,
-                    properties = b.properties,
-                    values = (b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
-                )
-            )
-
-            blocks.append(
-                TensorBlock(
                     samples = Labels(
-                        names = b.samples.names,
-                        values = b.samples.values[idx_up],
+                        names = b.samples.names[:-1],
+                        values = samplelist,
                     ),
                     components = b.components,
                     properties = b.properties,
-                    values = (b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+                    values = torch.stack(values_plus1),
                 )
             )
+            blocks.append(
+                TensorBlock(
+                    samples = Labels(
+                        names = b.samples.names[:-1],
+                        values = samplelist,
+                    ),
+                    components = b.components,
+                    properties = b.properties,
+                    values = torch.stack(values_minus1),
+                )
+            )
+            #blocks.append(
+            #    TensorBlock(
+            #        samples = Labels(names = b.samples.names, values = b.samples.values[idx_up]),
+            #        components = b.components,
+            #        properties = b.properties,
+            #        values = (b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
+            #    )
+            #)
 
-        elif k["species_center"] < k["species_neighbor"]:
+            #blocks.append(
+            #    TensorBlock(
+            #        samples = Labels(
+            #            names = b.samples.names,
+            #            values = b.samples.values[idx_up],
+            #        ),
+            #        components = b.components,
+            #        properties = b.properties,
+            #        values = (b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
+            #    )
+            #)
+
+        elif k["species_center"] < k["species_neighbor"]: #TODO: compare against the twocenter_Features_periodic_NH to be sure 
             # off-site, different species
             keys.append(tuple(k) + (2,))
-            blocks.append(b.clone())
+            #blocks.append(b.clone())
+            blocks.append(TensorBlock(
+                values = b.values, 
+                components = b.components,
+                properties = b.properties,
+                samples = Labels(b.samples.names[:-1], b.samples.values[:,:-1])).to(device = device))
 
-    keys = np.pad(keys, ((0, 0), (0, 3)))
     return TensorMap(
-        keys = Labels(names = pair.keys.names + ["block_type"] + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
-                      values = torch.tensor(keys, dtype = torch.int32)),
+        keys = Labels(
+            names = pair.keys.names + ["block_type"],
+            values = torch.tensor(keys),
+        ).to(device = device),
         blocks = blocks,
     )
+
+    #keys = np.pad(keys, ((0, 0), (0, 3)))
+    #return TensorMap(
+    #    keys = Labels(names = pair.keys.names + ["block_type"] + ["cell_shift_a", "cell_shift_b", "cell_shift_c"],
+    #                  values = torch.tensor(keys, dtype = torch.int32)),
+    #    blocks = blocks,
+    #)
 
 def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     hypers = kwargs.get("hypers", None)
@@ -540,7 +646,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
             device=device,
             both_centers=kwargs.get("both_centers", False),
         )
-        features = twocenter_hermitian_features(single, pairs)
+        features = twocenter_hermitian_features(single, pairs, device=device) #twocenter_features_periodic_NH(single, pairs,  device=device)
     else:
         raise ValueError(f"Target type {type(dataset.target)} not supported")
     return features

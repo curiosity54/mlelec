@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 from typing import Dict, List, Optional, Union
 
 import numpy as np
@@ -367,27 +366,6 @@ class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
     pbc_c2_rotated = f"{mlelec_dir}/examples/data/pbc/c2_rotated"
 
 # No model/feature info here
-class MoleculeDataset(Dataset):
-=======
-import copy
-import os
-import warnings
-from collections import defaultdict
-from enum import Enum
-from typing import Dict, List, Optional, Union
-
-import ase
-import hickle
-import metatensor
-import metatensor.operations as operations
-import numpy as np
-import torch
-import torch.utils.data as data
-from torch.utils.data import Dataset
-from ase.io import read
-from metatensor import Labels, TensorMap, TensorBlock, load
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
-from mlelec.targets import ModelTargets
 
 
 class precomputed_molecules(Enum):
@@ -443,37 +421,25 @@ class MoleculeDataset(Dataset):
         MoleculeDataset: A Dataset object for molecular data.
     """
 
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
     def __init__(
         self,
         path: Optional[str] = None,
         mol_name: Union[precomputed_molecules, str] = "water_1000",
         frame_slice: slice = slice(None),
-<<<<<<< HEAD
-        target: List[str] = ["fock"],  # TODO: list of targets
-        use_precomputed: bool = True,
-        aux: Optional[List] = None,
-=======
         target: List[str] = ["fock"], 
         lb_target: Optional[List] = None, 
         use_precomputed: bool = True,
         aux: Optional[List] = None,
         lb_aux: Optional[List] = None,
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         data_path: Optional[str] = None,
         aux_path: Optional[str] = None,
         frames: Optional[List[ase.Atoms]] = None,
         target_data: Optional[dict] = None,
         aux_data: Optional[dict] = None,
-<<<<<<< HEAD
-        device: str = "cpu",
-        orbs: str = "sto-3g",
-=======
         lb_aux_data: Optional[dict] = None,
         device: str = "cpu",
         basis: str = "sto-3g",
         large_basis: str = "def2-tzvp"
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
     ):
         # aux_data could be basis, overlaps for H-learning, Lattice translations etc.
         self.device = device
@@ -483,17 +449,6 @@ class MoleculeDataset(Dataset):
         self.use_precomputed = use_precomputed
         self.frame_slice = frame_slice
         self.target_names = target
-<<<<<<< HEAD
-        self.basis = orbs
-
-        self.target = {t: [] for t in self.target_names}
-        if mol_name in precomputed_molecules.__members__ and self.use_precomputed:
-            self.path = precomputed_molecules[mol_name].value
-        if target_data is None:
-            self.data_path = os.path.join(self.path, orbs)
-            self.aux_path = os.path.join(self.path, orbs)
-            # allow overwrite of data and aux path if necessary
-=======
         self.basis = basis
         if lb_target is not None:
             self.lb_target_names = lb_target
@@ -506,19 +461,15 @@ class MoleculeDataset(Dataset):
         if target_data is None:
             self.data_path = os.path.join(self.path, basis)
             self.aux_path = os.path.join(self.path, basis)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
             if data_path is not None:
                 self.data_path = data_path
             if aux_path is not None:
                 self.aux_path = aux_path
-<<<<<<< HEAD
-=======
         if lb_target is not None:
             self.lb_data_path = os.path.join(self.path, large_basis)
             self.lb_aux_path = os.path.join(self.path, large_basis)
             # allow overwrite of data and aux path if necessary
             
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
         if frames is None:
             if self.path is None and self.data_path is not None:
@@ -533,15 +484,10 @@ class MoleculeDataset(Dataset):
         self.load_structures(frames=frames)
         self.pbc = False
         for f in self.structures:
-<<<<<<< HEAD
             # print(f.pbc, f.cell)
             if f.pbc.any():
                 if not f.cell.any():
                     # "PBC found but no cell vectors found"
-=======
-            if f.pbc.any():
-                if not f.cell.any():
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
                     f.pbc = False
                 self.pbc = True
             if self.pbc:
@@ -549,14 +495,6 @@ class MoleculeDataset(Dataset):
                     f.cell = [100, 100, 100]  # TODO this better
 
         self.load_target(target_data=target_data)
-<<<<<<< HEAD
-        self.aux_data_names = aux
-        if "fock" in target:
-            if self.aux_data_names is None:
-                self.aux_data_names = ["overlap", "orbitals"]
-            elif "overlap" not in self.aux_data_names:
-                self.aux_data_names.append("overlap")
-=======
         if lb_target is not None:
             self.load_lb_target()
         self.aux_data_names = aux
@@ -571,17 +509,13 @@ class MoleculeDataset(Dataset):
                 self.aux_data_names.append("overlap")
             elif lb_aux_data is not None and "overlap" not in self.lb_aux_data_names:
                 self.lb_aux_data_names.append("overlap")
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
         if self.aux_data_names is not None:
             self.aux_data = {t: [] for t in self.aux_data_names}
             self.load_aux_data(aux_data=aux_data)
-<<<<<<< HEAD
-=======
         if lb_aux is not None and self.lb_aux_data_names is not None:
             self.lb_aux_data = {t: [] for t in self.lb_aux_data_names}
             self.load_lb_aux_data(lb_aux_data=lb_aux_data)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
     def load_structures(self, frames: Optional[List[ase.Atoms]] = None):
         if frames is not None:
@@ -599,39 +533,34 @@ class MoleculeDataset(Dataset):
             )
 
     def load_target(self, target_data: Optional[dict] = None):
-<<<<<<< HEAD
         # TODO: ensure that all keys of self.target names are filled even if they are not provided in target_data
-=======
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         if target_data is not None:
             for t in self.target_names:
                 self.target[t] = target_data[t].to(device=self.device)
 
         else:
-<<<<<<< HEAD
-            try:
-                for t in self.target_names:
-                    print(self.data_path + "/{}.hickle".format(t))
-                    self.target[t] = hickle.load(
-                        self.data_path + "/{}.hickle".format(t)
-                    )[self.frame_slice].to(device=self.device)
-                    # os.join(self.aux_path, "{}.hickle".format(t))
-            except Exception as e:
-                print(e)
-                print("Generating data")
-                from mlelec.data.pyscf_calculator import calculator
+            #try:
+            #    for t in self.target_names:
+            #        print(self.data_path + "/{}.hickle".format(t))
+            #        self.target[t] = hickle.load(
+            #            self.data_path + "/{}.hickle".format(t)
+            #        )[self.frame_slice].to(device=self.device)
+            #        # os.join(self.aux_path, "{}.hickle".format(t))
+            #except Exception as e:
+            #    print(e)
+            #    print("Generating data")
+            #    from mlelec.data.pyscf_calculator import calculator
 
-                calc = calculator(
-                    path=self.path,
-                    mol_name=self.mol_name,
-                    frame_slice=":",
-                    target=self.target_names,
-                )
-                calc.calculate(basis_set=self.basis, verbose=1)
-                calc.save_results()
-                # raise FileNotFoundError("Required target not found at the given path")
-                # TODO: generate data instead?
-=======
+            #    calc = calculator(
+            #        path=self.path,
+            #        mol_name=self.mol_name,
+            #        frame_slice=":",
+            #        target=self.target_names,
+            #    )
+            #    calc.calculate(basis_set=self.basis, verbose=1)
+            #    calc.save_results()
+            #    # raise FileNotFoundError("Required target not found at the given path")
+            #    # TODO: generate data instead?
             for t in self.target_names:
                 file_path = os.path.join(self.data_path, f"{t}.hickle")
                 print(file_path)
@@ -694,19 +623,14 @@ class MoleculeDataset(Dataset):
                 assert all(isinstance(x, torch.Tensor) for x in self.lb_target[t]), \
                     f"Not all items in lb_target '{t}' are tensors after conversion."
 
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
     def load_aux_data(self, aux_data: Optional[dict] = None):
         if aux_data is not None:
             for t in self.aux_data_names:
                 if torch.is_tensor(aux_data[t]):
-<<<<<<< HEAD
                     self.aux_data[t] = aux_data[t][self.frame_slice].to(
                         device=self.device
                     )
-=======
-                    self.aux_data[t] = aux_data[t][self.frame_slice]
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
                 else:
                     self.aux_data[t] = aux_data[t]
 
@@ -716,18 +640,13 @@ class MoleculeDataset(Dataset):
                     self.aux_data[t] = hickle.load(
                         self.aux_path + "/{}.hickle".format(t)
                     )
-<<<<<<< HEAD
-=======
                     if isinstance(self.aux_data[t], np.ndarray):
                         self.aux_data[t] = self.aux_data[t].tolist()
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
                     # os.join(self.aux_path, "{}.hickle".format(t))
                     if torch.is_tensor(self.aux_data[t]):
                         self.aux_data[t] = self.aux_data[t][self.frame_slice].to(
                             device=self.device
                         )
-<<<<<<< HEAD
-=======
                     elif isinstance(self.aux_data[t], list):
                         self.aux_data[t] = self.aux_data[t][self.frame_slice]
                         for i in range(len(self.aux_data[t])):
@@ -736,7 +655,6 @@ class MoleculeDataset(Dataset):
                             elif isinstance(self.aux_data[t][i], torch.Tensor):
                                 self.aux_data[t][i] = self.aux_data[t][i].to(device = self.device)
                             # assert isinstance(self.aux_data[t][i], torch.Tensor)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
             except Exception as e:
                 print(e)
                 # raise FileNotFoundError("Auxillary data not found at the given path")
@@ -748,9 +666,7 @@ class MoleculeDataset(Dataset):
                 ),
                 axis=1,
             )
-<<<<<<< HEAD
             # This, for each frame is the Trace(overlap @ Density matrix) = number of electrons
-=======
 
     def load_lb_aux_data(self, lb_aux_data: Optional[dict] = None):
         if lb_aux_data is not None:
@@ -779,7 +695,6 @@ class MoleculeDataset(Dataset):
                         elif isinstance(self.lb_aux_data[t][i], torch.Tensor):
                             self.lb_aux_data[t][i] = self.lb_aux_data[t][i].to(device = self.device)
                         # assert isinstance(self.lb_aux_data[t][i], torch.Tensor)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
     def shuffle(self, indices: torch.tensor):
         self.structures = [self.structures[i] for i in indices]
@@ -791,17 +706,14 @@ class MoleculeDataset(Dataset):
             except:
                 warnings.warn("Aux data {} skipped shuffling ".format(t))
                 continue
-<<<<<<< HEAD
     
     def __len__(self):
         return len(self.structures)
 
+
+
 class MLDataset(Dataset):
     # TODO: add compatibility with PeriodicDataset
-=======
-
-
-class MLDataset(Dataset):
     """
     Dataset class for machine learning data.
 
@@ -826,7 +738,6 @@ class MLDataset(Dataset):
 
     """
 
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
     def __init__(
         self,
         molecule_data: MoleculeDataset,
@@ -835,10 +746,7 @@ class MLDataset(Dataset):
         features: Optional[TensorMap] = None,
         shuffle: bool = False,
         shuffle_seed: Optional[int] = None,
-<<<<<<< HEAD
-=======
         orthogonal: bool = True,
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         **kwargs,
     ):
         super().__init__()
@@ -850,20 +758,6 @@ class MLDataset(Dataset):
         else:
             self.indices = self.indices = torch.arange(self.nstructs)
         self.molecule_data = copy.deepcopy(molecule_data)
-<<<<<<< HEAD
-        # self.molecule_data.shuffle(self.indices)
-        # self.molecule_data = molecule_data
-
-        self.structures = self.molecule_data.structures
-        self.target = self.molecule_data.target
-        # print(self.target, next(iter(self.target.values())))
-        # sets the first target as the primary target - # FIXME
-        self.target_class = ModelTargets(self.molecule_data.target_names[0])
-        self.target = self.target_class.instantiate(
-            next(iter(self.molecule_data.target.values())),
-            frames=self.structures,
-            orbitals=self.molecule_data.aux_data.get("orbitals", None),
-=======
 
         self.structures = self.molecule_data.structures
         self.target = self.molecule_data.target
@@ -875,25 +769,16 @@ class MLDataset(Dataset):
             frames=self.structures,
             orbitals=self.molecule_data.aux_data.get("orbitals", None),
             orthogonal=orthogonal,
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
             device=device,
             **kwargs,
         )
-
-<<<<<<< HEAD
-=======
-        self.molecule_data.target_blocks = copy.deepcopy(self.target.blocks)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
+        self.molecule_data.target_blocks = self.target.blocks.copy()
         self.natoms_list = [len(frame) for frame in self.structures]
         self.species = set([tuple(f.numbers) for f in self.structures])
 
         self.aux_data = self.molecule_data.aux_data
         self.rng = None
-<<<<<<< HEAD
         self.model_type = model_type  # flag to know if we are using acdc features or want to cycle hrough positons
-=======
-        self.model_type = model_type
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         if self.model_type == "acdc":
             self.features = features
 
@@ -906,7 +791,6 @@ class MLDataset(Dataset):
         else:
             self.rng = torch.Generator().manual_seed(random_seed)
 
-<<<<<<< HEAD
         self.indices = torch.randperm(
             self.nstructs, generator=self.rng
         )  # .to(self.device)
@@ -929,21 +813,9 @@ class MLDataset(Dataset):
             axis="samples",
             labels=Labels(
                 names=["structure"], values = torch.tensor(indices).reshape(-1, 1)
-=======
-        self.indices = torch.randperm(self.nstructs, generator=self.rng)
+            )
+         )
 
-    def _get_subset(self, y: TensorMap, indices: torch.tensor):
-        indices = indices.cpu().numpy()
-        assert isinstance(y, TensorMap)
-
-        return operations.slice(
-            y,
-            axis="samples",
-            labels=Labels(
-                names=["structure"], values=np.asarray(indices).reshape(-1, 1)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
-            ),
-        )
 
     def _split_indices(
         self,
@@ -951,13 +823,9 @@ class MLDataset(Dataset):
         val_frac: float = None,
         test_frac: Optional[float] = None,
     ):
-<<<<<<< HEAD
         # TODO: handle this smarter
 
         # overwrite self train/val/test indices
-=======
-
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         if train_frac is not None:
             self.train_frac = train_frac
         if val_frac is not None:
@@ -982,7 +850,6 @@ class MLDataset(Dataset):
                 self.test_frac = 1 - (self.train_frac + self.val_frac)
                 assert self.test_frac > 0
 
-<<<<<<< HEAD
         # self.train_idx = torch.tensor(list(range(int(train_frac * self.nstructs))))
         # self.val_idx = torch.tensor(list(
         #     range(int(train_frac * self.nstructs), int((train_frac + val_frac) * self.nstructs))
@@ -993,26 +860,16 @@ class MLDataset(Dataset):
         #     > 0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
         # ), "Split indices not generated properly"
 
-=======
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         self.train_idx = self.indices[: int(self.train_frac * self.nstructs)].sort()[0]
         self.val_idx = self.indices[
             int(self.train_frac * self.nstructs) : int(
                 (self.train_frac + self.val_frac) * self.nstructs
             )
         ].sort()[0]
-<<<<<<< HEAD
         self.test_idx = self.indices[int((self.train_frac + self.val_frac) * self.nstructs) :].sort()[0]
         if self.test_frac > 0:
             assert (len(self.test_idx)> 0.0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
                     ), "Split indices not generated properly"
-=======
-        self.test_idx = self.indices[
-            int((self.train_frac + self.val_frac) * self.nstructs) :
-        ].sort()[0]
-        if self.test_frac > 0:
-            assert len(self.test_idx) > 0, "Split indices not generated properly"
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
@@ -1023,6 +880,10 @@ class MLDataset(Dataset):
 
     def _set_features(self, features: TensorMap):
         self.features = features
+        ###### DROP cell shifts from samples ######## FIXME 
+        self.features = mts.remove_dimension(self.features, axis='samples', name='cell_shift_a')
+        self.features = mts.remove_dimension(self.features, axis='samples', name='cell_shift_b')
+        self.features = mts.remove_dimension(self.features, axis='samples', name='cell_shift_c')
         if not hasattr(self, "train_idx"):
             warnings.warn("No train/val/test split found, deafult split used")
             self._split_indices(train_frac=0.7, val_frac=0.2, test_frac=0.1)
@@ -1030,11 +891,6 @@ class MLDataset(Dataset):
         self.feat_train = self._get_subset(self.features, self.train_idx)
         self.feat_val = self._get_subset(self.features, self.val_idx)
         self.feat_test = self._get_subset(self.features, self.test_idx)
-<<<<<<< HEAD
-
-    def _set_model_return(self, model_return: str = "blocks"):
-        ## Helper function to set output in __get_item__ for model training
-=======
         self._match_feature_and_target_samples()
         
     def _load_features(self, filename: str):
@@ -1049,7 +905,7 @@ class MLDataset(Dataset):
         for k, target_block in self.molecule_data.target_blocks.items():
             feat_block = map_targetkeys_to_featkeys(self.features, k)
             intersection, _, idx = feat_block.samples.intersection_and_mapping(target_block.samples)
-            idx = np.where(idx != -1)
+            idx = torch.where(idx != -1)
 
             new_blocks.append(
                 TensorBlock(values = target_block.values[idx],
@@ -1065,7 +921,6 @@ class MLDataset(Dataset):
 
     def _set_model_return(self, model_return: str = "blocks"):
         # Helper function to set output in __get_item__ for model training
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         assert model_return in [
             "blocks",
             "tensor",
@@ -1076,22 +931,17 @@ class MLDataset(Dataset):
         return self.nstructs
 
     def __getitem__(self, idx):
-<<<<<<< HEAD
-        # if torch.is_tensor(idx):
-        #     # idx = [i.item() for i in idx]
-        #     idx = idx.tolist()
-=======
-        if torch.is_tensor(idx):
-            idx = idx.tolist()
+        #print(torch.is_tensor(idx))
+        if not torch.is_tensor(idx):
+            idx = torch.tensor(idx)
+
         frames = [self.structures[i] for i in idx]
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
         if not self.model_type == "acdc":
             return self.structures[idx], self.target.tensor[idx]
         else:
             assert (
                 self.features is not None
             ), "Features not set, call _set_features() first"
-<<<<<<< HEAD
             x = mts.slice(
                 self.features,
                 axis="samples",
@@ -1105,47 +955,20 @@ class MLDataset(Dataset):
                     axis="samples",
                     labels = Labels(
                         names=["structure"], values = idx.reshape(-1, 1)
-=======
-            x = operations.slice(
-                self.features,
-                axis="samples",
-                labels=Labels(
-                    names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
-                ),
-            )
-            if self.model_return == "blocks":
-                y = operations.slice(
-                    self.target.blocks,
-                    axis="samples",
-                    labels=Labels(
-                        names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
                     ),
                 )
             else:
                 idx = [i.item() for i in idx]
-<<<<<<< HEAD
-                y = self.target.tensor[idx]
-            # x = metatensor.to(x, "torch")
-            # y = metatensor.to(y, "torch")
-
-            return x, y, idx
-=======
                 y = [self.target.tensor[i] for i in idx]
 
             return x, y, idx, frames
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
     def collate_fn(self, batch):
         x = batch[0][0]
         y = batch[0][1]
         idx = batch[0][2]
-<<<<<<< HEAD
-        return {"input": x, "output": y, "idx": idx}
-=======
         frames = batch[0][3]
         return {"input": x, "output": y, "idx": idx, "frames": frames}
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863
 
 
 def get_dataloader(
@@ -1213,7 +1036,6 @@ def get_dataloader(
         return test_loader
 
 
-<<<<<<< HEAD
 from mlelec.data.pyscf_calculator import kpoint_to_translations, translations_to_kpoint
 from mlelec.data.pyscf_calculator import (
     get_scell_phase,
@@ -1617,461 +1439,3 @@ def split_by_Aij_mts(tensor, features = None):
             tmaps_target[Aij] = TensorMap(tmap_keys, target_blocks[Aij])
         
         return tmaps_feature, tmaps_target
-=======
-from mlelec.data.pyscf_calculator import (
-    _map_transidx_to_relative_translation,
-    get_scell_phase,
-    kpoint_to_translations,
-    map_mic_translations,
-    map_supercell_to_relativetrans,
-    translation_vectors_for_kmesh,
-    translations_to_kpoint,
-)
-
-
-class PeriodicDataset(Dataset):
-    # TODO: make format compatible with MolecularDataset
-    def __init__(
-        self,
-        frames,
-        frame_slice: slice = slice(None),
-        kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
-        matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
-        matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
-        target: List[str] = ["real_translation"],
-        aux: List[str] = ["real_overlap"],
-        use_precomputed: bool = True,
-        device="cuda",
-        orbs: str = "sto-3g",
-        desired_shifts: List = None,
-    ):
-        self.structures = frames
-        self.frame_slice = frame_slice
-        self.nstructs = len(frames)
-        self.kmesh = kgrid
-        self.kgrid_is_list = False
-        if isinstance(kgrid[0], list):
-            self.kgrid_is_list = True
-            assert (
-                len(self.kmesh) == self.nstructs
-            ), "If kgrid is a list, it must have the same length as the number of structures"
-        else:
-            self.kmesh = [
-                kgrid for _ in range(self.nstructs)
-            ]  # currently easiest to do
-
-        self.device = device
-        self.basis = orbs
-        self.use_precomputed = use_precomputed
-        if not use_precomputed:
-            raise NotImplementedError("You must use precomputed data for now.")
-
-        self.target_names = target
-        self.aux_names = aux
-        self.desired_shifts_sup = (
-            []
-        )  # track the negative counterparts of desired_shifts as well
-        self.cells = []
-        self.phase_matrices = []
-        self.supercells = []
-        self.all_relative_shifts = []  # allowed shifts of kmesh
-
-        for ifr, structure in enumerate(self.structures):
-            # if self.kgrid_is_list:
-            # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
-            # else:
-            cell, scell, phase = get_scell_phase(structure, self.kmesh[ifr])
-
-            self.cells.append(cell)
-            self.supercells.append(scell)
-            self.phase_matrices.append(phase)
-            self.all_relative_shifts.append(
-                translation_vectors_for_kmesh(
-                    cell, self.kmesh[ifr], return_rel=True
-                ).tolist()
-            )
-        self.supercell_matrices = None
-        if desired_shifts is not None:
-            self.desired_shifts = desired_shifts
-        else:
-            self.desired_shifts = np.unique(np.vstack(self.all_relative_shifts), axis=0)
-
-        for s in self.desired_shifts:
-            self.desired_shifts_sup.append(s)  # make this tuple(s)?
-            self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
-        self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
-        # FIXME - works only for a uniform kgrid across structures
-        # ----MIC---- (Uncomment) TODO
-        # self.desired_shifts_sup = map_mic_translations(
-        #     self.desired_shifts_sup, self.kmesh[0]
-        # )  ##<<<<<<
-
-        # self.desired_shifts = []
-        # for L in self.desired_shifts_sup:
-        #     lL = list(L)
-        #     lmL = list(-1 * np.array(lL))
-        #     if not (lL in self.desired_shifts):
-        #         if not (lmL in self.desired_shifts):
-        #             self.desired_shifts.append(lL)
-
-        # ------------------------------
-        if matrices_translation is not None:
-            self.matrices_translation = {
-                tuple(t): [] for t in list(self.desired_shifts_sup)
-            }
-            self.weights_translation = (
-                []
-            )  # {tuple(t): [] for t in list(self.desired_shifts)}
-            self.phase_diff_translation = (
-                []
-            )  # {tuple(t): [] for t in list(self.desired_shifts)}
-
-            self.matrices_translation = defaultdict(list)  # {}
-            if not isinstance(matrices_translation[0], dict):
-                # assume we are given the supercell matrices
-                self.supercell_matrices = matrices_translation.copy()
-                # convert to dict of translations
-                matrices_translation = []
-                for ifr in range(self.nstructs):
-                    # TODO: we'd need to track frames in which desired shifts not found
-                    (
-                        translated_mat_dict,
-                        weight,
-                        phase_diff,
-                    ) = map_supercell_to_relativetrans(
-                        self.supercell_matrices[ifr],
-                        phase=self.phase_matrices[ifr],
-                        cell=self.cells[ifr],
-                        kmesh=self.kmesh[ifr],
-                    )
-                    matrices_translation.append(translated_mat_dict)
-                    self.weights_translation.append(weight)
-                    self.phase_diff_translation.append(phase_diff)
-
-                    # for i, t in enumerate(self.desired_shifts_sup):
-                    #     # for ifr in range(self.nstructs):
-                    #     # idx_t = self.all_relative_shifts[ifr].index(list(t))
-                    #     # print(tuple(t), idx_t, self.matrices_translation.keys())#matrices_translation[ifr][idx_t])
-                    #     self.matrices_translation[tuple(t)].append(
-                    #         translated_mat_dict[tuple(t)]
-                    #     )
-                self.matrices_translation = {
-                    key: np.asarray(
-                        [dictionary[key] for dictionary in matrices_translation]
-                    )
-                    for key in matrices_translation[0].keys()
-                }
-                # TODO: tracks the keys from the first frame for translations - need to change when working with different kgrids
-            else:
-                # assume we are given dicts with translatiojns as keys
-                self.matrices_translation = matrices_translation  # NOT TESTED FIXME
-            # self.matrices_kpoint = self.get_kpoint_target()
-        else:
-            assert (
-                matrices_kpoint is not None
-            ), "Must provide either matrices_kpoint or matrices_translation"
-
-        if matrices_kpoint is not None:
-            self.matrices_kpoint = matrices_kpoint
-            matrices_translation = self.get_translation_target(matrices_kpoint)
-            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-            self.matrices_translation = {
-                key: [] for key in set().union(*matrices_translation)
-            }
-            [
-                self.matrices_translation[k].append(matrices_translation[ifr][k])
-                for ifr in range(self.nstructs)
-                for k in matrices_translation[ifr].keys()
-            ]
-            for k in self.matrices_translation.keys():
-                self.matrices_translation[k] = np.stack(
-                    self.matrices_translation[k]
-                ).real
-
-        self.target = {t: [] for t in self.target_names}
-        for t in self.target_names:
-            # keep only desired shifts
-            if t == "real_translation":
-                self.target[t] = self.matrices_translation
-            elif t == "kpoint":
-                self.target[t] = self.matrices_kpoint
-
-    def get_kpoint_target(self):
-        kmatrix = []
-        for ifr in range(self.nstructs):
-            kmatrix.append(
-                translations_to_kpoint(
-                    self.matrices_translation[ifr],
-                    self.phase_diff_translation[ifr],
-                    self.weights_translation[ifr],
-                )
-            )
-        return kmatrix
-
-    def get_translation_target(self, matrices_kpoint):
-        target = []
-        self.translation_idx_map = []
-        if not hasattr(self, "phase_diff_translation"):
-            self.phase_diff_translation = []
-            for ifr in range(self.nstructs):
-                assert (
-                    matrices_kpoint[ifr].shape[0] == self.phase_matrices[ifr].shape[0]
-                ), "Number of kpoints and phase matrices must be the same"
-                Nk = self.phase_matrices[ifr].shape[0]
-                nao = matrices_kpoint[ifr].shape[-1]
-                idx_map = _map_transidx_to_relative_translation(
-                    np.zeros((Nk, nao, Nk, nao)),
-                    R_rel=np.asarray(self.all_relative_shifts[ifr]),
-                )
-                # print(self.all_relative_shifts[ifr], idx_map)
-                self.translation_idx_map.append(idx_map)
-                frame_phase = {}
-                for i, (key, val) in enumerate(idx_map.items()):
-                    M, N = val[0][1], val[0][2]
-                    frame_phase[key] = np.array(
-                        self.phase_matrices[ifr][N] / self.phase_matrices[ifr][M]
-                    )
-                self.phase_diff_translation.append(frame_phase)
-
-        for ifr in range(self.nstructs):
-            sc = kpoint_to_translations(
-                matrices_kpoint[ifr],
-                self.phase_diff_translation[ifr],
-                idx_map=self.translation_idx_map[ifr],
-                return_supercell=False,
-            )
-            # convert this to dict over trnaslations and to gamma point if required
-            subset_translations = {tuple(t): sc[tuple(t)] for t in self.desired_shifts}
-            target.append(subset_translations)
-        return target
-
-    def _run_tests(self):
-        self.check_translation_hermiticity()
-        self.check_fourier()
-        self.check_block_()
-
-    def check_translation_hermiticity(self):
-        """Check H(T) = H(-T)^T"""
-        pass
-        # for i, structure in enumerate(self.structures):
-        #     check_translation_hermiticity(structure, self.matrices_translation[i])
-
-    def check_fourier(self):
-        pass
-
-    def check_block_(self):
-        # mat -> blocks _> couple -> uncouple -> mat
-        pass
-
-    def discard_nonhermiticity(self, target="", retain="upper"):
-        """For each T, create a hermitian target with the upper triangle reflected across the diagonal
-        retain = "upper" or "lower"
-        target :str to specify which matrices to discard nonhermiticity from
-        """
-        retain = retain.lower()
-        retain_upper = retain == "upper"
-        from mlelec.utils.symmetry import _reflect_hermitian
-
-        for i, mat in enumerate(self.targets[target]):
-            assert (
-                len(mat.shape) == 2
-            ), "matrix to discard non-hermiticity from must be a 2D matrix"
-
-            self.target[target] = _reflect_hermitian(mat, retain_upper=retain_upper)
-
-    def __len__(self):
-        return self.nstructs
-
-
-class PySCFPeriodicDataset(Dataset):
-    # TODO: make format compatible with MolecularDataset
-    def __init__(
-        self,
-        frames,
-        frame_slice: slice = slice(None),
-        kgrid: Union[List[int], List[List[int]]] = [1, 1, 1],
-        matrices_kpoint: Union[torch.tensor, np.ndarray] = None,
-        matrices_translation: Union[Dict, torch.tensor, np.ndarray] = None,
-        overlap_kpoint: Union[torch.tensor, np.ndarray] = None,
-        overlap_translation: Union[Dict, torch.tensor, np.ndarray] = None,
-        target: List[str] = ["real_translation"],
-        aux: List[str] = ["real_overlap"],
-        use_precomputed: bool = True,
-        device="cuda",
-        orbs_name: str = "sto-3g",
-        orbs: List = None,
-        desired_shifts: List = None,
-        nao: int = None,
-    ):
-        self.structures = frames
-        self.frame_slice = frame_slice
-        self.nstructs = len(frames)
-        self.kmesh = kgrid
-        self.kgrid_is_list = False
-        if isinstance(kgrid[0], list):
-            self.kgrid_is_list = True
-            assert (
-                len(self.kmesh) == self.nstructs
-            ), "If kgrid is a list, it must have the same length as the number of structures"
-        else:
-            self.kmesh = [
-                kgrid for _ in range(self.nstructs)
-            ]  # currently easiest to do
-
-        self.device = device
-        self.basis = orbs  # actual orbitals
-        self.basis_name = orbs_name
-        self.use_precomputed = use_precomputed
-        if not use_precomputed:
-            raise NotImplementedError("You must use precomputed data for now.")
-
-        self.target_names = target
-        self.aux_names = aux
-        self.desired_shifts_sup = (
-            []
-        )  # track the negative counterparts of desired_shifts as well
-        self.cells = []
-        self.phase_matrices = []
-        self.supercells = []
-        self.all_relative_shifts = []  # allowed shifts of kmesh
-
-        for ifr, structure in enumerate(self.structures):
-            # if self.kgrid_is_list:
-            # cell, scell, phase = get_scell_phase(structure, self.kmesh[i])
-            # else:
-            cell, scell, phase = get_scell_phase(
-                structure, self.kmesh[ifr], basis=self.basis_name
-            )
-            self.cells.append(cell)
-
-            self.phase_matrices.append(torch.from_numpy(phase).to(self.device))
-            self.all_relative_shifts.append(
-                translation_vectors_for_kmesh(
-                    cell, self.kmesh[ifr], return_rel=True
-                ).tolist()
-            )
-
-        if desired_shifts is not None:
-            self.desired_shifts = desired_shifts
-        else:
-
-            self.desired_shifts = np.unique(np.vstack(self.all_relative_shifts), axis=0)
-
-        for s in self.desired_shifts:
-            self.desired_shifts_sup.append(s)  # make this tuple(s)?
-            self.desired_shifts_sup.append([-s[0], -s[1], -s[2]])
-        self.desired_shifts_sup = np.unique(self.desired_shifts_sup, axis=0)
-
-        assert matrices_kpoint is not None
-        self.matrices_kpoint = torch.from_numpy(matrices_kpoint).to(self.device)
-
-        matrices_translation = self.kpts_to_translation_target(
-            self.matrices_kpoint, nao
-        )
-        ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-        self.matrices_translation = {key: [] for key in matrices_translation[0]}
-        [
-            self.matrices_translation[tuple(k)].append(
-                matrices_translation[ifr][tuple(k)]
-            )
-            for ifr in range(self.nstructs)
-            for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
-        ]
-
-        for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
-            self.matrices_translation[tuple(k)] = torch.stack(
-                self.matrices_translation[tuple(k)]
-            )
-        # DO the same for the overlap
-        if overlap_kpoint is not None:
-            self.overlap_kpoint = torch.from_numpy(overlap_kpoint).to(self.device)
-            overlap_translation = self.kpts_to_translation_target(
-                self.overlap_kpoint, nao
-            )
-            ## FIXME : this will not work when we use a nonunifrom kgrid <<<<<<<<
-            self.overlap_translation = {key: [] for key in overlap_translation[0]}
-            [
-                self.overlap_translation[tuple(k)].append(
-                    overlap_translation[ifr][tuple(k)]
-                )
-                for ifr in range(self.nstructs)
-                for k in self.desired_shifts  # matrices_translation[ifr].keys() TOCHECK
-            ]
-
-            for k in self.desired_shifts:  # self.matrices_translation.keys(): TOCHECK
-                self.overlap_translation[tuple(k)] = torch.stack(
-                    self.overlap_translation[tuple(k)]
-                )
-
-        self.target = {t: [] for t in self.target_names}
-        for t in self.target_names:
-            # keep only desired shifts
-            if t == "real_translation":
-                self.target[t] = self.matrices_translation
-            elif t == "kpoint":
-                self.target[t] = self.matrices_kpoint
-
-    def get_kpoint_target(self, translated_matrices):
-        """function to convert translated matrices to kpoint target with the phase matrices consistent with this dataset. Useful for combining ML predictions of translated matrices to kpoint matrices"""
-        kmatrix = []
-        for ifr in range(self.nstructs):
-            framekmatrix = torch.zeros_like(
-                torch.tensor(self.matrices_kpoint[0]), dtype=torch.complex128
-            ).to(self.device)
-            # ,self.cells[ifr].nao, self.cells[ifr].nao), dtype=np.complex128)
-            for kpt in range(np.prod(self.kmesh[ifr])):
-                for i, t in enumerate(translated_matrices.keys()):
-                    # for i in range(len(translated_matrices)):
-                    framekmatrix[kpt] += (
-                        translated_matrices[t][ifr] * self.phase_matrices[ifr][i][kpt]
-                    )
-            kmatrix.append(framekmatrix)
-        return kmatrix
-
-    def kpts_to_translation_target(self, matrices_kpoint, nao=None):
-        target = []
-        for ifr in range(self.nstructs):
-            rel_translations = translation_vectors_for_kmesh(
-                self.cells[ifr], self.kmesh[ifr], wrap_around=False, return_rel=True
-            )
-
-            rel_translations = [tuple(x) for x in rel_translations]
-            if nao is None:
-                nao = self.cells[ifr].nao
-            translated_matrices = torch.zeros(
-                (
-                    len(self.phase_matrices[ifr]),
-                    nao,
-                    nao,
-                ),
-                dtype=torch.complex128,
-            ).to(self.device)
-            for i in range(len(self.phase_matrices[ifr])):
-                for kpt in range(np.prod(self.kmesh[ifr])):
-                    translated_matrices[i] += (
-                        matrices_kpoint[ifr][kpt]
-                        * self.phase_matrices[ifr][i][kpt].conj()
-                    )
-
-            # translated_matrices = translated_matrices
-            assert torch.isclose(
-                torch.linalg.norm(translated_matrices - translated_matrices.real),
-                torch.tensor(0.0).to(translated_matrices.real),
-            ), (
-                "error to real",
-                torch.linalg.norm(translated_matrices - translated_matrices.real),
-            )
-
-            translated_matrices = {
-                k: v for k, v in zip(rel_translations, translated_matrices.real)
-            }
-            target.append(translated_matrices)
-        return target
-
-    def check_block_(self):
-        # mat -> blocks _> couple -> uncouple -> mat
-        pass
-
-    def __len__(self):
-        return self.nstructs
->>>>>>> 9b00bd7614ebc9e92b38e0829bab8c94397fa863

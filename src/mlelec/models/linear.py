@@ -9,6 +9,7 @@ from mlelec.utils.twocenter_utils import (
     _to_matrix,
 )
 
+from mlelec.utils.metatensor_utils import drop_blocks
 
 import metatensor.torch as mts
 import metatensor
@@ -23,7 +24,7 @@ import warnings
 def drop_zero_blocks(tensor):
     for i1,b1 in tensor.items():
         if b1.values.shape[0] == 0:
-            tensor = metatensor.drop_blocks(tensor, Labels(i1.names, i1.values.reshape(1,-1)))
+            tensor = drop_blocks(tensor, Labels(i1.names, i1.values.reshape(1,-1)))
     return tensor
             
 
@@ -201,7 +202,10 @@ class MLP(nn.Module):
                     nn.Linear(nin, nout, bias=bias)
                     ]
             else:
-                self.mlp = [nn.Linear(nin, nout, bias=bias)]
+                self.mlp = nn.Linear(nin, nout, bias=bias)
+                #self.mlp = [nn.Linear(nin, nout, bias=bias)]
+                self.mlp.to(device)
+                return
 
         else:
 
@@ -433,7 +437,8 @@ class LinearTargetModel(nn.Module):
         self.recon = {}
 
         pred_blocks = []
-        self.ridges = []
+        #self.ridges = []
+        self.ridges={}
         # kernels = []
         for k, block in self.dataset.target_train.items():
             #blockval = torch.linalg.norm(block.values)
@@ -447,7 +452,7 @@ class LinearTargetModel(nn.Module):
                 #targetnorm = torch.linalg.norm(block.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
-                assert np.all(block.samples.values == feat.samples.values), (
+                assert torch.all(block.samples.values == feat.samples.values), (
                     k,
                     block.samples.values.shape,
                     feat.samples.values.shape,
@@ -458,7 +463,7 @@ class LinearTargetModel(nn.Module):
                         feat.values.reshape(
                             (feat.values.shape[0] * feat.values.shape[1], -1)
                         )
-                        / 1
+               #         / 1
                     )
                     .cpu()
                     .numpy()
@@ -468,7 +473,7 @@ class LinearTargetModel(nn.Module):
                         block.values.reshape(
                             block.values.shape[0] * block.values.shape[1], -1
                         )
-                        / 1
+                #        / 1
                     )
                     .cpu()
                     .numpy()
@@ -480,7 +485,8 @@ class LinearTargetModel(nn.Module):
                 ).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 pred = ridge.predict(x)
-                self.ridges.append(ridge)
+                #self.ridges.append(ridge)
+                self.ridges[tuple(k)]=ridge
 
                 pred_blocks.append(
                     TensorBlock(

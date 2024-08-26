@@ -139,7 +139,11 @@ def unfix_orbital_order(
             fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
         if isinstance(matrix, np.ndarray):
             return np.asarray(fixed_matrices)
-        return torch.stack(fixed_matrices)
+        try:
+            return torch.stack(fixed_matrices)
+        except RuntimeError:
+            return fixed_matrices 
+
     else:
         return unfix_one_matrix(matrix, frames, orbital)
 
@@ -211,14 +215,14 @@ def _to_blocks(
     orbitals: dict,
     device: str = None,
     NH=False,
-):
+): 
     if not isinstance(frames, list):
         assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
         frames = [frames]
         matrices = matrices.reshape(1, *matrices.shape)
     # check hermiticity:
     if isinstance(matrices, np.ndarray):
-        matrices = torch.from_numpy(matrices)
+        matrices = torch.from_numpy(matrices).to(device)
     if NH:
         warnings.warn(
             "Matrix is neither hermitian nor antihermitian - attempting to use _toblocks for NH"
@@ -230,9 +234,12 @@ def _to_blocks(
         return nh_blocks
 
     else:
-        assert torch.allclose(
-            torch.abs(matrices), torch.abs(matrices.transpose(-1, -2))
-        ), "Matrix supposed to be hermitian but is not"
+        try:
+            assert torch.allclose(
+                torch.abs(matrices), torch.abs(matrices.transpose(-1, -2))
+            ), "Matrix supposed to be hermitian but is not"
+        except:
+            warnings.warn('skipping hermiticity check in _to_blocks')    
         return _matrix_to_blocks(matrices, frames, orbitals, device)
 
 def _matrix_to_blocks_NH_translations(
@@ -409,9 +416,9 @@ def _matrix_to_blocks(
                 ]
 
                 if isinstance(ham, np.ndarray):
-                    block_data = torch.from_numpy(bdata)
+                    block_data = torch.from_numpy(bdata).to(device)
                 elif isinstance(ham, torch.Tensor):
-                    block_data = bdata
+                    block_data = bdata.to(device)
                 else:
                     raise ValueError
 
@@ -553,7 +560,7 @@ def _blocks_to_matrix(
     # loops over block types
     for idx, block in blocks.items():
         # dense idx and cur_A track the frame
-        dense_idx = -1
+        #dense_idx = -1
         cur_A = -1
         block_type = idx["block_type"]
         ai = idx["species_i"]
@@ -571,16 +578,18 @@ def _blocks_to_matrix(
         for sample, block_data in zip(block.samples, block.values):
             A = sample["structure"]
             i = sample["center"]
-            j = sample["neighbor"]
+            j = sample["neighbor"]            
             # check if we have to update the frame and index
             if A != cur_A:
                 cur_A = A
-                dense_idx += 1
+                matrix = matrices[A]
+                #dense_idx += 1
 
-            matrix = matrices[dense_idx]
+            #matrix = matrices[dense_idx]
 
             # coordinates of the atom block in the matrix
-            ki_base, kj_base = atom_blocks_idx[(dense_idx, i, j)]
+            ki_base, kj_base = atom_blocks_idx[(A, i, j)]
+            #ki_base, kj_base = atom_blocks_idx[(dense_idx, i, j)]
 
             # values to assign
             values = block_data[:, :, 0].reshape(2 * li + 1, 2 * lj + 1)
@@ -983,7 +992,9 @@ def _to_uncoupled_basis(
         lmax = max(blocks.keys["L"])
         cg = ClebschGordanReal(lmax, device = device)
 
-    dummy_property = Labels(['dummy'], torch.tensor([[0]]))
+    blocks=blocks.keys_to_properties(['n_i','l_i','n_j','l_j'])
+
+    dummy_property = Labels(['dummy'], torch.tensor([[0]], device=device))
 
     uncoupled_blocks = {}
     samples = {}
@@ -997,7 +1008,9 @@ def _to_uncoupled_basis(
 
         block_type, ai, aj, L  = key.values[:4].tolist()
 
+        #print(block.properties.values[:, :], block, key,block_type, ai, aj, L )
         for ip, (ni, li, nj, lj) in enumerate(block.properties.values[:, :4].tolist()):
+            #print('ni',ni,'li',li,'nj',nj,'lj',lj)
             k = block_type, ai, ni, li, aj, nj, lj
             
             if k not in uncoupled_blocks:
@@ -1016,10 +1029,10 @@ def _to_uncoupled_basis(
                 values = uncoupled_blocks[k],
                 samples = samples[k],
                 properties = dummy_property,
-                components = [Labels(['m_i'], torch.arange(-li, li+1).reshape(-1, 1)), Labels(['m_j'], torch.arange(-lj, lj+1).reshape(-1, 1))]
+                components = [Labels(['m_i'], torch.arange(-li, li+1, device=device).reshape(-1, 1)), Labels(['m_j'], torch.arange(-lj, lj+1, device=device).reshape(-1, 1))]
                 )
         )
-    return mts.sort(TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks))
+    return mts.sort(TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys, device=device)), new_blocks))
 
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):

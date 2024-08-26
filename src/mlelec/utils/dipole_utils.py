@@ -162,7 +162,7 @@ def instantiate_mf(ml_data: MLDataset, fock_predictions=None, batch_indices=None
     return mfs, fockvar
 
 
-def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True):
+def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True,device=None):
     # compute dipole moment for each molecule in batch
     dipoles = []
     eigenvalues = []
@@ -176,9 +176,9 @@ def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True
         else:
             mo_energy, mo_coeff = mf.eig(fock, overlaps)
         mo_occ = mf.get_occ(mo_energy)  
-        mo_occ = ops.convert_to_tensor(mo_occ)
+        mo_occ = ops.convert_to_tensor(mo_occ).to(device)
         if orthogonal:
-            ovlp = ops.convert_to_tensor(mf.mol.intor("int1e_ovlp"))
+            ovlp = ops.convert_to_tensor(mf.mol.intor("int1e_ovlp")).to(device)
             mo_coeff = isqrtm(ovlp) @ mo_coeff
         dm1 = mf.make_rdm1(mo_coeff, mo_occ)
         dip = mf.dip_moment(dm=dm1, unit="A.U.")
@@ -188,7 +188,7 @@ def compute_dipole_moment_from_mf(mfs, fock_vars, overlaps=None, orthogonal=True
     return torch.stack(dipoles), eigenvalues
 
 
-def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indices, mfs, orthogonal=True):
+def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indices, mfs, orthogonal=True,device=None):
     # Convert fock predictions back to pyscf order
     # Compute dipole moment for each molecule in batch
     batch_frames = [ml_data.structures[i] for i in batch_indices]
@@ -204,11 +204,11 @@ def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indice
         ]
     batch_mfs = [mfs[i] for i in batch_indices]
     dipoles, eigenvalues = compute_dipole_moment_from_mf(batch_mfs,
-                                                         batch_fock, batch_overlap)
+                                                         batch_fock, batch_overlap,device=device)
     return dipoles, eigenvalues
 
 
-def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
+def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal, device=None):
     # computes polarisability, dipole moment and eigenvalues for each molecule in batch
     polarisability = []
     eigenvalues = []
@@ -217,10 +217,12 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
     for i in range(len(mfs)):
         mf = mfs[i]
         ao_dip = mf.mol.intor("int1e_r", comp=3)
-        ao_dip = ops.convert_to_tensor(ao_dip)
+        ao_dip = ops.convert_to_tensor(ao_dip).to(device)
         fock = fock_vars[i]
         if overlaps is None:
-            ovlp = torch.from_numpy(mf.mol.intor("int1e_ovlp"))
+            ovlp = torch.from_numpy(mf.mol.intor("int1e_ovlp")).to(device)
+            print(fock.device)
+            print('Here',isqrtp(ovlp).device, fock.device, isqrtp(ovlp).device)
             fock = torch.einsum("ij,jk,kl->il", isqrtp(ovlp),
                                 fock, isqrtp(ovlp))
         else:
@@ -230,13 +232,13 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
             p_fock = fock + pynp.einsum("x,xij->ij", E, ao_dip)
             mo_energy, mo_coeff = mf.eig(p_fock, ovlp)
             mo_occ = mf.get_occ(mo_energy)
-            mo_occ = ops.convert_to_tensor(mo_occ)
+            mo_occ = ops.convert_to_tensor(mo_occ).to(device)
             dm1 = mf.make_rdm1(mo_coeff, mo_occ)
             dip = mf.dip_moment(dm=dm1, unit="A.U.")
             return dip
 
         eva, _ = mf.eig(fock, ovlp)
-        E = torch.zeros((3,), dtype=float)
+        E = torch.zeros((3,), dtype=float,device=device)
         dip = apply_perturb(E)
         pol = jacobian(apply_perturb, E, create_graph=True)
         dipoles.append(dip)
@@ -245,7 +247,7 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
     return torch.stack(dipoles), torch.stack(polarisability), eigenvalues
 
 
-def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, orthogonal=True):
+def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, orthogonal=True,device=None):
 
     batch_frames = [ml_data.structures[i] for i in batch_indices]
     batch_fock = unfix_orbital_order(
@@ -258,5 +260,5 @@ def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, or
             ml_data.molecule_data.aux_data["overlap"][i]
             for i in batch_indices]
     batch_mfs = [mfs[i] for i in batch_indices]
-    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal)
+    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal,device=device)
     return dipoles, polars, eigenvalues

@@ -14,12 +14,11 @@ class ModelTargets:  # generic class for different targets
             name = "hamiltonian"
         name = name.capitalize()
         self.target_class = globals()[name]  # find target class from string
-        # print(self.target_class)
 
 
-    def instantiate(self, tensor: torch.tensor, **kwargs):
+    def instantiate(self, tensor: torch.tensor, device=None, **kwargs):
         self.target = self.target_class(
-            tensor, **kwargs
+            tensor, device=device, **kwargs
 
         )  # instantiate target class with required arguments
         return self.target
@@ -44,18 +43,26 @@ class TwoCenter:  # class for second-rank tensors
     def __init__(
         self,
         tensor: torch.tensor,
+        overlap: torch.tensor,
         orbitals: Dict,
         frames: Optional[List[ase.Atoms]] = None,
+        orthogonal: bool = False,
         device=None,
     ):
-        assert (
-            len(tensor.shape) == 3
-        ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
+        if not isinstance(tensor, list):
+            assert (
+                len(tensor.shape) == 3
+            ), "Second rank tensor must be of shape (N,n,n)"  # FIXME
         self.tensor = tensor
-        if isinstance(tensor, np.ndarray):
-            self.tensor = torch.from_numpy(tensor)
+        self.overlap = overlap
 
-        self.tensor = self.tensor.to(device)
+        if isinstance(tensor, np.ndarray):
+            self.tensor = [torch.from_numpy(tensor[i]).to(device) for i in range(tensor.shape[0])]
+        
+        if isinstance(overlap, np.ndarray):
+            self.overlap = [torch.from_numpy(overlap[i]).to(device) for i in range(overlap.shape[0])]
+
+        self.tensor = self.tensor
         self.orbitals = orbitals
         self.frames = frames
         self.device = device
@@ -63,7 +70,8 @@ class TwoCenter:  # class for second-rank tensors
     def _to_blocks(self, device="cpu"):
         self.blocks = twocenter_utils._to_blocks(
             self.tensor, self.frames, self.orbitals, device=device
-        )
+        ).to(device)
+
         return self.blocks
 
     def _blocks_to_tensor(self):
@@ -136,19 +144,19 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
     def _couple_blocks(self):
         self.blocks_coupled = twocenter_utils._to_coupled_basis(
             self.blocks, device=self.device
-        )
+        ).to(self.device)
         self.coupled_keys = self.blocks_coupled.keys
 
     def orthogonalize(self, overlap: torch.tensor):
-        twocenter_utils.lowin_orthogonalize(self.tensor, overlap)
+        twocenter_utils.lowdin_orthogonalize(self.tensor, overlap)
 
     def change_basis(new_basis):
         # project onto another basis
         pass
 
     def _set_blocks(self, blocks):
-        from metatensor import TensorMap
-        assert isinstance(blocks, TensorMap)
+        from metatensor.torch import TensorMap
+        assert isinstance(blocks, torch.ScriptObject) # check that this is TensorMap
         self.blocks = blocks
         self.block_keys = blocks.keys
         
