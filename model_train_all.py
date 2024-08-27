@@ -11,7 +11,7 @@ import torch
 from ase.units import Hartree
 from IPython.utils import io
 #from metatensor import Labels
-from metatensor.torch import Labels, TensorBlock, TensorMap
+from metatensor.torch import Labels, TensorBlock, TensorMap, drop_blocks
 from tqdm import tqdm
 
 import mlelec.metrics as mlmetrics
@@ -39,7 +39,7 @@ torch.set_default_dtype(torch.float64)
 # ------------------ CHANGE THE PARAMETERS -------------
 NUM_FRAMES = 100#1000
 BATCH_SIZE = 10 #100
-NUM_EPOCHS = 300
+NUM_EPOCHS = 2
 SHUFFLE_SEED = 1234
 TRAIN_FRAC = 0.7
 TEST_FRAC = 0.1
@@ -50,7 +50,7 @@ VAL_INTERVAL = 10
 W_EVA = 1e4
 W_DIP = 1e3
 W_POL = 1e2
-DEVICE = 'cuda' #'cuda'
+DEVICE = 'cpu' #'cuda'
 
 ORTHOGONAL = True  # set to 'FALSE' if working in the non-orthogonal basis
 FOLDER_NAME = 'multitask_learn_normalised_with_weights'
@@ -126,7 +126,8 @@ save_parameters(
 #     #print(new_keys,len(new_keys),len(new_blocks))
 #     return TensorMap(keys=new_keys, blocks=new_blocks)
 # ###previously : drop_blocks = metatensor.drop_blocks 
-from mlelec.utils.metatensor_utils import drop_blocks
+#from mlelec.utils.metatensor_utils import drop_blocks
+
 def drop_zero_blocks(train_tensor, val_tensor, test_tensor):
     for i1, b1 in train_tensor.items():
         if b1.values.shape[0] == 0:
@@ -188,9 +189,9 @@ molecule_data = MoleculeDataset(
     frame_slice=slice(0, NUM_FRAMES),
     device=DEVICE,
     aux=["overlap", "orbitals"],
-    lb_aux=["overlap"],#, "orbitals"],
-    target=["fock"],#,  "dipole_moment", "polarisability"],
-    lb_target=["fock"]#, "dipole_moment", "polarisability"],
+    lb_aux=["overlap", "orbitals"],
+    target=["fock",  "dipole_moment", "polarisability"],
+    lb_target=["fock", "dipole_moment", "polarisability"],
 )
 
 
@@ -244,9 +245,9 @@ model = LinearTargetModel(dataset=ml_data, nlayers=0, nhidden=16, bias=False, de
 
 pred_ridges, ridges = model.fit_ridge_analytical(alphas=np.logspace(-8, 3, 12), cv=3, set_bias=False)
 
-## Training on large basis targets
-#ref_polar_lb = molecule_data.lb_target["polarisability"]
-#ref_dip_lb = molecule_data.lb_target["dipole_moment"]
+# Training on large basis targets
+ref_polar_lb = molecule_data.lb_target["polarisability"]
+ref_dip_lb = molecule_data.lb_target["dipole_moment"]
 
 ref_eva_lb = []
 for i in range(len(molecule_data.lb_target["fock"])):
@@ -258,12 +259,12 @@ for i in range(len(molecule_data.lb_target["fock"])):
     ref_eva_lb.append(eig)
 
 
-#ref_polar = molecule_data.target["polarisability"]
-#ref_dip = molecule_data.target["dipole_moment"]
+ref_polar = molecule_data.target["polarisability"]
+ref_dip = molecule_data.target["dipole_moment"]
 
 var_eigval = torch.cat([ref_eva_lb[i].flatten() for i in range(len(ref_eva_lb))]).var() ##FIXME: this is for all structures
-#var_dipole = torch.cat([ref_dip_lb[i].flatten() for i in range(len(ref_dip_lb))]).var()
-#var_polar = torch.cat([ref_polar_lb[i].flatten() for i in range(len(ref_polar_lb))]).var()
+var_dipole = torch.cat([ref_dip_lb[i].flatten() for i in range(len(ref_dip_lb))]).var()
+var_polar = torch.cat([ref_polar_lb[i].flatten() for i in range(len(ref_polar_lb))]).var()
 
 ref_eva = []
 for i in range(len(molecule_data.target["fock"])):
@@ -323,22 +324,22 @@ for epoch in range(nepochs):
 
         # Forward pass
         pred = model(data["input"], return_type="tensor", batch_indices=[i.item() for i in idx])
-#        train_polar_ref = ref_polar_lb[[i.item() for i in idx]]
-#        train_dip_ref = ref_dip_lb[[i.item() for i in idx]]
+        train_polar_ref = ref_polar_lb[[i.item() for i in idx]]
+        train_dip_ref = ref_dip_lb[[i.item() for i in idx]]
         train_eva_ref = [ref_eva_lb[i][:ml_data.target.tensor[i].shape[0]] for i in idx]
 
-#        loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(ml_data, pred, all_mfs, idx, data["frames"],
-#                                                                   train_eva_ref, train_polar_ref, train_dip_ref,
-#                                                                   var_polar, var_dipole, var_eigval,
-#                                                                   W_EVA, W_POL, W_DIP)
-        pred_eva=compute_eigvals(ml_data, pred, idx, orthogonal=ORTHOGONAL)
-        loss = loss_fn(data['frames'], pred_eva, train_eva_ref)/var_eigval
-        loss_eva=loss
+        loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(ml_data, pred, all_mfs, idx, data["frames"],
+                                                                   train_eva_ref, train_polar_ref, train_dip_ref,
+                                                                   var_polar, var_dipole, var_eigval,
+                                                                   W_EVA, W_POL, W_DIP, device=DEVICE)
+#        pred_eva=compute_eigvals(ml_data, pred, idx, orthogonal=ORTHOGONAL)
+#        loss = loss_fn(data['frames'], pred_eva, train_eva_ref)/var_eigval
+#        loss_eva=loss
 
         train_loss += loss.item()
         train_loss_eva += loss_eva.item()
-#        train_loss_polar += loss_polar.item()
-#        train_loss_dipole += loss_dipole.item()
+        train_loss_polar += loss_polar.item()
+        train_loss_dipole += loss_dipole.item()
         
         # Backward pass
         loss.backward()
@@ -347,13 +348,13 @@ for epoch in range(nepochs):
         
     avg_train_loss = train_loss / len(train_dl)
     avg_train_loss_eva = train_loss_eva / len(train_dl)
- #   avg_train_loss_polar = train_loss_polar / len(train_dl)
- #   avg_train_loss_dipole = train_loss_dipole / len(train_dl)
+    avg_train_loss_polar = train_loss_polar / len(train_dl)
+    avg_train_loss_dipole = train_loss_dipole / len(train_dl)
     
     losses.append(avg_train_loss)
     losses_eva.append(avg_train_loss_eva)
- #   losses_polar.append(avg_train_loss_polar)
- #   losses_dipole.append(avg_train_loss_dipole)
+    losses_polar.append(avg_train_loss_polar)
+    losses_dipole.append(avg_train_loss_dipole)
     
     lr = optimizer.param_groups[0]["lr"]
     
@@ -361,39 +362,39 @@ for epoch in range(nepochs):
     if epoch % val_interval == 0:
         val_loss = 0
         val_loss_eva = 0
-#        val_loss_polar = 0
-#        val_loss_dipole = 0
+        val_loss_polar = 0
+        val_loss_dipole = 0
         
         for data in val_dl:
             idx = data["idx"]
             val_pred = model(data["input"], return_type="tensor", batch_indices=[i.item() for i in idx])
         
-#            val_polar_ref = ref_polar_lb[[i.item() for i in idx]]
-#            val_dip_ref = ref_dip_lb[[i.item() for i in idx]]
+            val_polar_ref = ref_polar_lb[[i.item() for i in idx]]
+            val_dip_ref = ref_dip_lb[[i.item() for i in idx]]
             val_eva_ref = [ref_eva_lb[i][:ml_data.target.tensor[i].shape[0]] for i in idx]
 
-#            vloss, vloss_eva, vloss_dipole, vloss_polar = loss_fn_combined(ml_data, val_pred, all_mfs, idx, data["frames"],
-#                                                                           val_eva_ref, val_polar_ref, val_dip_ref,
-#                                                                           var_polar, var_dipole, var_eigval,
-#                                                                           W_EVA, W_POL, W_DIP)
-            vpred_eva=compute_eigvals(ml_data, val_pred, idx, orthogonal=ORTHOGONAL)
-            #print( idx, [(val_pred[ii].shape,ml_data.target.tensor[i].shape) for ii,i in enumerate(idx)])
-            vloss = loss_fn(data['frames'], vpred_eva, val_eva_ref)/var_eigval
+            vloss, vloss_eva, vloss_dipole, vloss_polar = loss_fn_combined(ml_data, val_pred, all_mfs, idx, data["frames"],
+                                                                           val_eva_ref, val_polar_ref, val_dip_ref,
+                                                                           var_polar, var_dipole, var_eigval,
+                                                                           W_EVA, W_POL, W_DIP, device=DEVICE)
+#            vpred_eva=compute_eigvals(ml_data, val_pred, idx, orthogonal=ORTHOGONAL)
+#            #print( idx, [(val_pred[ii].shape,ml_data.target.tensor[i].shape) for ii,i in enumerate(idx)])
+#            vloss = loss_fn(data['frames'], vpred_eva, val_eva_ref)/var_eigval
                 
             val_loss += vloss.item()
-#            val_loss_eva += vloss_eva.item()
-#            val_loss_polar += vloss_polar.item()
-#            val_loss_dipole += vloss_dipole.item()
+            val_loss_eva += vloss_eva.item()
+            val_loss_polar += vloss_polar.item()
+            val_loss_dipole += vloss_dipole.item()
 
         avg_val_loss = val_loss / len(val_dl)
-#        avg_val_loss_eva = val_loss_eva / len(val_dl)
-#        avg_val_loss_polar = val_loss_polar / len(val_dl)
-#        avg_val_loss_dipole = val_loss_dipole / len(val_dl)
+        avg_val_loss_eva = val_loss_eva / len(val_dl)
+        avg_val_loss_polar = val_loss_polar / len(val_dl)
+        avg_val_loss_dipole = val_loss_dipole / len(val_dl)
 
         val_losses.append(avg_val_loss)
-#        val_losses_eva.append(avg_val_loss_eva)
-#        val_losses_polar.append(avg_val_loss_polar)
-#        val_losses_dipole.append(avg_val_loss_dipole)
+        val_losses_eva.append(avg_val_loss_eva)
+        val_losses_polar.append(avg_val_loss_polar)
+        val_losses_dipole.append(avg_val_loss_dipole)
         
         new_best = avg_val_loss < best
         if new_best:
@@ -418,12 +419,12 @@ for epoch in range(nepochs):
             "train loss:", f"{avg_train_loss:.4g}", 
             "val loss:", f"{avg_val_loss:.4g}", 
             "learning rate:", f"{lr:.4g}")
-#        print("Train Loss Polar:", f"{avg_train_loss_polar:.4g}", 
-#            "Train Loss eva:", f"{avg_train_loss_eva:.4g}", 
-#            "Train Loss dipole:", f"{avg_train_loss_dipole:.4g}")
-#        print("Val Loss Polar:", f"{avg_val_loss_polar:.4g}", 
-#            "Val Loss eva:", f"{avg_val_loss_eva:.4g}", 
-#            "Val Loss dipole:", f"{avg_val_loss_dipole:.4g}")
+        print("Train Loss Polar:", f"{avg_train_loss_polar:.4g}", 
+            "Train Loss eva:", f"{avg_train_loss_eva:.4g}", 
+            "Train Loss dipole:", f"{avg_train_loss_dipole:.4g}")
+        print("Val Loss Polar:", f"{avg_val_loss_polar:.4g}", 
+            "Val Loss eva:", f"{avg_val_loss_eva:.4g}", 
+            "Val Loss dipole:", f"{avg_val_loss_dipole:.4g}")
     if epoch % 1 == 0:
         iterator.set_postfix(train_loss=avg_train_loss, Val_loss=avg_val_loss, lr=lr)
 
@@ -454,23 +455,22 @@ with io.capture_output() as captured:
     train_fock_predictions = model.forward(
         ml_data.feat_train, return_type="tensor", batch_indices=batch_indices
     )
-#    train_dipole_pred, train_polar_pred, train_eva_pred = compute_batch_polarisability(
-#        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
-#    )
-    train_pred_eva=compute_eigvals(ml_data, train_pred, batch_indices, orthogonal=ORTHOGONAL)
+    train_dipole_pred, train_polar_pred, train_eva_pred = compute_batch_polarisability(
+        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
+    )
+#    train_eva_pred=compute_eigvals(ml_data, train_pred, batch_indices, orthogonal=ORTHOGONAL)
 
-#train_error_pol = mlmetrics.mse_qm7(ml_data.train_frames,
-#                          train_polar_pred,
-#                          ref_polar_lb[[i.item() for i in batch_indices]])
-#train_error_dip = mlmetrics.mse_qm7(ml_data.train_frames,
-#                          train_dipole_pred,
-#                          ref_dip_lb[[i.item() for i in batch_indices]])
+train_error_pol = mlmetrics.mse_qm7(ml_data.train_frames,
+                          train_polar_pred,
+                          ref_polar_lb[[i.item() for i in batch_indices]])
+train_error_dip = mlmetrics.mse_qm7(ml_data.train_frames,
+                          train_dipole_pred,
+                          ref_dip_lb[[i.item() for i in batch_indices]])
 train_eva_ref = [ref_eva_lb[i][:ml_data.target.tensor[i].shape[0]] for i in batch_indices]
-#train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
 train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
 
-#print("Train RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(train_error_dip).item()))
-#print("Train RMSE on polar from indirect learning {:.5f} A.U.".format(torch.sqrt(train_error_pol).item()))
+print("Train RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(train_error_dip).item()))
+print("Train RMSE on polar from indirect learning {:.5f} A.U.".format(torch.sqrt(train_error_pol).item()))
 print("Train RMSE on MO energies from indirect learning {:.5f} eV.".format(torch.sqrt(train_error_eva).item() * Hartree))
 
 with io.capture_output() as captured:
@@ -481,6 +481,7 @@ with io.capture_output() as captured:
     test_dip_pred, test_polar_pred, test_eva_pred = compute_batch_polarisability(
         ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
     )
+#    test_eva_pred=compute_eigvals(ml_data, test_fock_predictions, batch_indices, orthogonal=ORTHOGONAL)
 
 error_dip = mlmetrics.mse_qm7(ml_data.test_frames,
                               test_dip_pred,
@@ -510,17 +511,17 @@ error_polar_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
                                       ref_polar_lb[ml_data.test_idx])
 
 plt.figure()
-for predicted, target in zip(test_dip_pred.detach().numpy(), ref_dip_lb[ml_data.test_idx]):
+for predicted, target in zip(test_dip_pred.detach().cpu().numpy(), ref_dip_lb[ml_data.test_idx]):
     x = target
     y = predicted
-    plt.scatter(x, y, color='royalblue',
+    plt.scatter(x.cpu(), y, color='royalblue',
                 label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 # Second scatter plot
 for predicted, target in zip(ref_dip[ml_data.test_idx], ref_dip_lb[ml_data.test_idx]):
     x = target
     y = predicted
-    plt.scatter(x, y, color='chocolate', marker='^',
+    plt.scatter(x.cpu(), y.cpu(), color='chocolate', marker='^',
                 label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 # Line plot
@@ -545,20 +546,20 @@ plt.savefig(f"{FOLDER_NAME}/mse_dipole_indirect.pdf", bbox_inches="tight")
 plt.figure()
 for target, predicted in zip(test_eva_ref, test_eva_pred):
     x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
+    y = predicted.detach().cpu().numpy() * Hartree
 
     x = x[x > -100]
     y = y[y > -100]
-    plt.scatter(x, y, color='royalblue',
+    plt.scatter(x.cpu(), y, color='royalblue',
                 label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 for target, predicted in zip(test_eva_ref, [ref_eva[i] for i in ml_data.test_idx]):
     x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
+    y = predicted.detach().cpu().numpy() * Hartree
 
     x = x[x > -100]
     y = y[y > -100]
-    plt.scatter(x, y, color='chocolate', marker='^',
+    plt.scatter(x.cpu(), y, color='chocolate', marker='^',
                 label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
     
 plt.plot([-35, 100], [-35, 100], linestyle='--', color='black', linewidth=1)
@@ -576,16 +577,16 @@ plt.savefig(f"{FOLDER_NAME}/mse_eva_indirect.pdf", bbox_inches="tight")
 
 
 plt.figure()
-for predicted, target in zip(test_polar_pred.detach().numpy(), ref_polar_lb[ml_data.test_idx]):
+for predicted, target in zip(test_polar_pred.detach().cpu().numpy(), ref_polar_lb[ml_data.test_idx]):
     x = target
     y = predicted
-    plt.scatter(x, y, color='royalblue', 
+    plt.scatter(x.cpu(), y, color='royalblue', 
                 label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 for predicted, target in zip(ref_polar[ml_data.test_idx], ref_polar_lb[ml_data.test_idx]):
     x = target
     y = predicted
-    plt.scatter(x, y, color='chocolate', marker='^',
+    plt.scatter(x.cpu(), y.cpu(), color='chocolate', marker='^',
                 label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 plt.plot([-50, 175], [-50, 175], linestyle='--', color='black', linewidth=1)

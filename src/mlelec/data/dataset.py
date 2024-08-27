@@ -812,7 +812,7 @@ class MLDataset(Dataset):
             y,
             axis="samples",
             labels=Labels(
-                names=["structure"], values = torch.tensor(indices).reshape(-1, 1)
+                names=["structure"], values = indices.reshape(-1, 1)
             )
          )
 

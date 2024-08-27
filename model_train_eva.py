@@ -11,7 +11,7 @@ import torch
 from ase.units import Hartree
 from IPython.utils import io
 #from metatensor import Labels
-from metatensor.torch import Labels, TensorBlock, TensorMap
+from metatensor.torch import Labels, TensorBlock, TensorMap, drop_blocks
 from tqdm import tqdm
 
 import mlelec.metrics as mlmetrics
@@ -39,7 +39,7 @@ torch.set_default_dtype(torch.float64)
 # ------------------ CHANGE THE PARAMETERS -------------
 NUM_FRAMES = 100#1000
 BATCH_SIZE = 10 #100
-NUM_EPOCHS = 300
+NUM_EPOCHS = 5
 SHUFFLE_SEED = 1234
 TRAIN_FRAC = 0.7
 TEST_FRAC = 0.1
@@ -50,7 +50,7 @@ VAL_INTERVAL = 10
 W_EVA = 1e4
 W_DIP = 1e3
 W_POL = 1e2
-DEVICE = 'cuda' #'cuda'
+DEVICE = 'cpu' #'cuda'
 
 ORTHOGONAL = True  # set to 'FALSE' if working in the non-orthogonal basis
 FOLDER_NAME = 'multitask_learn_normalised_with_weights'
@@ -126,7 +126,7 @@ save_parameters(
 #     #print(new_keys,len(new_keys),len(new_blocks))
 #     return TensorMap(keys=new_keys, blocks=new_blocks)
 # ###previously : drop_blocks = metatensor.drop_blocks 
-from mlelec.utils.metatensor_utils import drop_blocks
+#from mlelec.utils.metatensor_utils import drop_blocks
 def drop_zero_blocks(train_tensor, val_tensor, test_tensor):
     for i1, b1 in train_tensor.items():
         if b1.values.shape[0] == 0:
@@ -455,9 +455,9 @@ with io.capture_output() as captured:
         ml_data.feat_train, return_type="tensor", batch_indices=batch_indices
     )
 #    train_dipole_pred, train_polar_pred, train_eva_pred = compute_batch_polarisability(
-#        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
+#        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
 #    )
-    train_pred_eva=compute_eigvals(ml_data, train_pred, batch_indices, orthogonal=ORTHOGONAL)
+    train_eva_pred=compute_eigvals(ml_data, train_pred, batch_indices, orthogonal=ORTHOGONAL)
 
 #train_error_pol = mlmetrics.mse_qm7(ml_data.train_frames,
 #                          train_polar_pred,
@@ -466,7 +466,6 @@ with io.capture_output() as captured:
 #                          train_dipole_pred,
 #                          ref_dip_lb[[i.item() for i in batch_indices]])
 train_eva_ref = [ref_eva_lb[i][:ml_data.target.tensor[i].shape[0]] for i in batch_indices]
-#train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
 train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
 
 #print("Train RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(train_error_dip).item()))
@@ -478,22 +477,23 @@ with io.capture_output() as captured:
     test_fock_predictions = model.forward(
         ml_data.feat_test, return_type="tensor", batch_indices=ml_data.test_idx,
     )
-    test_dip_pred, test_polar_pred, test_eva_pred = compute_batch_polarisability(
-        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
-    )
+#    test_dip_pred, test_polar_pred, test_eva_pred = compute_batch_polarisability(
+#        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
+#    )
+    test_eva_pred=compute_eigvals(ml_data, test_fock_predictions, batch_indices, orthogonal=ORTHOGONAL)
 
-error_dip = mlmetrics.mse_qm7(ml_data.test_frames,
-                              test_dip_pred,
-                              ref_dip_lb[[i.item() for i in batch_indices]]
-                             )
-error_pol = mlmetrics.mse_qm7(ml_data.test_frames, test_polar_pred,
-                              ref_polar_lb[[i.item() for i in batch_indices]]
-                              )
+#error_dip = mlmetrics.mse_qm7(ml_data.test_frames,
+#                              test_dip_pred,
+#                              ref_dip_lb[[i.item() for i in batch_indices]]
+#                             )
+#error_pol = mlmetrics.mse_qm7(ml_data.test_frames, test_polar_pred,
+#                              ref_polar_lb[[i.item() for i in batch_indices]]
+#                              )
 test_eva_ref = [ref_eva_lb[i][:ml_data.target.tensor[i].shape[0]] for i in batch_indices]
 error_eva = mlmetrics.mse_qm7(ml_data.test_frames, test_eva_pred, test_eva_ref)
 
-print("Test RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(error_dip).item()))
-print("Test RMSE on polar from indirect learning {:.5f} A.U.".format(torch.sqrt(error_pol).item()))
+#print("Test RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(error_dip).item()))
+#print("Test RMSE on polar from indirect learning {:.5f} A.U.".format(torch.sqrt(error_pol).item()))
 print("Test RMSE on MO energies from indirect learning {:.5f} eV.".format(torch.sqrt(error_eva).item() * Hartree))
 
 
@@ -501,64 +501,64 @@ error_eva_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
                                     [ref_eva[i] for i in ml_data.test_idx],
                                     test_eva_ref
                                     )
-error_dip_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
-                                    ref_dip[ml_data.test_idx],
-                                    ref_dip_lb[ml_data.test_idx]
-                                    )
-error_polar_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
-                                      ref_polar[ml_data.test_idx],
-                                      ref_polar_lb[ml_data.test_idx])
+#error_dip_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
+#                                    ref_dip[ml_data.test_idx],
+#                                    ref_dip_lb[ml_data.test_idx]
+#                                    )
+#error_polar_STO3G = mlmetrics.mse_qm7(ml_data.test_frames,
+#                                      ref_polar[ml_data.test_idx],
+#                                      ref_polar_lb[ml_data.test_idx])
 
-plt.figure()
-for predicted, target in zip(test_dip_pred.detach().numpy(), ref_dip_lb[ml_data.test_idx]):
-    x = target
-    y = predicted
-    plt.scatter(x, y, color='royalblue',
-                label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
-
-# Second scatter plot
-for predicted, target in zip(ref_dip[ml_data.test_idx], ref_dip_lb[ml_data.test_idx]):
-    x = target
-    y = predicted
-    plt.scatter(x, y, color='chocolate', marker='^',
-                label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
-
-# Line plot
-plt.plot([-2, 2], [-2, 2], linestyle='--', color='black', linewidth=1)
-
-# Labels
-plt.xlabel('Target dipoles (A.U.)')
-plt.ylabel('Predicted dipoles (A.U.)')
-
-# Text box
-rmse_ml = torch.sqrt(error_dip).item()
-rmse_sto3g = torch.sqrt(error_dip_STO3G).item()
-plt.text(0.4, -1.8,
-         f'$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.',
-         fontsize=10, bbox=dict(facecolor='white', alpha=0.5))
-
-# Legend
-plt.legend()
-plt.savefig(f"{FOLDER_NAME}/mse_dipole_indirect.pdf", bbox_inches="tight")
+#plt.figure()
+#for predicted, target in zip(test_dip_pred.detach().numpy(), ref_dip_lb[ml_data.test_idx]):
+#    x = target
+#    y = predicted
+#    plt.scatter(x, y, color='royalblue',
+#                label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
+#
+## Second scatter plot
+#for predicted, target in zip(ref_dip[ml_data.test_idx], ref_dip_lb[ml_data.test_idx]):
+#    x = target
+#    y = predicted
+#    plt.scatter(x, y, color='chocolate', marker='^',
+#                label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
+#
+## Line plot
+#plt.plot([-2, 2], [-2, 2], linestyle='--', color='black', linewidth=1)
+#
+## Labels
+#plt.xlabel('Target dipoles (A.U.)')
+#plt.ylabel('Predicted dipoles (A.U.)')
+#
+## Text box
+#rmse_ml = torch.sqrt(error_dip).item()
+#rmse_sto3g = torch.sqrt(error_dip_STO3G).item()
+#plt.text(0.4, -1.8,
+#         f'$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.',
+#         fontsize=10, bbox=dict(facecolor='white', alpha=0.5))
+#
+## Legend
+#plt.legend()
+#plt.savefig(f"{FOLDER_NAME}/mse_dipole_indirect.pdf", bbox_inches="tight")
 
 
 plt.figure()
 for target, predicted in zip(test_eva_ref, test_eva_pred):
     x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
+    y = predicted.detach().cpu().numpy() * Hartree
 
     x = x[x > -100]
     y = y[y > -100]
-    plt.scatter(x, y, color='royalblue',
+    plt.scatter(x.cpu(), y, color='royalblue',
                 label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
 
 for target, predicted in zip(test_eva_ref, [ref_eva[i] for i in ml_data.test_idx]):
     x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
+    y = predicted.detach().cpu().numpy() * Hartree
 
     x = x[x > -100]
     y = y[y > -100]
-    plt.scatter(x, y, color='chocolate', marker='^',
+    plt.scatter(x.cpu(), y, color='chocolate', marker='^',
                 label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
     
 plt.plot([-35, 100], [-35, 100], linestyle='--', color='black', linewidth=1)
@@ -575,28 +575,28 @@ plt.legend()
 plt.savefig(f"{FOLDER_NAME}/mse_eva_indirect.pdf", bbox_inches="tight")
 
 
-plt.figure()
-for predicted, target in zip(test_polar_pred.detach().numpy(), ref_polar_lb[ml_data.test_idx]):
-    x = target
-    y = predicted
-    plt.scatter(x, y, color='royalblue', 
-                label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
-
-for predicted, target in zip(ref_polar[ml_data.test_idx], ref_polar_lb[ml_data.test_idx]):
-    x = target
-    y = predicted
-    plt.scatter(x, y, color='chocolate', marker='^',
-                label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
-
-plt.plot([-50, 175], [-50, 175], linestyle='--', color='black', linewidth=1)
-plt.xlabel('Target polarisability (A.U.)')
-plt.ylabel('Predicted polarisability (A.U.)')
-
-rmse_ml = torch.sqrt(error_pol).item()
-rmse_sto3g = torch.sqrt(error_polar_STO3G).item()
-plt.text(100, -50,
-         f'$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.',
-         fontsize=10,
-         bbox=dict(facecolor='white', alpha=0.5))
-plt.legend()
-plt.savefig(f"{FOLDER_NAME}/mse_polar_indirect.pdf", bbox_inches="tight")
+#plt.figure()
+#for predicted, target in zip(test_polar_pred.detach().numpy(), ref_polar_lb[ml_data.test_idx]):
+#    x = target
+#    y = predicted
+#    plt.scatter(x, y, color='royalblue', 
+#                label='ML' if 'ML' not in plt.gca().get_legend_handles_labels()[1] else "")
+#
+#for predicted, target in zip(ref_polar[ml_data.test_idx], ref_polar_lb[ml_data.test_idx]):
+#    x = target
+#    y = predicted
+#    plt.scatter(x, y, color='chocolate', marker='^',
+#                label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
+#
+#plt.plot([-50, 175], [-50, 175], linestyle='--', color='black', linewidth=1)
+#plt.xlabel('Target polarisability (A.U.)')
+#plt.ylabel('Predicted polarisability (A.U.)')
+#
+#rmse_ml = torch.sqrt(error_pol).item()
+#rmse_sto3g = torch.sqrt(error_polar_STO3G).item()
+#plt.text(100, -50,
+#         f'$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.',
+#         fontsize=10,
+#         bbox=dict(facecolor='white', alpha=0.5))
+#plt.legend()
+#plt.savefig(f"{FOLDER_NAME}/mse_polar_indirect.pdf", bbox_inches="tight")
