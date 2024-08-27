@@ -198,6 +198,8 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         self.derived_pred_kwargs = kwargs
         self.qmdata = mldata.qmdata
         self.is_molecule = mldata.qmdata.is_molecule
+        self.overlaps = mldata.items.overlap_realspace if self.is_molecule else mldata.items.overlap_kspace
+
         self.is_indirect = is_indirect
         self.optimizer = optimizer
         self.save_hyperparameters({
@@ -239,7 +241,9 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             targets = batch.fock_blocks
             # predictions = self.forward(features, targets)
             predictions = self.forward(features, self.metadata)
-            derived_predictions = self.compute_derived_predictions(predictions, batch, **self.derived_pred_kwargs)
+            target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+            overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+            derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps = overlaps, target_properties = target_properties)
 
             loss = self.compute_weighted_loss(derived_predictions, batch)
 
@@ -277,7 +281,10 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         features = batch.features
         targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
-        derived_predictions = self.compute_derived_predictions(predictions, batch, **self.derived_pred_kwargs)
+        target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+        overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+        derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
+
         derived_metrics = {}
 
         loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
@@ -292,7 +299,9 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         features = batch.features
         targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
-        derived_predictions = self.compute_derived_predictions(predictions, batch, **self.derived_pred_kwargs)
+        target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+        overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+        derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
        
         loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
 
@@ -320,7 +329,6 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 
         for k, p in derived_predictions.items():
             t = batch._asdict()[k]
-            # print(t, 't')
             loss_contributions.append(self.loss_fn.compute(p, t))
             if compute_metrics:
                 derived_metrics[f'rmse_{k}'] = RMSE().compute(p, t)
@@ -342,26 +350,30 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         else:
             return weighted_loss
 
-    def compute_derived_predictions(self, predictions, batch, **kwargs):
+    def compute_derived_predictions(self, predictions, **kwargs):
         # Compute derived predictions based on keyword arguments.
         
         basis = self.model.orbitals
         basis_name = self.model.basis_name
-        frames = self.model.frames
         ncore = self.model.ncore
-        batch_frames = [frames[i] for i in batch.sample_id]
-        frames_dict = {A: f for A, f in zip(batch.sample_id, batch_frames)}
+
+        frames = kwargs.get('frames', self.model.frames)
+        batch_sample_id = kwargs.get('batch_sample_id', range(len(frames)))
+        batch_frames = [frames[i] for i in batch_sample_id]
+
+        frames_dict = {A: f for A, f in zip(batch_sample_id, batch_frames)}
+        S = kwargs.get('overlaps', None)
 
         HT = blocks_to_matrix(predictions, basis, frames_dict, device = self.device, detach = False, check_hermiticity=False)
         # TODO: The next line needs to be handled inside blocks_to_matrix!
         if self.is_molecule:
             H = [h[0,0,0] for h in HT]
-            S = batch.overlap_realspace
+            # S = batch.overlap_realspace
         else:
             # Bloch sums. TODO: Not very nice to use QMDataset methods here?
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
             # H = [H[i] for i in batch.sample_id]
-            S = batch.overlap_kspace
+            # S = batch.overlap_kspace
             
         to_return = {}
         target_properties = kwargs.get("target_properties", [])
@@ -381,6 +393,34 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
                 raise NotImplementedError(f'{property} not implemented yet')
     
         return to_return
+    
+    def predict(self, descriptor, metadata=None, frames=None, **kwargs):
+        from collections import namedtuple
+        if frames is None:
+            frames = self.model.frames
+
+        overlaps = kwargs.get('overlaps', self.overlaps)
+
+        # Set the model to evaluation mode
+        self.eval()
+
+        if metadata is None:
+            metadata = self.metadata
+
+        # Disable gradient calculation
+        with torch.no_grad():
+            predictions = {'fock_blocks': self(descriptor, metadata)}
+
+        target_properties = kwargs.get('target_properties', None)
+        if target_properties is not None: 
+            derived_predictions = self.compute_derived_predictions(predictions['fock_blocks'], frames=frames, overlaps=overlaps, target_properties=target_properties)
+            predictions.update(derived_predictions)
+        
+        OUT = namedtuple("predictions", predictions)
+        output = OUT(**predictions)
+        
+        return output
+
 
 ####
 # Maybe move to separate file
