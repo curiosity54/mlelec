@@ -1,8 +1,6 @@
 import numpy as np
 import torch
-
 from metatensor.torch import Labels, TensorBlock, TensorMap
-from typing import Dict
 
 # def _to_tensormap(block_data: Dict):
 #     # support for blocks in dict format- just convert to tensormap before using tensormap utils
@@ -10,7 +8,9 @@ from typing import Dict
 
 
 class TensorBuilder:
-    def __init__(self, key_names, sample_names, component_names, property_names, device = 'cpu'):
+    def __init__(
+        self, key_names, sample_names, component_names, property_names, device="cpu"
+    ):
         self._key_names = key_names
         self.blocks = {}
 
@@ -42,9 +42,12 @@ class TensorBuilder:
 
         # print(components)
         if all([isinstance(component, torch.ScriptObject) for component in components]):
-        # if all([isinstance(component, Labels) for component in components]):
-            components = [component.values.reshape(components.shape[0], -1) for component in components]
-        
+            # if all([isinstance(component, Labels) for component in components]):
+            components = [
+                component.values.reshape(components.shape[0], -1)
+                for component in components
+            ]
+
         components_label = []
         for names, values in zip(self._component_names, components):
             components_label.append(Labels(names, values))
@@ -53,7 +56,9 @@ class TensorBuilder:
         if properties is not None:
             if isinstance(properties, torch.ScriptObject):
                 if properties._type().name() == "Labels":
-                    properties = properties.view(dtype = torch.int32).reshape(properties.shape[0], -1)    
+                    properties = properties.view(dtype=torch.int32).reshape(
+                        properties.shape[0], -1
+                    )
             elif isinstance(properties, np.ndarray):
                 properties = torch.from_numpy(properties)
             elif isinstance(properties, list):
@@ -62,17 +67,30 @@ class TensorBuilder:
             properties = Labels(self._property_names, properties)
 
         if properties is not None:
-            block = TensorBuilderPerSamples(properties, components, self._sample_names, gradient_samples, device = self.device)
+            block = TensorBuilderPerSamples(
+                properties,
+                components,
+                self._sample_names,
+                gradient_samples,
+                device=self.device,
+            )
 
         if samples is not None:
-            block = TensorBuilderPerProperties(samples, components, self._property_names, gradient_samples, device = self.device)
+            block = TensorBuilderPerProperties(
+                samples,
+                components,
+                self._property_names,
+                gradient_samples,
+                device=self.device,
+            )
 
         self.blocks[key] = block
         return block
 
     def build(self):
-
-        keys = Labels(self._key_names, torch.tensor(list(self.blocks.keys()), dtype = torch.int32)).to(device = self.device)
+        keys = Labels(
+            self._key_names, torch.tensor(list(self.blocks.keys()), dtype=torch.int32)
+        ).to(device=self.device)
 
         blocks = []
         for block in self.blocks.values():
@@ -91,11 +109,26 @@ class TensorBuilder:
 
 
 class TensorBuilderPerSamples:
-    def __init__(self, properties, components, sample_names, gradient_samples=None, device = 'cpu'):
-
-        assert isinstance(properties, torch.ScriptObject) and properties._type().name() == "Labels"
-        assert all([(isinstance(component, torch.ScriptObject) and component._type().name() == "Labels") for component in components])
-        assert (gradient_samples is None) or (isinstance(gradient_samples, torch.ScriptObject) and gradient_samples._type().name() == "Labels")
+    def __init__(
+        self, properties, components, sample_names, gradient_samples=None, device="cpu"
+    ):
+        assert (
+            isinstance(properties, torch.ScriptObject)
+            and properties._type().name() == "Labels"
+        )
+        assert all(
+            [
+                (
+                    isinstance(component, torch.ScriptObject)
+                    and component._type().name() == "Labels"
+                )
+                for component in components
+            ]
+        )
+        assert (gradient_samples is None) or (
+            isinstance(gradient_samples, torch.ScriptObject)
+            and gradient_samples._type().name() == "Labels"
+        )
 
         self._gradient_samples = gradient_samples
         self._properties = properties
@@ -109,27 +142,37 @@ class TensorBuilderPerSamples:
         self.device = device
 
     def add_samples(self, labels, data, gradient=None):
-
         if not isinstance(data, torch.Tensor):
             if isinstance(data, np.ndarray):
                 data = torch.from_numpy(data).to(device=self.device)
-            assert isinstance(data, torch.Tensor), "Data must be numpy.ndarray or torch.tensor."
-        assert data.shape[-1] == self._properties.values.shape[0], "The property dimension of data does not match."
-        
+            assert isinstance(
+                data, torch.Tensor
+            ), "Data must be numpy.ndarray or torch.tensor."
+        assert (
+            data.shape[-1] == self._properties.values.shape[0]
+        ), "The property dimension of data does not match."
+
         for i in range(len(self._components)):
-            assert data.shape[i + 1] == self._components[i].values.shape[0], f"The {i}-th component dimension of data does not match."
+            assert (
+                data.shape[i + 1] == self._components[i].values.shape[0]
+            ), f"The {i}-th component dimension of data does not match."
 
         if isinstance(labels, np.ndarray):
-            labels = torch.from_numpy(labels).to(dtype = torch.int32, device = self.device)
+            labels = torch.from_numpy(labels).to(dtype=torch.int32, device=self.device)
         elif isinstance(labels, list):
-            labels = torch.tensor(labels, dtype = torch.int32, device = self.device)
+            labels = torch.tensor(labels, dtype=torch.int32, device=self.device)
 
         if len(data.shape) == 2:
             data = data.reshape(1, data.shape[0], data.shape[1])
-        assert data.shape[0] == labels.shape[0], ("data.shape[0]", data.shape[0], "labelsshape", labels.shape[0])
+        assert data.shape[0] == labels.shape[0], (
+            "data.shape[0]",
+            data.shape[0],
+            "labelsshape",
+            labels.shape[0],
+        )
 
         self._samples.append(labels)
-        self._data.append(data.to(device = self.device))
+        self._data.append(data.to(device=self.device))
 
         if gradient is not None:
             raise (Exception("Gradient data not implemented for BlockBuilderSamples"))
@@ -137,10 +180,10 @@ class TensorBuilderPerSamples:
     def build(self):
         samples = Labels(self._sample_names, torch.vstack(self._samples))
         block = TensorBlock(
-            values = torch.cat(self._data, axis=0).to(device = self.device),
-            samples = samples.to(device = self.device),
-            components = [c.to(device = self.device) for c in self._components],
-            properties = self._properties.to(device = self.device),
+            values=torch.cat(self._data, axis=0).to(device=self.device),
+            samples=samples.to(device=self.device),
+            components=[c.to(device=self.device) for c in self._components],
+            properties=self._properties.to(device=self.device),
         )
 
         if self._gradient_samples is not None:
@@ -154,12 +197,18 @@ class TensorBuilderPerSamples:
 
 
 class TensorBuilderPerProperties:
-    def __init__(self, samples, components, property_names, gradient_samples=None, device='cpu'):
+    def __init__(
+        self, samples, components, property_names, gradient_samples=None, device="cpu"
+    ):
         assert isinstance(samples, torch.ScriptObject)
         # assert isinstance(samples, Labels)
-        assert all([isinstance(component, torch.ScriptObject) for component in components])
+        assert all(
+            [isinstance(component, torch.ScriptObject) for component in components]
+        )
         # assert all([isinstance(component, Labels) for component in components])
-        assert (gradient_samples is None) or isinstance(gradient_samples, torch.ScriptObject)
+        assert (gradient_samples is None) or isinstance(
+            gradient_samples, torch.ScriptObject
+        )
         # assert (gradient_samples is None) or isinstance(gradient_samples, Labels)
         self._gradient_samples = gradient_samples
         self._samples = samples
@@ -173,8 +222,7 @@ class TensorBuilderPerProperties:
 
         self.device = device
 
-    def add_properties(self, labels, data, gradient = None):
-
+    def add_properties(self, labels, data, gradient=None):
         if not isinstance(data, torch.Tensor):
             if isinstance(data, np.ndarray):
                 data = torch.from_numpy(data)
@@ -204,17 +252,17 @@ class TensorBuilderPerProperties:
     def build(self):
         properties = Labels(self._property_names, torch.vstack(self._properties))
         block = TensorBlock(
-            values = torch.cat(self._data, dim = 2).to(device = self.device),
-            samples = self._samples.to(device = self.device),
-            components = [c.to(device = self.device) for c in self._components],
-            properties = properties.to(device = self.device),
+            values=torch.cat(self._data, dim=2).to(device=self.device),
+            samples=self._samples.to(device=self.device),
+            components=[c.to(device=self.device) for c in self._components],
+            properties=properties.to(device=self.device),
         )
 
         if self._gradient_samples is not None:
             block.add_gradient(
                 "positions",
                 self._gradient_samples,
-                torch.cat(self._gradient_data, dim = 2),
+                torch.cat(self._gradient_data, dim=2),
             )
 
         self._gradient_data = []
@@ -224,7 +272,7 @@ class TensorBuilderPerProperties:
         return block
 
 
-def labels_where(labels, selection, return_idx = False):
+def labels_where(labels, selection, return_idx=False):
     # TODO: slow! avoid using it
     # Extract the relevant columns from `selection` that the selection will
     # be performed on
@@ -239,9 +287,11 @@ def labels_where(labels, selection, return_idx = False):
             )
 
     # Build a mask of the selected keys
-    mask = [torch.any([torch.all(i == j) for j in selection.values]) for i in keys_out_vals]
+    mask = [
+        torch.any([torch.all(i == j) for j in selection.values]) for i in keys_out_vals
+    ]
 
-    labels = Labels(names = labels.names, values = labels.values[mask])
+    labels = Labels(names=labels.names, values=labels.values[mask])
     if return_idx:
         return labels, torch.where(mask)[0]
     return labels

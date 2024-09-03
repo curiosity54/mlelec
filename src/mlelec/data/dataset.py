@@ -1,40 +1,39 @@
-from typing import Dict, List, Optional, Union, Any
-
-import numpy as np
-import torch
-from torch.utils.data import Dataset
-
-import ase
-
-from enum import Enum
-from ase.io import read
-import hickle
-from mlelec.targets import ModelTargets
-
-import metatensor.torch as mts
-from metatensor.torch import TensorMap, Labels, TensorBlock
+import io
 import os
 import sys
-import io
-from contextlib import redirect_stderr
-
 import warnings
-warnings.simplefilter('always', DeprecationWarning)
+from contextlib import redirect_stderr
+from enum import Enum
+from typing import Any, Dict, List, Optional, Union
+
+import ase
+import hickle
+import metatensor.torch as mts
+import numpy as np
+import torch
+from ase.io import read
+from metatensor.torch import Labels, TensorBlock, TensorMap
+from torch.utils.data import Dataset
+
+from mlelec.targets import ModelTargets
+
+warnings.simplefilter("always", DeprecationWarning)
+
+import copy
+from pathlib import Path
 
 import torch.utils.data as data
-import copy
-from collections import defaultdict
-from pathlib import Path
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys, fix_orbital_order
-from mlelec.utils.pbc_utils import unique_Aij_block, inverse_fourier_transform
 
-from mlelec.data.pyscf_calculator import get_scell_phase, _instantiate_pyscf_mol
+from mlelec.data.pyscf_calculator import _instantiate_pyscf_mol, get_scell_phase
+from mlelec.utils.pbc_utils import inverse_fourier_transform, unique_Aij_block
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys
+
 
 class QMDataset:
-    '''
+    """
     Class containing information about the quantum chemistry calculation and its results.
-    '''
-    
+    """
+
     def __init__(
         self,
         frames,
@@ -50,22 +49,20 @@ class QMDataset:
         orbs_name: str = "sto-3g",
         orbs: List = None,
         dimension: int = 3,
-        fix_p_orbital_order = False,
-        apply_condon_shortley = False,
+        fix_p_orbital_order=False,
+        apply_condon_shortley=False,
     ):
-    
-
         # TODO: probably to remove soon. Keeping the warning for now to avoid silly mistakes
         if fix_p_orbital_order or apply_condon_shortley:
             warnings.warn(
                 "The `fix_p_orbital_order` and `apply_condon_shortley` options have been moved to MLDataset.",
-                DeprecationWarning
+                DeprecationWarning,
             )
         fix_p_orbital_order = False
         apply_condon_shortley = False
 
         self._device = device
-        self._basis = orbs 
+        self._basis = orbs
         self._basis_name = orbs_name
 
         self._dimension = dimension
@@ -79,31 +76,31 @@ class QMDataset:
         self._ncore = self._set_ncore()
 
         self._initialize_pyscf_objects()
-        
+
         # Assign/compute Hamiltonians and Overlaps
         self._set_matrices(
-            fock_realspace = fock_realspace,
-            fock_kspace = fock_kspace,
-            overlap_realspace = overlap_realspace,
-            overlap_kspace = overlap_kspace,
-                           )
-                
+            fock_realspace=fock_realspace,
+            fock_kspace=fock_kspace,
+            overlap_realspace=overlap_realspace,
+            overlap_kspace=overlap_kspace,
+        )
+
     ##########################################################################################################
-    
+
     @property
     def device(self):
         return self._device
-    
+
     @device.setter
     def device(self, value):
-        if value not in ['cpu', 'cuda']:
+        if value not in ["cpu", "cuda"]:
             raise ValueError("device must be either cpu or cuda")
         self._device = value
 
     @property
     def basis(self):
         return self._basis
-    
+
     @property
     def basis_name(self):
         return self._basis_name
@@ -111,7 +108,7 @@ class QMDataset:
     @property
     def dimension(self):
         return self._dimension
-    
+
     @property
     def is_molecule(self):
         return self._dimension == 0
@@ -119,30 +116,30 @@ class QMDataset:
     @property
     def structures(self):
         return self._structures
-    
+
     def _wrap_frames(self, frames):
         for f in frames:
             if self.dimension == 2:
                 f.pbc = [True, True, False]
-                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.wrap(center=(0, 0, 0), eps=1e-60)
                 f.pbc = True
             elif self.dimension == 3:
-                f.wrap(center = (0,0,0), eps = 1e-60)
+                f.wrap(center=(0, 0, 0), eps=1e-60)
                 f.pbc = True
-            elif self.dimension == 0: # Handle molecules 
-                f.pbc = False    
+            elif self.dimension == 0:  # Handle molecules
+                f.pbc = False
             else:
-                raise NotImplementedError('dimension must be 0, 2 or 3')
+                raise NotImplementedError("dimension must be 0, 2 or 3")
         return frames
-    
+
     @property
     def nstructs(self):
         return len(self.structures)
-    
+
     @property
     def kmesh(self):
         return self._kmesh
-    
+
     def _set_kmesh(self, kmesh):
         if self.is_molecule:
             return None
@@ -155,39 +152,40 @@ class QMDataset:
             ), "If kmesh is a list, it must have the same length as the number of structures"
             _kmesh = kmesh
         else:
-            _kmesh = [
-                kmesh for _ in range(self.nstructs)
-            ] 
+            _kmesh = [kmesh for _ in range(self.nstructs)]
 
         return _kmesh
 
     @property
     def nao(self):
         return self._nao
-    
+
     def _set_nao(self):
-        return [sum(len(self._basis[s]) for s in frame.numbers) for frame in self._structures]
-    
+        return [
+            sum(len(self._basis[s]) for s in frame.numbers)
+            for frame in self._structures
+        ]
+
     @property
     def ncore(self):
         return self._ncore
-    
+
     def _set_ncore(self):
         ncore = {}
         for s in self._basis:
             basis = np.array(self._basis[s])
-            nmin = np.min(basis[:,0])
+            nmin = np.min(basis[:, 0])
             ncore[s] = 0
             for n in np.arange(nmin):
                 for l in range(n):
-                    ncore[s] += 2*(2*l+1)
-            llist = set(basis[np.argwhere(basis[:,0]==nmin)][:, 0, 1])
-            llist_nmin = set(range(max(llist)+1))
+                    ncore[s] += 2 * (2 * l + 1)
+            llist = set(basis[np.argwhere(basis[:, 0] == nmin)][:, 0, 1])
+            llist_nmin = set(range(max(llist) + 1))
             l_diff = llist_nmin - llist
             for l in l_diff:
-                ncore[s] += 2*(2*l+1)
+                ncore[s] += 2 * (2 * l + 1)
         return ncore
-    
+
     def _initialize_pyscf_objects(self):
         if self.is_molecule:
             self._mols = self._initialize_pyscf_mol()
@@ -199,18 +197,24 @@ class QMDataset:
 
     def _initialize_pyscf_cell(self):
         cells = []
-        
+
         _stderr_capture = io.StringIO()
-        
+
         with redirect_stderr(_stderr_capture):
             for ifr, structure in enumerate(self._structures):
-                cell, _, _ = get_scell_phase(structure, self._kmesh[ifr], basis=self._basis_name)
+                cell, _, _ = get_scell_phase(
+                    structure, self._kmesh[ifr], basis=self._basis_name
+                )
                 cells.append(cell)
         try:
-            assert _stderr_capture.getvalue() == '''WARNING!
+            assert (
+                _stderr_capture.getvalue()
+                == """WARNING!
   Very diffused basis functions are found in the basis set. They may lead to severe
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
-  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
+                * len(self)
+            )
         except:
             sys.stderr.write(_stderr_capture.getvalue())
 
@@ -219,15 +223,19 @@ class QMDataset:
     def _initialize_pyscf_mol(self):
         mols = []
         _stderr_capture = io.StringIO()
-        
+
         with redirect_stderr(_stderr_capture):
             for structure in self._structures:
-                mols.append(_instantiate_pyscf_mol(structure, basis = self._basis_name))
+                mols.append(_instantiate_pyscf_mol(structure, basis=self._basis_name))
         try:
-            assert _stderr_capture.getvalue() == '''WARNING!
+            assert (
+                _stderr_capture.getvalue()
+                == """WARNING!
   Very diffused basis functions are found in the basis set. They may lead to severe
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
-  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
+                * len(self)
+            )
         except:
             sys.stderr.write(_stderr_capture.getvalue())
 
@@ -236,26 +244,30 @@ class QMDataset:
     @property
     def cells(self):
         if self.is_molecule:
-            raise AttributeError('This system is not periodic')
+            raise AttributeError("This system is not periodic")
         return self._cells
-    
+
     @property
     def mols(self):
         if not self.is_molecule:
-            raise AttributeError('This system is not a molecule')
+            raise AttributeError("This system is not a molecule")
         return self._mols
-    
+
     @property
     def kpts_rel(self):
         return self._kpts_rel
-    
+
     @property
     def kpts_abs(self):
         return self._kpts_abs
-       
+
     def _set_kpts(self):
-        self._kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
-        self._kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
+        self._kpts_rel = [
+            c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)
+        ]
+        self._kpts_abs = [
+            c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)
+        ]
 
     @property
     def fock_realspace(self):
@@ -273,17 +285,29 @@ class QMDataset:
     def overlap_kspace(self):
         return self._overlap_kspace
 
-    def _set_matrices(self,
-                      fock_realspace: Optional[Union[Dict, List]] = None,
-                      fock_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None,
-                      overlap_realspace: Optional[Union[Dict, List]] = None,
-                      overlap_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None):
+    def _set_matrices(
+        self,
+        fock_realspace: Optional[Union[Dict, List]] = None,
+        fock_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None,
+        overlap_realspace: Optional[Union[Dict, List]] = None,
+        overlap_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None,
+    ):
         self._fock_realspace, self._fock_kspace = self._assign_or_compute_matrices(
-            fock_realspace, fock_kspace, self._set_fock_kspace)
-        self._overlap_realspace, self._overlap_kspace = self._assign_or_compute_matrices(
-            overlap_realspace, overlap_kspace, self._set_overlap_kspace)
+            fock_realspace, fock_kspace, self._set_fock_kspace
+        )
+        (
+            self._overlap_realspace,
+            self._overlap_kspace,
+        ) = self._assign_or_compute_matrices(
+            overlap_realspace, overlap_kspace, self._set_overlap_kspace
+        )
 
-    def _assign_or_compute_matrices(self, realspace: Optional[Union[Dict, List]], kspace: Optional[Union[np.ndarray, torch.Tensor, List]], kspace_setter: Any):
+    def _assign_or_compute_matrices(
+        self,
+        realspace: Optional[Union[Dict, List]],
+        kspace: Optional[Union[np.ndarray, torch.Tensor, List]],
+        kspace_setter: Any,
+    ):
         if kspace is not None and realspace is None:
             kspace_setter(kspace)
             realspace = None
@@ -296,17 +320,23 @@ class QMDataset:
             realspace = None
             kspace = None
         elif kspace is not None and realspace is not None:
-            raise NotImplementedError("Check consistency between realspace and kspace matrices.")
+            raise NotImplementedError(
+                "Check consistency between realspace and kspace matrices."
+            )
         else:
             raise NotImplementedError("Unhandled condition.")
-        
+
         return realspace, kspace
 
-    def _set_matrices_realspace(self, matrices_realspace: Union[Dict, List[Dict]]) -> List[Dict]:
+    def _set_matrices_realspace(
+        self, matrices_realspace: Union[Dict, List[Dict]]
+    ) -> List[Dict]:
         if not isinstance(matrices_realspace[0], dict):
-            assert self.is_molecule, "matrices_realspace should be a dictionary unless it's a molecule"
+            assert (
+                self.is_molecule
+            ), "matrices_realspace should be a dictionary unless it's a molecule"
             return matrices_realspace
-        
+
         return [self._convert_matrix(m) for m in matrices_realspace]
 
     def _convert_matrix(self, matrix: Dict) -> Dict:
@@ -320,27 +350,45 @@ class QMDataset:
         elif isinstance(data, list):
             return torch.tensor(data, device=self.device)
         else:
-            raise ValueError("Matrix elements should be torch.Tensor, numpy.ndarray, or list")
+            raise ValueError(
+                "Matrix elements should be torch.Tensor, numpy.ndarray, or list"
+            )
 
-    def _set_matrices_kspace(self, matrices_kspace: Union[List, np.ndarray, torch.Tensor]) -> List[torch.Tensor]:
+    def _set_matrices_kspace(
+        self, matrices_kspace: Union[List, np.ndarray, torch.Tensor]
+    ) -> List[torch.Tensor]:
         if isinstance(matrices_kspace, list):
             return [self._to_tensor(m) for m in matrices_kspace]
         elif isinstance(matrices_kspace, (np.ndarray, torch.Tensor)):
-            assert matrices_kspace.shape[0] == len(self.structures), "Provide matrices_kspace for each structure"
-            return [self._to_tensor(matrices_kspace[i]) for i in range(matrices_kspace.shape[0])]
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "Provide matrices_kspace for each structure"
+            return [
+                self._to_tensor(matrices_kspace[i])
+                for i in range(matrices_kspace.shape[0])
+            ]
         else:
-            raise TypeError("matrices_kspace should be a list, np.ndarray, or torch.Tensor")
+            raise TypeError(
+                "matrices_kspace should be a list, np.ndarray, or torch.Tensor"
+            )
 
     def _set_fock_kspace(self, fock_kspace: Union[List, np.ndarray, torch.Tensor]):
         self._fock_kspace = self._set_matrices_kspace(fock_kspace)
 
-    def _set_overlap_kspace(self, overlap_kspace: Union[List, np.ndarray, torch.Tensor]):
+    def _set_overlap_kspace(
+        self, overlap_kspace: Union[List, np.ndarray, torch.Tensor]
+    ):
         self._overlap_kspace = self._set_matrices_kspace(overlap_kspace)
 
     def compute_matrices_realspace(self, matrices_kspace: Any):
         raise NotImplementedError("This must happen when the targets are computed!")
 
-    def bloch_sum(self, matrices_realspace: List[Dict], is_tensor: bool = True, structure_ids: Optional[List[int]] = None) -> List[Optional[torch.Tensor]]:
+    def bloch_sum(
+        self,
+        matrices_realspace: List[Dict],
+        is_tensor: bool = True,
+        structure_ids: Optional[List[int]] = None,
+    ) -> List[Optional[torch.Tensor]]:
         matrices_kspace = []
         structure_ids = structure_ids or range(len(matrices_realspace))
 
@@ -349,9 +397,13 @@ class QMDataset:
                 H_T = self._stack_tensors(H, is_tensor)
                 T_list = self._convert_keys_to_tensor(H, is_tensor)
                 k = torch.from_numpy(self.kpts_rel[ifr]).to(device=self.device)
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list=T_list, k=k, norm=1))
+                matrices_kspace.append(
+                    inverse_fourier_transform(H_T, T_list=T_list, k=k, norm=1)
+                )
             else:
-                matrices_kspace.append(None)  # FIXME: not the best way to handle this situation
+                matrices_kspace.append(
+                    None
+                )  # FIXME: not the best way to handle this situation
 
         return matrices_kspace
 
@@ -365,8 +417,9 @@ class QMDataset:
         if is_tensor:
             return torch.tensor(list(H.keys()), dtype=torch.float64, device=self.device)
         else:
-            return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(device=self.device)
-    
+            return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(
+                device=self.device
+            )
 
     # def _set_matrices(self,
     #                   fock_realspace=None,
@@ -401,7 +454,7 @@ class QMDataset:
     #     if not isinstance(matrices_realspace[0], dict):
     #         assert self.is_molecule, "matrices_realspace should be a dictionary unless it's a molecule"
     #         return matrices_realspace
-        
+
     #     return [self._convert_matrix(m) for m in matrices_realspace]
 
     # def _convert_matrix(self, matrix):
@@ -458,7 +511,7 @@ class QMDataset:
     #         else:
     #             matrices_kspace.append(None)  # FIXME: not the best way to handle this situation
 
-    #     try: 
+    #     try:
     #         return torch.stack(matrices_kspace)
     #     except:
     #         return matrices_kspace
@@ -473,10 +526,11 @@ class QMDataset:
     #     if is_tensor:
     #         return torch.tensor(list(H.keys()), dtype=torch.float64, device=self.device)
     #     else:
-    #         return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(device=self.device)    
+    #         return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(device=self.device)
 
     def __len__(self):
         return self.nstructs
+
 
 # Tests
 def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-10):
@@ -501,7 +555,6 @@ def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-1
         ), (ifr, torch.norm(reconstructed_matrices_kspace[ifr] - matrices_kspace[ifr]))
 
 
-
 ####################################################
 ####################################################
 ####################################################
@@ -518,6 +571,7 @@ def check_fourier_duality(matrices_kspace, matrices_realspace, kpoints, tol=1e-1
 
 mlelec_dir = Path(__file__).parents[3]
 
+
 # Dataset class  - to load and pass around structures, targets and
 # required auxillary data wherever necessary
 class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
@@ -525,6 +579,7 @@ class precomputed_molecules(Enum):  # RENAME to precomputed_structures?
     water_rotated = f"{mlelec_dir}/examples/data/water_rotated"
     ethane = f"{mlelec_dir}/examples/data/ethane"
     pbc_c2_rotated = f"{mlelec_dir}/examples/data/pbc/c2_rotated"
+
 
 # No model/feature info here
 class MoleculeDataset(Dataset):
@@ -690,9 +745,10 @@ class MoleculeDataset(Dataset):
             except:
                 warnings.warn("Aux data {} skipped shuffling ".format(t))
                 continue
-    
+
     def __len__(self):
         return len(self.structures)
+
 
 class MLDataset(Dataset):
     # TODO: add compatibility with PeriodicDataset
@@ -759,18 +815,19 @@ class MLDataset(Dataset):
         # self.target.shuffle(self.indices)
         # self.molecule_data.shuffle(self.indices)
 
-    def _get_subset(self, y:torch.ScriptObject, indices: torch.tensor):
-
+    def _get_subset(self, y: torch.ScriptObject, indices: torch.tensor):
         # indices = indices.cpu().numpy()
-        assert isinstance(y, torch.ScriptObject) and y._type().name() == "TensorMap", "y must be a TensorMap"
-        
+        assert (
+            isinstance(y, torch.ScriptObject) and y._type().name() == "TensorMap"
+        ), "y must be a TensorMap"
+
         # for k, b in y.items():
         #     b = b.values.to(device=self.device)
         return mts.slice(
             y,
             axis="samples",
             labels=Labels(
-                names=["structure"], values = torch.tensor(indices).reshape(-1, 1)
+                names=["structure"], values=torch.tensor(indices).reshape(-1, 1)
             ),
         )
 
@@ -823,10 +880,14 @@ class MLDataset(Dataset):
                 (self.train_frac + self.val_frac) * self.nstructs
             )
         ].sort()[0]
-        self.test_idx = self.indices[int((self.train_frac + self.val_frac) * self.nstructs) :].sort()[0]
+        self.test_idx = self.indices[
+            int((self.train_frac + self.val_frac) * self.nstructs) :
+        ].sort()[0]
         if self.test_frac > 0:
-            assert (len(self.test_idx)> 0.0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
-                    ), "Split indices not generated properly"
+            assert (
+                len(self.test_idx)
+                > 0.0  # and len(self.val_idx) > 0 and len(self.train_idx) > 0
+            ), "Split indices not generated properly"
         self.target_train = self._get_subset(self.target.blocks, self.train_idx)
         self.target_val = self._get_subset(self.target.blocks, self.val_idx)
         self.target_test = self._get_subset(self.target.blocks, self.test_idx)
@@ -869,17 +930,13 @@ class MLDataset(Dataset):
             x = mts.slice(
                 self.features,
                 axis="samples",
-                labels=Labels(
-                    names=["structure"], values = idx.reshape(-1, 1)
-                ),
+                labels=Labels(names=["structure"], values=idx.reshape(-1, 1)),
             )
             if self.model_return == "blocks":
                 y = mts.slice(
                     self.target.blocks,
                     axis="samples",
-                    labels = Labels(
-                        names=["structure"], values = idx.reshape(-1, 1)
-                    ),
+                    labels=Labels(names=["structure"], values=idx.reshape(-1, 1)),
                 )
             else:
                 idx = [i.item() for i in idx]
@@ -959,9 +1016,6 @@ def get_dataloader(
         return val_loader
     elif selection.lower() == "test":
         return test_loader
-
-
-
 
 
 # class PeriodicDataset(Dataset):
@@ -1221,8 +1275,8 @@ def get_dataloader(
 ############################################################################################################################################################
 # Dataset/Dataloader specific functions
 
+
 def split_block_by_Aij(block):
-    
     Aij, where_inv = unique_Aij_block(block)
 
     values = {}
@@ -1233,8 +1287,8 @@ def split_block_by_Aij(block):
 
     return values
 
-def split_block_by_Aij_mts(block):
 
+def split_block_by_Aij_mts(block):
     Aij, where_inv = unique_Aij_block(block)
 
     new_blocks = {}
@@ -1244,15 +1298,19 @@ def split_block_by_Aij_mts(block):
     b_properties = block.properties
     for I, (A, i, j) in enumerate(Aij):
         idx = np.where(where_inv == I)[0]
-        new_blocks[A, i, j] = TensorBlock(samples = Labels(b_samples.names, torch.tensor(b_samples.values[idx].tolist())),
-                                          components = b_components,
-                                          properties = b_properties,
-                                          values = b_values[idx])
+        new_blocks[A, i, j] = TensorBlock(
+            samples=Labels(
+                b_samples.names, torch.tensor(b_samples.values[idx].tolist())
+            ),
+            components=b_components,
+            properties=b_properties,
+            values=b_values[idx],
+        )
 
     return new_blocks
 
-def split_by_Aij(tensor, features = None):
 
+def split_by_Aij(tensor, features=None):
     if features is None:
         values = {}
         keys = {}
@@ -1270,20 +1328,18 @@ def split_by_Aij(tensor, features = None):
         outdict = {}
         for Aij in values:
             outdict[Aij] = {k: v for k, v in zip(keys[Aij], values[Aij])}
-        
+
         return outdict
 
     else:
-        
         target_values = {}
         feature_values = {}
         keys = {}
 
         for k, target in tensor.items():
-
-            kl = tuple(k.values.tolist())            
+            kl = tuple(k.values.tolist())
             feature = map_targetkeys_to_featkeys(features, k)
-            
+
             tvalue = split_block_by_Aij(target)
             fvalue = split_block_by_Aij(feature)
 
@@ -1300,14 +1356,15 @@ def split_by_Aij(tensor, features = None):
         features_outdict = {}
         for Aij in target_values:
             target_outdict[Aij] = {k: v for k, v in zip(keys[Aij], target_values[Aij])}
-            features_outdict[Aij] = {k: v for k, v in zip(keys[Aij], feature_values[Aij])}
-        
-        return features_outdict, target_outdict 
+            features_outdict[Aij] = {
+                k: v for k, v in zip(keys[Aij], feature_values[Aij])
+            }
 
-def split_by_Aij_mts(tensor, features = None):
-    
+        return features_outdict, target_outdict
+
+
+def split_by_Aij_mts(tensor, features=None):
     if features is None:
-
         blocks = {}
         keys = {}
         for k, b in tensor.items():
@@ -1320,13 +1377,12 @@ def split_by_Aij_mts(tensor, features = None):
                 keys[Aij].append(k.values.tolist())
                 blocks[Aij].append(block[Aij])
 
-
         tmaps = {}
         for Aij in blocks:
             tmap_keys = Labels(tensor.keys.names, torch.tensor(keys[Aij]))
             tmap_blocks = blocks[Aij]
             tmaps[Aij] = TensorMap(tmap_keys, tmap_blocks)
-        
+
         return tmaps
 
     else:
@@ -1335,7 +1391,7 @@ def split_by_Aij_mts(tensor, features = None):
         keys = {}
         for k, b in tensor.items():
             feature = map_targetkeys_to_featkeys(features, k)
-            
+
             target_block = split_block_by_Aij_mts(b)
             feature_block = split_block_by_Aij_mts(feature)
 
@@ -1355,5 +1411,5 @@ def split_by_Aij_mts(tensor, features = None):
             tmap_keys = Labels(tensor.keys.names, torch.tensor(keys[Aij]))
             tmaps_feature[Aij] = TensorMap(tmap_keys, feature_blocks[Aij])
             tmaps_target[Aij] = TensorMap(tmap_keys, target_blocks[Aij])
-        
+
         return tmaps_feature, tmaps_target

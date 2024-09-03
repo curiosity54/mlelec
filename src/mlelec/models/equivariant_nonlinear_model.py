@@ -1,16 +1,17 @@
+import warnings
+from typing import List, Union
+
+import metatensor.torch as mts
+import numpy as np
 import torch
 import torch.nn as nn
-from typing import List, Dict, Optional, Union
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys_integrated
-import metatensor.torch as mts
-from metatensor.torch import Labels, TensorMap, TensorBlock
+from metatensor.torch import TensorBlock, TensorMap
 from metatensor.torch.learn import ModuleMap
-import numpy as np
-import warnings
-from sklearn.linear_model import RidgeCV
 from sklearn.kernel_ridge import KernelRidge
+from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import GridSearchCV
 
+from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys_integrated
 
 # class EquivariantNonLinearity(nn.Module):
 #     """
@@ -30,7 +31,7 @@ from sklearn.model_selection import GridSearchCV
 #         self.nonlinearity = nonlinearity
 #         self.epsilon = epsilon
 #         self.device = device or 'cpu'
-        
+
 #         self.nn = [self.nonlinearity]
 #         if norm:
 #             self.nn.append(nn.LayerNorm([layersize], device=self.device))
@@ -47,17 +48,18 @@ from sklearn.model_selection import GridSearchCV
 #             torch.Tensor: Output tensor of the same shape as input.
 #         """
 #         assert len(x.shape) == 3, "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
-        
+
 #         # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
 #         x_inv = torch.einsum("imf,imf->if", x, x)
 #         x_inv = torch.sqrt(x_inv + self.epsilon)
-        
+
 #         # Apply the nonlinearity and optional normalization
 #         x_inv = self.nn(x_inv)
-        
+
 #         # Scale the original tensor by the transformed inverse tensor
 #         out = torch.einsum("if, imf->imf", x_inv, x)
 #         return out
+
 
 class EquivariantNonLinearity(nn.Module):
     """
@@ -72,35 +74,55 @@ class EquivariantNonLinearity(nn.Module):
         layersize (int): The size of the layer (number of features).
         device (str): The device to use for the layer.
     """
-    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm=True, layersize=None, device=None):
+
+    def __init__(
+        self,
+        nonlinearity: callable = None,
+        epsilon=1e-6,
+        norm=True,
+        layersize=None,
+        device=None,
+    ):
         super().__init__()
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
-        self.device = device or 'cpu'
+        self.device = device or "cpu"
 
         # Use LayerNorm if norm is True
         self.norm = nn.LayerNorm([layersize], device=self.device) if norm else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        assert len(x.shape) == 3, "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
+        assert (
+            len(x.shape) == 3
+        ), "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
 
         # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
         x_inv = torch.sqrt(torch.einsum("imf,imf->if", x, x) + self.epsilon)
-        
+
         # Apply the nonlinearity and optional normalization
         if self.nonlinearity:
             x_inv = self.nonlinearity(x_inv)
         if self.norm:
             x_inv = self.norm(x_inv)
-        
+
         # Scale the original tensor by the transformed inverse tensor
         return torch.einsum("if,imf->imf", x_inv, x)
 
-    
+
 class simpleMLP(nn.Module):
-    def __init__(self, nlayers: int, nin: int, nhidden: Union[int, list], nout: int = 1, activation: Union[str, callable] = None, bias: bool = False, device=None, apply_layer_norm=False):
+    def __init__(
+        self,
+        nlayers: int,
+        nin: int,
+        nhidden: Union[int, list],
+        nout: int = 1,
+        activation: Union[str, callable] = None,
+        bias: bool = False,
+        device=None,
+        apply_layer_norm=False,
+    ):
         super().__init__()
-        self.device = device or 'cpu'
+        self.device = device or "cpu"
 
         if nlayers == 0:
             # Single linear layer if no hidden layers
@@ -113,20 +135,26 @@ class simpleMLP(nn.Module):
             # Build the network layers
             layers = []
             for i in range(nlayers):
-                in_dim = nin if i == 0 else nhidden[i-1]
+                in_dim = nin if i == 0 else nhidden[i - 1]
                 out_dim = nhidden[i]
-                
+
                 layers.append(nn.Linear(in_dim, out_dim, bias=bias))
-                
+
                 if activation:
-                    nonlinearity = getattr(nn, activation)() if isinstance(activation, str) else activation
-                    layers.append(EquivariantNonLinearity(
-                        nonlinearity=nonlinearity, 
-                        layersize=out_dim,  
-                        device=self.device, 
-                        norm=apply_layer_norm
-                    ))
-            
+                    nonlinearity = (
+                        getattr(nn, activation)()
+                        if isinstance(activation, str)
+                        else activation
+                    )
+                    layers.append(
+                        EquivariantNonLinearity(
+                            nonlinearity=nonlinearity,
+                            layersize=out_dim,
+                            device=self.device,
+                            norm=apply_layer_norm,
+                        )
+                    )
+
             # Final output layer
             layers.append(nn.Linear(nhidden[-1], nout, bias=bias))
 
@@ -135,8 +163,6 @@ class simpleMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.mlp(x)
-
-
 
 
 class MLP(nn.Module):
@@ -153,6 +179,7 @@ class MLP(nn.Module):
         device (str): Device to run the model on.
         apply_layer_norm (bool): Whether to apply layer normalization.
     """
+
     def __init__(
         self,
         nlayers: int,
@@ -166,7 +193,7 @@ class MLP(nn.Module):
     ):
         super().__init__()
 
-        self.device = device or 'cpu'
+        self.device = device or "cpu"
 
         if nlayers == 0:
             # Purely linear model
@@ -180,14 +207,31 @@ class MLP(nn.Module):
 
             layers = [self._create_layer(nin, nhidden[0], None, bias, apply_layer_norm)]
             for in_dim, out_dim in zip(nhidden[:-1], nhidden[1:]):
-                layers.append(self._create_layer(in_dim, out_dim, activation, bias, apply_layer_norm))
-            layers.append(self._create_layer(nhidden[-1], nout, activation, bias, apply_layer_norm))
+                layers.append(
+                    self._create_layer(
+                        in_dim, out_dim, activation, bias, apply_layer_norm
+                    )
+                )
+            layers.append(
+                self._create_layer(
+                    nhidden[-1], nout, activation, bias, apply_layer_norm
+                )
+            )
 
-            self.mlp = nn.Sequential(*[layer for sublist in layers for layer in sublist])
-        
+            self.mlp = nn.Sequential(
+                *[layer for sublist in layers for layer in sublist]
+            )
+
         self.mlp.to(self.device)
 
-    def _create_layer(self, n_in: int, n_out: int, activation: Union[str, callable], bias: bool, apply_layer_norm: bool) -> List[nn.Module]:
+    def _create_layer(
+        self,
+        n_in: int,
+        n_out: int,
+        activation: Union[str, callable],
+        bias: bool,
+        apply_layer_norm: bool,
+    ) -> List[nn.Module]:
         """
         Create a single layer with optional activation and normalization.
 
@@ -208,9 +252,19 @@ class MLP(nn.Module):
             if isinstance(activation, str):
                 activation = getattr(nn, activation)()
             elif not isinstance(activation, torch.nn.Module):
-                raise ValueError('activation must be a string or a torch.nn.Module instance')
-            layers.insert(0, EquivariantNonLinearity(nonlinearity=activation, layersize=n_in, device=self.device, norm=apply_layer_norm))
-        
+                raise ValueError(
+                    "activation must be a string or a torch.nn.Module instance"
+                )
+            layers.insert(
+                0,
+                EquivariantNonLinearity(
+                    nonlinearity=activation,
+                    layersize=n_in,
+                    device=self.device,
+                    norm=apply_layer_norm,
+                ),
+            )
+
         return layers
 
     def _initialize_layer(self, layer: nn.Module):
@@ -221,7 +275,7 @@ class MLP(nn.Module):
             layer (nn.Module): The layer to initialize.
         """
         if isinstance(layer, nn.Linear):
-            nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+            nn.init.kaiming_uniform_(layer.weight, nonlinearity="relu")
             if layer.bias is not None:
                 nn.init.constant_(layer.bias, 0)
 
@@ -236,7 +290,8 @@ class MLP(nn.Module):
             torch.Tensor: Output tensor.
         """
         return self.mlp(x)
-    
+
+
 def compute_ncore(basis_dict):
     # Same function as in QMDataset. TODO: avoid code duplication
     ncore = {}
@@ -254,6 +309,7 @@ def compute_ncore(basis_dict):
             ncore[s] += 2 * (2 * l + 1)
     return ncore
 
+
 class EquivariantNonlinearModel(nn.Module):
     """
     A model for equivariant nonlinear transformations with support for ridge regression.
@@ -266,12 +322,13 @@ class EquivariantNonlinearModel(nn.Module):
         apply_norm (bool): Whether to apply layer normalization.
         **kwargs: Additional arguments for model configuration.
     """
+
     def __init__(
         self,
         mldata,
         nhidden: Union[int, list],
         nlayers: int,
-        activation: Union[str, callable] = 'SiLU',
+        activation: Union[str, callable] = "SiLU",
         apply_norm: bool = True,
         **kwargs,
     ):
@@ -286,10 +343,17 @@ class EquivariantNonlinearModel(nn.Module):
         self.apply_norm = apply_norm
         self.device = mldata.device
         self.dummy_property = self.target_blocks[0].properties
-        self._initialize_submodels(set_bias=kwargs.get("bias", False), nhidden=nhidden, nlayers=nlayers, activation=activation)
+        self._initialize_submodels(
+            set_bias=kwargs.get("bias", False),
+            nhidden=nhidden,
+            nlayers=nlayers,
+            activation=activation,
+        )
         self.ridges = None
-    
-    def _initialize_submodels(self, set_bias=False, nhidden=16, nlayers=2, activation=None, **kwargs):
+
+    def _initialize_submodels(
+        self, set_bias=False, nhidden=16, nlayers=2, activation=None, **kwargs
+    ):
         """
         Initialize submodels for each target block.
 
@@ -309,17 +373,21 @@ class EquivariantNonlinearModel(nn.Module):
             feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
             bias = k["L"] == 0 and set_bias
 
-            modules.append(simpleMLP(
-                nin=feat.values.shape[-1],
-                nout=nprop,
-                nhidden=nhidden,
-                nlayers=nlayers,
-                bias=bias,
-                activation=activation,
-                apply_layer_norm=self.apply_norm,
-            ))
+            modules.append(
+                simpleMLP(
+                    nin=feat.values.shape[-1],
+                    nout=nprop,
+                    nhidden=nhidden,
+                    nlayers=nlayers,
+                    bias=bias,
+                    activation=activation,
+                    apply_layer_norm=self.apply_norm,
+                )
+            )
 
-        self.model = ModuleMap(self.target_blocks.keys, modules, out_properties).to(self.device)
+        self.model = ModuleMap(self.target_blocks.keys, modules, out_properties).to(
+            self.device
+        )
 
     def forward(self, features, target_blocks=None, return_matrix=False):
         """
@@ -335,7 +403,9 @@ class EquivariantNonlinearModel(nn.Module):
         """
         if target_blocks is None:
             keys = self.model.in_keys
-            warnings.warn('Using training target_blocks; provide test target_blocks for inference.')
+            warnings.warn(
+                "Using training target_blocks; provide test target_blocks for inference."
+            )
         else:
             keys = target_blocks.keys
 
@@ -386,7 +456,9 @@ class EquivariantNonlinearModel(nn.Module):
             feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
             nsamples, ncomp, _ = block.values.shape
             feat = _match_feature_and_target_samples(block, feat, return_idx=True)
-            assert torch.all(block.samples.values == feat.samples.values[:, :]), (_match_feature_and_target_samples(block, feat))
+            assert torch.all(
+                block.samples.values == feat.samples.values[:, :]
+            ), _match_feature_and_target_samples(block, feat)
 
             if feat.values.is_complex():
                 is_complex = True
@@ -394,13 +466,41 @@ class EquivariantNonlinearModel(nn.Module):
                 x_imag = feat.values.imag
                 y_real = block.values.real
                 y_imag = block.values.imag
-                x = x_real.reshape((x_real.shape[0] * x_real.shape[1], -1)).cpu().numpy()
-                y = y_real.reshape((y_real.shape[0] * y_real.shape[1], -1)).cpu().numpy()
-                x2 = x_imag.reshape((x_imag.shape[0] * x_imag.shape[1], -1)).cpu().numpy()
-                y2 = y_imag.reshape((y_imag.shape[0] * y_imag.shape[1], -1)).cpu().numpy()
+                x = (
+                    x_real.reshape((x_real.shape[0] * x_real.shape[1], -1))
+                    .cpu()
+                    .numpy()
+                )
+                y = (
+                    y_real.reshape((y_real.shape[0] * y_real.shape[1], -1))
+                    .cpu()
+                    .numpy()
+                )
+                x2 = (
+                    x_imag.reshape((x_imag.shape[0] * x_imag.shape[1], -1))
+                    .cpu()
+                    .numpy()
+                )
+                y2 = (
+                    y_imag.reshape((y_imag.shape[0] * y_imag.shape[1], -1))
+                    .cpu()
+                    .numpy()
+                )
             else:
-                x = feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1)).cpu().numpy()
-                y = block.values.reshape(block.values.shape[0] * block.values.shape[1], -1).cpu().numpy()
+                x = (
+                    feat.values.reshape(
+                        (feat.values.shape[0] * feat.values.shape[1], -1)
+                    )
+                    .cpu()
+                    .numpy()
+                )
+                y = (
+                    block.values.reshape(
+                        block.values.shape[0] * block.values.shape[1], -1
+                    )
+                    .cpu()
+                    .numpy()
+                )
 
             if kernel_ridge:
                 ridge = KernelRidge(alpha=alpha).fit(x, y)
@@ -415,7 +515,7 @@ class EquivariantNonlinearModel(nn.Module):
 
             pred = ridge.predict(x)
             self.ridges.append(ridge)
-            if is_complex: 
+            if is_complex:
                 pred2 = ridge_c.predict(x2)
                 self.ridges.append(ridge_c)
                 pred_real = pred
@@ -424,7 +524,9 @@ class EquivariantNonlinearModel(nn.Module):
 
             pred_blocks.append(
                 TensorBlock(
-                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(self.device),
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                        self.device
+                    ),
                     samples=block.samples,
                     components=block.components,
                     properties=self.dummy_property,
@@ -448,25 +550,32 @@ class EquivariantNonlinearModel(nn.Module):
             TensorMap: Predicted tensor map.
         """
         if self.ridges is None:
-            assert ridges is not None, 'Ridges must be fitted first'
+            assert ridges is not None, "Ridges must be fitted first"
             self.ridges = ridges
         if hfeat is None:
             hfeat = self.feats
-            warnings.warn('Using train hfeat, otherwise provide test hfeat')
+            warnings.warn("Using train hfeat, otherwise provide test hfeat")
         if target_blocks is None:
             target_blocks = self.target_blocks
-            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+            warnings.warn(
+                "Using train target_blocks, otherwise provide test target_blocks"
+            )
 
         pred_blocks = []
         for imdl, (key, tkey) in enumerate(zip(self.ridges, target_blocks.keys)):
             feat = map_targetkeys_to_featkeys_integrated(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
-            x = feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1)).cpu().numpy()
+            x = (
+                feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))
+                .cpu()
+                .numpy()
+            )
             pred = self.ridges[imdl].predict(x)
             pred_blocks.append(
                 TensorBlock(
-                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                    .to(self.device),
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                        self.device
+                    ),
                     samples=feat.samples,
                     components=feat.components,
                     properties=self.dummy_property,
@@ -489,7 +598,7 @@ class EquivariantNonlinearModel(nn.Module):
             * torch.sum(self.layer.weight.T @ self.layer.weight)
             / 1  # normalize by number of samples
         )
-    
+
     def model_return(self, target: torch.ScriptObject, return_matrix=False):
         """
         Return the model output.
@@ -520,7 +629,9 @@ def _match_feature_and_target_samples(target_block, feat_block, return_idx=False
         Union[TensorBlock, Tuple[torch.Tensor, torch.Tensor]]:
             The matched feature block or a tuple of indices.
     """
-    intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
+    intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(
+        target_block.samples
+    )
     if not return_idx:
         idx1 = torch.where(idx1 == -1)[0]
         idx2 = torch.where(idx2 == -1)[0]
@@ -534,7 +645,9 @@ def _match_feature_and_target_samples(target_block, feat_block, return_idx=False
         idx1 = torch.where(idx1 != -1)
         idx2 = torch.where(idx2 != -1)
         assert len(idx1) == len(idx2)
-        return TensorBlock(values=feat_block.values[idx1],
-                           samples=intersection,
-                           properties=feat_block.properties,
-                           components=feat_block.components)
+        return TensorBlock(
+            values=feat_block.values[idx1],
+            samples=intersection,
+            properties=feat_block.properties,
+            components=feat_block.components,
+        )

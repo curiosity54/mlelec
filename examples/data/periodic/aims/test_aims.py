@@ -19,20 +19,21 @@
 # +
 
 
-import numpy as np 
-import torch 
-import metatensor 
-from metatensor import Labels, TensorBlock, TensorMap
+import metatensor
+import numpy as np
+import torch
+from ase.io import read
+from ase.visualize import view
+from metatensor import Labels, TensorBlock, TensorMap, save
+
 from mlelec.data.dataset import QMDataset
 from mlelec.features.acdc import *
-from mlelec.features.acdc_utils import *    
-from ase.io import read
-from mlelec.utils.twocenter_utils import fix_orbital_order
-from ase.visualize import view
-from metatensor import save 
+from mlelec.features.acdc_utils import *
+
 # -
 from mlelec.models.linear import LinearModelPeriodic
 from mlelec.utils.plot_utils import plot_hamiltonian
+from mlelec.utils.twocenter_utils import fix_orbital_order
 
 device='cpu'
 filename = "C2_rotated"
@@ -57,9 +58,11 @@ for f in frames:
 dataset = QMDataset(frames = frames[:5], kgrid=kmesh, matrices_kpoint = kfock[:5], target=["real_translation"] ,device = "cpu", orbs = orbitals[ORBS], orbs_name = ORBS) 
 
 
+from mlelec.utils.pbc_utils import matrix_to_blocks
+
 # +
 from mlelec.utils.twocenter_utils import _to_coupled_basis
-from mlelec.utils.pbc_utils import matrix_to_blocks 
+
 # from mlelec.utils.twocenter_utils import _to_blocks  
 
 def get_targets(dataset, device ="cpu"):
@@ -174,6 +177,7 @@ print(loss_ridge_bias)
 
 # +
 import matplotlib.pyplot as plt
+
 plt.rcParams['figure.dpi'] = 500
 x=[','.join([str(lbl[i]) for i in [0,2,3,5,6,7]]) for lbl in target_coupled_blocks.keys.values.tolist()]
 fs = plt.rcParams['figure.figsize']

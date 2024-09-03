@@ -1,20 +1,21 @@
 # sets up a linear model
-import torch
-import torch.nn as nn
-from mlelec.data.dataset import MLDataset
-from typing import List, Dict, Optional, Union
-from mlelec.utils.twocenter_utils import (
-    map_targetkeys_to_featkeys,
-    _to_uncoupled_basis,
-    _to_matrix,
-)
+import warnings
+from typing import Union
 
 import metatensor.torch as mts
-from metatensor.torch import Labels, TensorMap, TensorBlock
-import mlelec.metrics as mlmetrics
-from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
-import warnings
+import torch
+import torch.nn as nn
+from metatensor.torch import Labels, TensorBlock, TensorMap
+
+import mlelec.metrics as mlmetrics
+from mlelec.data.dataset import MLDataset
+from mlelec.utils.metatensor_utils import labels_where
+from mlelec.utils.twocenter_utils import (
+    _to_matrix,
+    _to_uncoupled_basis,
+    map_targetkeys_to_featkeys,
+)
 
 
 def norm_over_components(x):
@@ -53,8 +54,9 @@ class NormLayer(nn.Module):
             new_norm = _norm(norm).unsqueeze(-1)
             print(new_norm, new_norm.device)
 
-        norm_x = rescale(x, norm, new_norm)
+        rescale(x, norm, new_norm)
         return norm
+
 
 # class E3LayerNorm(nn.Module):
 #     def __init__(self, layersize, epsilon = 1e-6, device = None, bias = False):
@@ -64,7 +66,7 @@ class NormLayer(nn.Module):
 #             self.device = 'cpu'
 #         else:
 #             self.device = device
-        
+
 #         self.bias = bias
 
 #         self.layersize = layersize
@@ -76,56 +78,70 @@ class NormLayer(nn.Module):
 #         # assert x.shape[2] == self.layersize
 #         return self.layer(x)
 
+
 class E3LayerNorm(nn.Module):
-    def __init__(self, layersize, device = None, bias = False, epsilon = 1e-7):
+    def __init__(self, layersize, device=None, bias=False, epsilon=1e-7):
         super().__init__()
         self.layersize = layersize
         if device is None:
-            self.device = 'cpu'
+            self.device = "cpu"
         else:
-            self.device = device        
-        self.bias = bias            # compute mean
+            self.device = device
+        self.bias = bias  # compute mean
         self.epsilon = epsilon
-        self.alpha = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True) # parameter for mean
-        self.beta = nn.Parameter(torch.randn(1, device = self.device), requires_grad=True)  # parameter for variance
+        self.alpha = nn.Parameter(
+            torch.randn(1, device=self.device), requires_grad=True
+        )  # parameter for mean
+        self.beta = nn.Parameter(
+            torch.randn(1, device=self.device), requires_grad=True
+        )  # parameter for variance
         # self.gamma = nn.Parameter(torch.randn(self.layersize, device = self.device), requires_grad=True) # parameter for global bias << BREAKS equivariance
 
     def forward(self, x):
         assert len(x.shape) == 3
         assert x.shape[2] == self.layersize
         if self.bias:
-            mean = torch.mean(x, dim = 2, keepdim = True)
+            mean = torch.mean(x, dim=2, keepdim=True)
             x = x - self.alpha * mean
-        
-        var = torch.var(x,keepdim = True)
-        return self.beta * x / torch.sqrt(var +self.epsilon) #+ self.gamma.view(1,1,self.layersize)
+
+        var = torch.var(x, keepdim=True)
+        return (
+            self.beta * x / torch.sqrt(var + self.epsilon)
+        )  # + self.gamma.view(1,1,self.layersize)
+
 
 class EquivariantNonLinearity(nn.Module):
-    def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm = True, layersize = None, device=None):
+    def __init__(
+        self,
+        nonlinearity: callable = None,
+        epsilon=1e-6,
+        norm=True,
+        layersize=None,
+        device=None,
+    ):
         super().__init__()
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
         if device is None:
-            device = 'cpu'
+            device = "cpu"
         self.device = device
-        
+
         if norm:
             self.nn = [
                 # nn.LayerNorm(layersize, device = self.device),
                 self.nonlinearity,
-                nn.LayerNorm(layersize, device = self.device)
+                nn.LayerNorm(layersize, device=self.device),
             ]
             # self.norm = nn.LayerNorm(layersize, device = self.device, elementwise_affine = True, bias = False)
         else:
             self.nn = [self.nonlinearity]
 
         self.nn = nn.Sequential(*self.nn)
-        
-    def forward(self, x):
 
+    def forward(self, x):
         assert len(x.shape) == 3
 
-        x_inv = torch.einsum("imf,imf->if", x, x)#.flatten()
+        x_inv = torch.einsum("imf,imf->if", x, x)  # .flatten()
         x_inv = self.nn(x_inv)
 
         try:
@@ -136,7 +152,7 @@ class EquivariantNonLinearity(nn.Module):
         return out
 
 
-def _norm_layer(x, norm_clamp=2e-12,  nonlinearity: callable = None):
+def _norm_layer(x, norm_clamp=2e-12, nonlinearity: callable = None):
     """
     x: torch.tensor of shape (nstr, ncomponents, nfeatures)
 
@@ -163,7 +179,7 @@ class BlockModel(nn.Module):
 
     def __init__(self):
         super().__init__()
-        pass
+
 
 # from mlelec.models.nn import EquiLayerNorm
 class MLP(nn.Module):
@@ -176,8 +192,8 @@ class MLP(nn.Module):
         activation: Union[str, callable] = None,
         bias: bool = False,
         device=None,
-        apply_layer_norm = False, 
-        e3layernorm_size = None,
+        apply_layer_norm=False,
+        e3layernorm_size=None,
         # activation_with_linear = False,
     ):
         super().__init__()
@@ -185,69 +201,83 @@ class MLP(nn.Module):
         if nlayers == 0:
             # Purely linear model
 
-            if False: #e3layernorm_size is not None:
+            if False:  # e3layernorm_size is not None:
                 self.mlp = [
-                    E3LayerNorm(e3layernorm_size, device = device, bias = bias),
-                    nn.Linear(nin, nout, bias=bias)
-                    ]
+                    E3LayerNorm(e3layernorm_size, device=device, bias=bias),
+                    nn.Linear(nin, nout, bias=bias),
+                ]
             else:
                 self.mlp = [nn.Linear(nin, nout, bias=bias)]
 
         else:
-
             if not isinstance(nhidden, list):
                 nhidden = [nhidden] * nlayers
             else:
                 assert len(nhidden) == nlayers, "len(nhidden) must be equal to nlayers"
 
             # Input layer
-            if False: #e3layernorm_size is not None:
+            if False:  # e3layernorm_size is not None:
                 self.mlp = [
-                    E3LayerNorm(e3layernorm_size, device = device, bias = bias),
-                    nn.Linear(nin, nhidden[0], bias = bias)
-                    ]
+                    E3LayerNorm(e3layernorm_size, device=device, bias=bias),
+                    nn.Linear(nin, nhidden[0], bias=bias),
+                ]
             else:
-                self.mlp = [nn.Linear(nin, nhidden[0], bias = bias)]
-            
+                self.mlp = [nn.Linear(nin, nhidden[0], bias=bias)]
+
             # Hidden layers
             last_n = nhidden[0]
             for n in nhidden[1:]:
-                self.mlp.extend(self.middle_layer(last_n, n, activation, bias, device, apply_layer_norm))
+                self.mlp.extend(
+                    self.middle_layer(
+                        last_n, n, activation, bias, device, apply_layer_norm
+                    )
+                )
                 last_n = n
-            
+
             # Output layer
             # self.mlp.append(nn.Linear(nhidden[-1], nout, bias=bias))
-            self.mlp.extend(self.middle_layer(last_n, nout, activation, bias, device, apply_layer_norm))
-                            
+            self.mlp.extend(
+                self.middle_layer(
+                    last_n, nout, activation, bias, device, apply_layer_norm
+                )
+            )
+
         self.mlp = nn.Sequential(*self.mlp)
         self.mlp.to(device)
 
-    def middle_layer(self, 
-                     n_in, 
-                     n_out, 
-                     activation = None, 
-                     bias = False, 
-                     device = 'cpu',
-                     apply_layer_norm = False,
-                     ):
-        
+    def middle_layer(
+        self,
+        n_in,
+        n_out,
+        activation=None,
+        bias=False,
+        device="cpu",
+        apply_layer_norm=False,
+    ):
         if activation is None:
-            return [nn.Linear(n_in, n_out, bias = bias)]
-        
+            return [nn.Linear(n_in, n_out, bias=bias)]
+
         else:
             if isinstance(activation, str):
                 activation = getattr(nn, activation)()
             elif not issubclass(activation, torch.nn.Module):
-                raise ValueError('activation must be a string or a torch.nn.Module instance')
-                
-            return [EquivariantNonLinearity(nonlinearity = activation, 
-                                            device = device, 
-                                            norm = apply_layer_norm, 
-                                            layersize = n_in),
-                    nn.Linear(n_in, n_out, bias = bias)]
+                raise ValueError(
+                    "activation must be a string or a torch.nn.Module instance"
+                )
+
+            return [
+                EquivariantNonLinearity(
+                    nonlinearity=activation,
+                    device=device,
+                    norm=apply_layer_norm,
+                    layersize=n_in,
+                ),
+                nn.Linear(n_in, n_out, bias=bias),
+            ]
 
     def forward(self, x):
         return self.mlp(x)
+
 
 class LinearTargetModel(nn.Module):
     def __init__(
@@ -390,7 +420,9 @@ class LinearTargetModel(nn.Module):
             raise NotImplementedError("return_type not implemented")
         return loss
 
-    def fit_ridge_analytical(self, alphas = np.logspace(-15, -1, 40),set_bias=False) -> None:
+    def fit_ridge_analytical(
+        self, alphas=np.logspace(-15, -1, 40), set_bias=False
+    ) -> None:
         from sklearn.linear_model import RidgeCV
 
         # set_bias will set bias=True for the invariant model
@@ -400,15 +432,15 @@ class LinearTargetModel(nn.Module):
         self.ridges = []
         # kernels = []
         for k, block in self.dataset.target_train.items():
-            blockval = torch.linalg.norm(block.values)
+            torch.linalg.norm(block.values)
             bias = False
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
                     bias = True
-                sample_names = block.samples.names
+                block.samples.names
                 feat = map_targetkeys_to_featkeys(self.dataset.feat_train, k)
 
-                targetnorm = torch.linalg.norm(block.values)
+                torch.linalg.norm(block.values)
                 nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
                 assert np.all(block.samples.values == feat.samples.values), (
@@ -439,9 +471,7 @@ class LinearTargetModel(nn.Module):
                 )
                 # ridge = KernelRidge(alpha =[1e-5,1e-1, 1])# np.logspace(-15,-1,40))
                 # ridge = ridge.fit(x,y)
-                ridge = RidgeCV(
-                    alphas=alphas, fit_intercept=bias
-                ).fit(x, y)
+                ridge = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x, y)
                 # print(ridge.intercept_, np.mean(ridge.coef_), ridge.alpha_)
                 pred = ridge.predict(x)
                 self.ridges.append(ridge)
@@ -473,42 +503,56 @@ class LinearTargetModel(nn.Module):
 
         return self.recon_blocks, self.ridges
 
-    def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):                       
-        if self.ridges is None:                                                                            
-            assert ridges is not None, 'Ridges must be fitted first or provided as input'                  
-            # self.ridges = ridges                                                                         
-        elif self.ridges is not None and ridges is not None:                                               
-            warnings.warn('Using ridges provided')                                                         
-            ridges = ridges                                                                                
-        else:                                                                                              
-            ridges = self.ridges                                                                           
-                                                                                                           
-        if hfeat is None:                                                                                  
-            hfeat = self.feats                                                                             
-            warnings.warn('Using train hfeat, otherwise provide test hfeat')                               
-        if target_blocks is None:                                                                          
-            target_blocks = self.target_blocks                                                             
-            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')               
-                                                                                                           
-        pred_blocks = []                                                                                   
-        for imdl, (key, tkey) in enumerate(zip(ridges, target_blocks.keys)):                               
-                                                                                                           
-            feat = map_targetkeys_to_featkeys(hfeat, tkey)                                                 
-            nsamples, ncomp, _ = feat.values.shape                                                         
-            x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))/1).cpu().numpy()) 
-            pred = ridges[imdl].predict(x)                                                                 
-            pred_blocks.append(                                                                            
-                            TensorBlock(                                                                   
-                                values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))                
-                                .to(self.device),                                                          
-                                samples=feat.samples,                                                      
-                                components=feat.components,                                                
-                                properties=self.dummy_property,                                            
-                            )                                                                              
-                        )                                                                                  
-                                                                                                           
-        return TensorMap(target_blocks.keys, pred_blocks)                                                  
-    
+    def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):
+        if self.ridges is None:
+            assert (
+                ridges is not None
+            ), "Ridges must be fitted first or provided as input"
+            # self.ridges = ridges
+        elif self.ridges is not None and ridges is not None:
+            warnings.warn("Using ridges provided")
+            ridges = ridges
+        else:
+            ridges = self.ridges
+
+        if hfeat is None:
+            hfeat = self.feats
+            warnings.warn("Using train hfeat, otherwise provide test hfeat")
+        if target_blocks is None:
+            target_blocks = self.target_blocks
+            warnings.warn(
+                "Using train target_blocks, otherwise provide test target_blocks"
+            )
+
+        pred_blocks = []
+        for imdl, (key, tkey) in enumerate(zip(ridges, target_blocks.keys)):
+            feat = map_targetkeys_to_featkeys(hfeat, tkey)
+            nsamples, ncomp, _ = feat.values.shape
+            x = (
+                (
+                    feat.values.reshape(
+                        (feat.values.shape[0] * feat.values.shape[1], -1)
+                    )
+                    / 1
+                )
+                .cpu()
+                .numpy()
+            )
+            pred = ridges[imdl].predict(x)
+            pred_blocks.append(
+                TensorBlock(
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                        self.device
+                    ),
+                    samples=feat.samples,
+                    components=feat.components,
+                    properties=self.dummy_property,
+                )
+            )
+
+        return TensorMap(target_blocks.keys, pred_blocks)
+
+
 class LinearModelPeriodic(nn.Module):
     def __init__(
         self,
@@ -517,8 +561,8 @@ class LinearModelPeriodic(nn.Module):
         frames,
         orbitals,
         device=None,
-        apply_norm = False,
-        use_e3layernorm = False,
+        apply_norm=False,
+        use_e3layernorm=False,
         **kwargs,
     ):
         super().__init__()
@@ -541,16 +585,14 @@ class LinearModelPeriodic(nn.Module):
         self.blockmodels = {}
 
         for k in self.target_blocks.keys:
-            
             bias = False
             if k["L"] == 0 and set_bias:
                 bias = True
 
             # blockval = torch.linalg.norm(self.target_blocks[k].values)
-            
+
             # if  blockval > 1e-10:
             if True:  # <<<<<<<<<<<<<<<<<<<<<
-
                 feat = map_targetkeys_to_featkeys(self.feats, k)
 
                 # if self.use_e3layernorm:
@@ -565,7 +607,7 @@ class LinearModelPeriodic(nn.Module):
                     nlayers=kwargs.get("nlayers", 2),
                     bias=bias,
                     activation=kwargs.get("activation", None),
-                    apply_layer_norm = self.apply_norm,
+                    apply_layer_norm=self.apply_norm,
                     # e3layernorm_size = e3layernorm_size,
                 )
         self.model = torch.nn.ModuleDict(self.blockmodels)
@@ -587,7 +629,9 @@ class LinearModelPeriodic(nn.Module):
                 # if blockval > 1e-10:
                 # sample_names = block.samples.names
                 feat = map_targetkeys_to_featkeys(self.feats, k)
-                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True)
+                feat = _match_feature_and_target_samples(
+                    block, map_targetkeys_to_featkeys(self.feats, k), return_idx=True
+                )
 
                 # nsamples, ncomp, nprops = block.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
@@ -595,9 +639,9 @@ class LinearModelPeriodic(nn.Module):
 
                 pred_blocks.append(
                     TensorBlock(
-                        values=pred,#.reshape((nsamples, ncomp, 1)),
+                        values=pred,  # .reshape((nsamples, ncomp, 1)),
                         samples=feat.samples,
-                        components= block.components,
+                        components=block.components,
                         properties=self.dummy_property,
                     )
                 )
@@ -612,7 +656,9 @@ class LinearModelPeriodic(nn.Module):
         pred_blocks = []
         if target_blocks is None:
             target_blocks = self.target_blocks
-            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+            warnings.warn(
+                "Using train target_blocks, otherwise provide test target_blocks"
+            )
         for k, block in target_blocks.items():
             # print(k)
             # blockval = torch.linalg.norm(block.values)
@@ -621,7 +667,7 @@ class LinearModelPeriodic(nn.Module):
             else:
                 blockstd = 1
             if True:
-            # if blockval > 1e-10:
+                # if blockval > 1e-10:
                 feat = map_targetkeys_to_featkeys(features, k)
 
                 # feat = _match_feature_and_target_samples(block, feat, return_idx=True) # FIXME: return_idx does the opposite of its name?
@@ -629,7 +675,6 @@ class LinearModelPeriodic(nn.Module):
                 nsamples, ncomp, nprops = feat.values.shape
                 # nsamples, ncomp, nprops = feat.values.shape
 
-               
                 pred = self.blockmodels[str(tuple(k))](feat.values) * blockstd
                 # print(pred.shape, nsamples)
 
@@ -647,16 +692,17 @@ class LinearModelPeriodic(nn.Module):
         pred_tmap = TensorMap(target_blocks.keys, pred_blocks)
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
         return recon_blocks
-    
-    def predict_batch(self, features, target_blocks = None, return_matrix = False):
 
+    def predict_batch(self, features, target_blocks=None, return_matrix=False):
         if target_blocks is None:
             target_blocks = self.target_blocks
-            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+            warnings.warn(
+                "Using train target_blocks, otherwise provide test target_blocks"
+            )
 
         pred_blocks = []
         for k, block in target_blocks.items():
-        # for (k, block), feat in zip(target_blocks.items(), features.blocks()):
+            # for (k, block), feat in zip(target_blocks.items(), features.blocks()):
             # print(k)
             # blockval = torch.linalg.norm(block.values)
             if self.scale_prediction:
@@ -670,7 +716,9 @@ class LinearModelPeriodic(nn.Module):
                 # sample_names = block.samples.names
 
                 # TODO: why is this necessary sometimes?
-                feat = _match_feature_and_target_samples(block, map_targetkeys_to_featkeys(features, k), return_idx=True) # FIXME: return_idx does the opposite of its name?
+                feat = _match_feature_and_target_samples(
+                    block, map_targetkeys_to_featkeys(features, k), return_idx=True
+                )  # FIXME: return_idx does the opposite of its name?
 
                 # featnorm = torch.linalg.norm(feat.values)
                 nsamples, ncomp, _ = feat.values.shape
@@ -759,8 +807,8 @@ class LinearModelPeriodic(nn.Module):
         is_complex = False
         if alphas is None:
             alphas = np.logspace(-18, 1, 35)
-        from sklearn.linear_model import RidgeCV
         from sklearn.kernel_ridge import KernelRidge
+        from sklearn.linear_model import RidgeCV
         from sklearn.model_selection import GridSearchCV
 
         # set_bias will set bias=True for the invariant model
@@ -769,7 +817,7 @@ class LinearModelPeriodic(nn.Module):
         pred_blocks = []
         self.ridges = []
         for k, block in self.target_blocks.items():
-            blockval = torch.linalg.norm(block.values)
+            torch.linalg.norm(block.values)
             bias = False
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
@@ -777,10 +825,11 @@ class LinearModelPeriodic(nn.Module):
                 feat = map_targetkeys_to_featkeys(self.feats, k)
                 nsamples, ncomp, _ = block.values.shape
 
-
                 # print(_match_feature_and_target_samples(block, feat))
                 feat = _match_feature_and_target_samples(block, feat, return_idx=True)
-                assert torch.all(block.samples.values == feat.samples.values[:, :]), (_match_feature_and_target_samples(block, feat))
+                assert torch.all(
+                    block.samples.values == feat.samples.values[:, :]
+                ), _match_feature_and_target_samples(block, feat)
                 if feat.values.is_complex():
                     is_complex = True
                     x_real = feat.values.real
@@ -793,14 +842,38 @@ class LinearModelPeriodic(nn.Module):
                     bval = y_real
                     feat__ = x_imag
                     bval_ = y_imag
-                    x = feat_.reshape((feat_.shape[0] * feat_.shape[1], -1)).cpu().numpy()
-                    y = ((bval.reshape(bval.shape[0] * bval.shape[1], -1)).cpu().numpy())
-                    x2 = feat__.reshape((feat__.shape[0] * feat__.shape[1], -1)).cpu().numpy()
-                    y2 =((bval_.reshape(bval_.shape[0] * bval_.shape[1], -1)).cpu().numpy())
+                    x = (
+                        feat_.reshape((feat_.shape[0] * feat_.shape[1], -1))
+                        .cpu()
+                        .numpy()
+                    )
+                    y = (bval.reshape(bval.shape[0] * bval.shape[1], -1)).cpu().numpy()
+                    x2 = (
+                        feat__.reshape((feat__.shape[0] * feat__.shape[1], -1))
+                        .cpu()
+                        .numpy()
+                    )
+                    y2 = (
+                        (bval_.reshape(bval_.shape[0] * bval_.shape[1], -1))
+                        .cpu()
+                        .numpy()
+                    )
 
                 else:
-                    x = feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1)).cpu().numpy()
-                    y = block.values.reshape(block.values.shape[0] * block.values.shape[1], -1).cpu().numpy()
+                    x = (
+                        feat.values.reshape(
+                            (feat.values.shape[0] * feat.values.shape[1], -1)
+                        )
+                        .cpu()
+                        .numpy()
+                    )
+                    y = (
+                        block.values.reshape(
+                            block.values.shape[0] * block.values.shape[1], -1
+                        )
+                        .cpu()
+                        .numpy()
+                    )
 
                 if kernel_ridge:
                     # warnings.warn("Using KernelRidge")
@@ -808,7 +881,7 @@ class LinearModelPeriodic(nn.Module):
                     if nsamples > 2:
                         gscv = GridSearchCV(ridge, dict(alpha=alphas), cv=cv).fit(x, y)
                         alpha = gscv.best_params_["alpha"]
-                       
+
                     else:
                         alpha = alpha
                     ridge = KernelRidge(alpha=alpha).fit(x, y)
@@ -821,11 +894,15 @@ class LinearModelPeriodic(nn.Module):
 
                 pred = ridge.predict(x)
                 self.ridges.append(ridge)
-                if is_complex: 
+                if is_complex:
                     pred2 = ridge_c.predict(x2)
                     self.ridges.append(ridge_c)
-                    pred_real = pred #pred[:nsamples * ncomp].reshape((nsamples, ncomp, 1))
-                    pred_imag = pred2 #pred[nsamples * ncomp :].reshape((nsamples, ncomp, 1))
+                    pred_real = (
+                        pred  # pred[:nsamples * ncomp].reshape((nsamples, ncomp, 1))
+                    )
+                    pred_imag = (
+                        pred2  # pred[nsamples * ncomp :].reshape((nsamples, ncomp, 1))
+                    )
                     pred = pred_real + 1j * pred_imag
                 pred_blocks.append(
                     TensorBlock(
@@ -853,37 +930,47 @@ class LinearModelPeriodic(nn.Module):
         self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
 
         return self.recon_blocks, self.ridges
-    
+
     def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):
         if self.ridges is None:
-            assert ridges is not None, 'Ridges must be fitted first'
+            assert ridges is not None, "Ridges must be fitted first"
             self.ridges = ridges
         if hfeat is None:
             hfeat = self.feats
-            warnings.warn('Using train hfeat, otherwise provide test hfeat')
+            warnings.warn("Using train hfeat, otherwise provide test hfeat")
         if target_blocks is None:
             target_blocks = self.target_blocks
-            warnings.warn('Using train target_blocks, otherwise provide test target_blocks')
+            warnings.warn(
+                "Using train target_blocks, otherwise provide test target_blocks"
+            )
 
         pred_blocks = []
         for imdl, (key, tkey) in enumerate(zip(self.ridges, target_blocks.keys)):
-            
             feat = map_targetkeys_to_featkeys(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
-            x = ((feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))/1).cpu().numpy())
+            x = (
+                (
+                    feat.values.reshape(
+                        (feat.values.shape[0] * feat.values.shape[1], -1)
+                    )
+                    / 1
+                )
+                .cpu()
+                .numpy()
+            )
             pred = self.ridges[imdl].predict(x)
             pred_blocks.append(
-                            TensorBlock(
-                                values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1)))
-                                .to(self.device),
-                                samples=feat.samples,
-                                components=feat.components,
-                                properties=self.dummy_property,
-                            )
-                        )
+                TensorBlock(
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                        self.device
+                    ),
+                    samples=feat.samples,
+                    components=feat.components,
+                    properties=self.dummy_property,
+                )
+            )
 
         return TensorMap(target_blocks.keys, pred_blocks)
-        
 
     def regularization_loss(self, regularization):
         return (
@@ -893,9 +980,11 @@ class LinearModelPeriodic(nn.Module):
         )
 
 
-def _match_feature_and_target_samples(target_block, feat_block, return_idx = False):
-    intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(target_block.samples)
-    
+def _match_feature_and_target_samples(target_block, feat_block, return_idx=False):
+    intersection, idx1, idx2 = feat_block.samples.intersection_and_mapping(
+        target_block.samples
+    )
+
     if not return_idx:
         idx1 = torch.where(idx1 == -1)[0]
         idx2 = torch.where(idx2 == -1)[0]
@@ -909,8 +998,9 @@ def _match_feature_and_target_samples(target_block, feat_block, return_idx = Fal
         idx1 = torch.where(idx1 != -1)
         idx2 = torch.where(idx2 != -1)
         assert len(idx1) == len(idx2)
-        return TensorBlock(values = feat_block.values[idx1],
-                           samples = intersection,
-                           properties = feat_block.properties,
-                           components = feat_block.components)
-        
+        return TensorBlock(
+            values=feat_block.values[idx1],
+            samples=intersection,
+            properties=feat_block.properties,
+            components=feat_block.components,
+        )

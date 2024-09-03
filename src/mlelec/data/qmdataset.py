@@ -1,21 +1,24 @@
-from typing import Dict, List, Optional, Union, Any, Tuple
+import io
+import sys
+import warnings
+from contextlib import redirect_stderr
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import hickle as hkl
 import numpy as np
 import torch
-import hickle as hkl
-import sys
-import io
 from ase.io import read
-from contextlib import redirect_stderr
-import warnings
-from mlelec.utils.pbc_utils import inverse_fourier_transform
-from mlelec.data.pyscf_calculator import get_scell_phase, _instantiate_pyscf_mol
 
-warnings.simplefilter('always', DeprecationWarning)
+from mlelec.data.pyscf_calculator import _instantiate_pyscf_mol, get_scell_phase
+from mlelec.utils.pbc_utils import inverse_fourier_transform
+
+warnings.simplefilter("always", DeprecationWarning)
+
 
 class QMDataset:
-    '''
+    """
     Class containing information about the quantum chemistry calculation and its results.
-    '''
+    """
 
     def __init__(
         self,
@@ -35,7 +38,7 @@ class QMDataset:
         if fix_p_orbital_order or apply_condon_shortley:
             warnings.warn(
                 "The `fix_p_orbital_order` and `apply_condon_shortley` options have been moved to MLDataset.",
-                DeprecationWarning
+                DeprecationWarning,
             )
 
         self._device = device
@@ -58,25 +61,38 @@ class QMDataset:
         )
 
     def __repr__(self):
-        return (f"QMDataset(\n"
-                f"  device: {self.device},\n"
-                f"  basis_name: {self.basis_name},\n"
-                f"  dimension: {self.dimension},\n"
-                f"  nstructs: {self.nstructs},\n"
-                f"  kmesh: {self.kmesh},\n"
-                f"  nao: {self.nao},\n"
-                f"  ncore: {self.ncore},\n"
-                f"  is_molecule: {self.is_molecule},\n"
-                f"  fock_realspace: {self.fock_realspace is not None},\n"
-                f"  fock_kspace: {self.fock_kspace is not None},\n"
-                f"  overlap_realspace: {self.overlap_realspace is not None},\n"
-                f"  overlap_kspace: {self.overlap_kspace is not None}\n"
-                f")")
+        return (
+            f"QMDataset(\n"
+            f"  device: {self.device},\n"
+            f"  basis_name: {self.basis_name},\n"
+            f"  dimension: {self.dimension},\n"
+            f"  nstructs: {self.nstructs},\n"
+            f"  kmesh: {self.kmesh},\n"
+            f"  nao: {self.nao},\n"
+            f"  ncore: {self.ncore},\n"
+            f"  is_molecule: {self.is_molecule},\n"
+            f"  fock_realspace: {self.fock_realspace is not None},\n"
+            f"  fock_kspace: {self.fock_kspace is not None},\n"
+            f"  overlap_realspace: {self.overlap_realspace is not None},\n"
+            f"  overlap_kspace: {self.overlap_kspace is not None}\n"
+            f")"
+        )
 
     @classmethod
-    def from_file(cls, frames_path: str, fock_realspace_path: Optional[str] = None, fock_kspace_path: Optional[str] = None, 
-                  overlap_realspace_path: Optional[str] = None, overlap_kspace_path: Optional[str] = None, kmesh_path: Optional[str] = None, device: str = "cpu", 
-                  orbs_name: str = "sto-3g", orbs: List = None, dimension: int = 3, frame_slice: Optional[Union[slice, str]] = None) -> 'QMDataset':
+    def from_file(
+        cls,
+        frames_path: str,
+        fock_realspace_path: Optional[str] = None,
+        fock_kspace_path: Optional[str] = None,
+        overlap_realspace_path: Optional[str] = None,
+        overlap_kspace_path: Optional[str] = None,
+        kmesh_path: Optional[str] = None,
+        device: str = "cpu",
+        orbs_name: str = "sto-3g",
+        orbs: List = None,
+        dimension: int = 3,
+        frame_slice: Optional[Union[slice, str]] = None,
+    ) -> "QMDataset":
         """
         Create a QMDataset instance by loading frames and matrices from files.
 
@@ -103,30 +119,52 @@ class QMDataset:
             kmesh = np.loadtxt(kmesh_path, dtype=np.int32).tolist()[frame_slice]
         else:
             kmesh = None
-        
+
         frames = cls.load_frames(frames_path)
         frames = frames[frame_slice]
 
-        fock_realspace = cls.load_matrix(fock_realspace_path, device) if fock_realspace_path else None
+        fock_realspace = (
+            cls.load_matrix(fock_realspace_path, device)
+            if fock_realspace_path
+            else None
+        )
         if fock_realspace is not None:
             fock_realspace = fock_realspace[frame_slice]
-        
-        fock_kspace = cls.load_matrix(fock_kspace_path, device) if fock_kspace_path else None
+
+        fock_kspace = (
+            cls.load_matrix(fock_kspace_path, device) if fock_kspace_path else None
+        )
         if fock_kspace is not None:
             fock_kspace = fock_kspace[frame_slice]
 
-        overlap_realspace = cls.load_matrix(overlap_realspace_path, device) if overlap_realspace_path else None
+        overlap_realspace = (
+            cls.load_matrix(overlap_realspace_path, device)
+            if overlap_realspace_path
+            else None
+        )
         if overlap_realspace is not None:
             overlap_realspace = overlap_realspace[frame_slice]
-        
-        overlap_kspace = cls.load_matrix(overlap_kspace_path, device) if overlap_kspace_path else None
+
+        overlap_kspace = (
+            cls.load_matrix(overlap_kspace_path, device)
+            if overlap_kspace_path
+            else None
+        )
         if overlap_kspace is not None:
             overlap_kspace = overlap_kspace[frame_slice]
 
-        return cls(frames=frames, fock_realspace=fock_realspace, fock_kspace=fock_kspace, 
-                   overlap_realspace=overlap_realspace, overlap_kspace=overlap_kspace, kmesh = kmesh, 
-                   device=device, orbs_name=orbs_name, orbs=orbs, dimension=dimension)
-
+        return cls(
+            frames=frames,
+            fock_realspace=fock_realspace,
+            fock_kspace=fock_kspace,
+            overlap_realspace=overlap_realspace,
+            overlap_kspace=overlap_kspace,
+            kmesh=kmesh,
+            device=device,
+            orbs_name=orbs_name,
+            orbs=orbs,
+            dimension=dimension,
+        )
 
     @staticmethod
     def load_frames(file_path: str) -> List:
@@ -155,35 +193,86 @@ class QMDataset:
         Returns:
             Union[Dict, List, torch.Tensor]: Loaded matrix.
         """
+
         def convert_to_tensor(item, device):
             if isinstance(item, np.ndarray):
                 # If it's an ndarray of objects, recursively convert elements
                 if item.dtype == np.object_:
-                    return torch.tensor([convert_to_tensor(subitem) for subitem in item],
-                                        dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64).to(device=device)
+                    return torch.tensor(
+                        [convert_to_tensor(subitem) for subitem in item],
+                        dtype=(
+                            torch.complex128
+                            if any(isinstance(subitem, complex) for subitem in item)
+                            else torch.float64
+                        ),
+                    ).to(device=device)
                 else:
-                    return torch.tensor(item, 
-                                        dtype=torch.complex128 if np.issubdtype(item.dtype, np.complexfloating) else torch.float64).to(device=device)
+                    return torch.tensor(
+                        item,
+                        dtype=(
+                            torch.complex128
+                            if np.issubdtype(item.dtype, np.complexfloating)
+                            else torch.float64
+                        ),
+                    ).to(device=device)
             elif isinstance(item, dict):
                 # Convert dictionaries to tensors
                 if isinstance(next(iter(item.values())), np.ndarray):
-                    return {k: torch.from_numpy(subitem).to(dtype=torch.complex128 if any(isinstance(s, complex) for s in item.values()) else torch.float64, device=device) for k, subitem in item.items()}
+                    return {
+                        k: torch.from_numpy(subitem).to(
+                            dtype=(
+                                torch.complex128
+                                if any(isinstance(s, complex) for s in item.values())
+                                else torch.float64
+                            ),
+                            device=device,
+                        )
+                        for k, subitem in item.items()
+                    }
                 elif isinstance(next(iter(item.values())), list):
-                    return {k: torch.tensor(subitem, dtype=torch.complex128 if any(isinstance(s, complex) for s in item.values()) else torch.float64, device=device) for k, subitem in item.items()}
+                    return {
+                        k: torch.tensor(
+                            subitem,
+                            dtype=(
+                                torch.complex128
+                                if any(isinstance(s, complex) for s in item.values())
+                                else torch.float64
+                            ),
+                            device=device,
+                        )
+                        for k, subitem in item.items()
+                    }
             elif isinstance(item, list):
                 # Convert lists to tensors
-                return torch.tensor(item, dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64, device=device)
+                return torch.tensor(
+                    item,
+                    dtype=(
+                        torch.complex128
+                        if any(isinstance(subitem, complex) for subitem in item)
+                        else torch.float64
+                    ),
+                    device=device,
+                )
             else:
                 # Convert single elements
-                return torch.tensor(item, dtype=torch.complex128 if isinstance(item, complex) else torch.float64, device=device)
+                return torch.tensor(
+                    item,
+                    dtype=(
+                        torch.complex128 if isinstance(item, complex) else torch.float64
+                    ),
+                    device=device,
+                )
 
-        if file_path.endswith('.pt'):
+        if file_path.endswith(".pt"):
             matrix = torch.load(file_path, map_location=device)
-        elif file_path.endswith('.npy'):
+        elif file_path.endswith(".npy"):
             matrix = np.load(file_path, allow_pickle=True)
             if isinstance(matrix, np.ndarray) and matrix.dtype == object:
                 # Handle potential ragged arrays or list of dictionaries
-                if any(isinstance(item, (list, np.ndarray)) and len(item) != len(matrix[0]) for item in matrix):
+                if any(
+                    isinstance(item, (list, np.ndarray)) and len(item) != len(matrix[0])
+                    for item in matrix
+                ):
                     matrix = [convert_to_tensor(item, device) for item in matrix]
                 elif any(isinstance(item, dict) for item in matrix):
                     matrix = [convert_to_tensor(item, device) for item in matrix]
@@ -191,21 +280,46 @@ class QMDataset:
                     matrix = convert_to_tensor([list(item) for item in matrix], device)
             else:
                 matrix = torch.from_numpy(matrix).to(device)
-        elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
+        elif file_path.endswith(".hkl") or file_path.endswith(".hickle"):
             matrix = hkl.load(file_path)
         else:
             raise ValueError(f"Unsupported file type: {file_path}")
 
         if isinstance(matrix, dict):
-            return {k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in matrix.items()}
+            return {
+                k: (
+                    torch.tensor(v, device=device)
+                    if isinstance(v, np.ndarray)
+                    else v.to(device)
+                )
+                for k, v in matrix.items()
+            }
         elif isinstance(matrix, list) and isinstance(matrix[0], dict):
-            return [{k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in sub_matrix.items()} for sub_matrix in matrix]
+            return [
+                {
+                    k: (
+                        torch.tensor(v, device=device)
+                        if isinstance(v, np.ndarray)
+                        else v.to(device)
+                    )
+                    for k, v in sub_matrix.items()
+                }
+                for sub_matrix in matrix
+            ]
         elif isinstance(matrix, list):
-            return [torch.tensor(m, device=device) if isinstance(m, np.ndarray) else m.to(device) for m in matrix]
+            return [
+                (
+                    torch.tensor(m, device=device)
+                    if isinstance(m, np.ndarray)
+                    else m.to(device)
+                )
+                for m in matrix
+            ]
         elif isinstance(matrix, np.ndarray):
             return torch.from_numpy(matrix).to(device)
         else:
             return matrix.to(device)
+
     # def load_matrix(file_path: str, device: str) -> Union[Dict, List, torch.Tensor]:
     #     """
     #     Load a matrix from a file.
@@ -251,7 +365,7 @@ class QMDataset:
 
     @device.setter
     def device(self, value: str):
-        if value not in ['cpu', 'cuda']:
+        if value not in ["cpu", "cuda"]:
             raise ValueError("Device must be either 'cpu' or 'cuda'")
         self._device = value
 
@@ -287,7 +401,7 @@ class QMDataset:
             elif self.dimension == 0:
                 f.pbc = False
             else:
-                raise NotImplementedError('Dimension must be 0, 2, or 3')
+                raise NotImplementedError("Dimension must be 0, 2, or 3")
         return frames
 
     @property
@@ -298,14 +412,18 @@ class QMDataset:
     def kmesh(self) -> Optional[List[Union[int, List[int]]]]:
         return self._kmesh
 
-    def _set_kmesh(self, kmesh: Optional[Union[List[int], List[List[int]]]]) -> Optional[List[Union[int, List[int]]]]:
+    def _set_kmesh(
+        self, kmesh: Optional[Union[List[int], List[List[int]]]]
+    ) -> Optional[List[Union[int, List[int]]]]:
         if self.is_molecule:
             return None
         if kmesh is None:
             kmesh = [1, 1, 1]
         if isinstance(kmesh[0], list):
             if len(kmesh) != self.nstructs:
-                raise ValueError("If kmesh is a list of lists, it must have the same length as the number of structures")
+                raise ValueError(
+                    "If kmesh is a list of lists, it must have the same length as the number of structures"
+                )
             return kmesh
         else:
             return [kmesh for _ in range(self.nstructs)]
@@ -315,7 +433,10 @@ class QMDataset:
         return self._nao
 
     def _set_nao(self) -> List[int]:
-        return [sum(len(self._basis[s]) for s in frame.numbers) for frame in self._structures]
+        return [
+            sum(len(self._basis[s]) for s in frame.numbers)
+            for frame in self._structures
+        ]
 
     @property
     def ncore(self) -> Dict[int, int]:
@@ -351,13 +472,19 @@ class QMDataset:
         _stderr_capture = io.StringIO()
         with redirect_stderr(_stderr_capture):
             for ifr, structure in enumerate(self._structures):
-                cell, _, _ = get_scell_phase(structure, self._kmesh[ifr], basis=self._basis_name)
+                cell, _, _ = get_scell_phase(
+                    structure, self._kmesh[ifr], basis=self._basis_name
+                )
                 cells.append(cell)
         try:
-            assert _stderr_capture.getvalue() == '''WARNING!
+            assert (
+                _stderr_capture.getvalue()
+                == """WARNING!
   Very diffused basis functions are found in the basis set. They may lead to severe
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
-  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
+                * len(self)
+            )
         except:
             sys.stderr.write(_stderr_capture.getvalue())
 
@@ -370,10 +497,14 @@ class QMDataset:
             for structure in self._structures:
                 mols.append(_instantiate_pyscf_mol(structure, basis=self._basis_name))
         try:
-            assert _stderr_capture.getvalue() == '''WARNING!
+            assert (
+                _stderr_capture.getvalue()
+                == """WARNING!
   Very diffused basis functions are found in the basis set. They may lead to severe
   linear dependence and numerical instability.  You can set  cell.exp_to_discard=0.1
-  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n'''*len(self)
+  to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
+                * len(self)
+            )
         except:
             sys.stderr.write(_stderr_capture.getvalue())
         return mols
@@ -381,13 +512,13 @@ class QMDataset:
     @property
     def cells(self) -> List:
         if self.is_molecule:
-            raise AttributeError('This system is not periodic')
+            raise AttributeError("This system is not periodic")
         return self._cells
 
     @property
     def mols(self) -> List:
         if not self.is_molecule:
-            raise AttributeError('This system is not a molecule')
+            raise AttributeError("This system is not a molecule")
         return self._mols
 
     @property
@@ -399,15 +530,21 @@ class QMDataset:
         return self._kpts_abs
 
     def _set_kpts(self):
-        self._kpts_rel = [c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)]
-        self._kpts_abs = [c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)]
+        self._kpts_rel = [
+            c.get_scaled_kpts(c.make_kpts(k)) for c, k in zip(self.cells, self.kmesh)
+        ]
+        self._kpts_abs = [
+            c.get_abs_kpts(kpts) for c, kpts in zip(self.cells, self.kpts_rel)
+        ]
 
     @property
     def fock_realspace(self) -> Optional[Union[Dict, List[Dict]]]:
         return self._fock_realspace
 
     @property
-    def fock_kspace(self) -> Optional[Union[np.ndarray, torch.Tensor, List[torch.Tensor]]]:
+    def fock_kspace(
+        self,
+    ) -> Optional[Union[np.ndarray, torch.Tensor, List[torch.Tensor]]]:
         return self._fock_kspace
 
     @property
@@ -415,7 +552,9 @@ class QMDataset:
         return self._overlap_realspace
 
     @property
-    def overlap_kspace(self) -> Optional[Union[np.ndarray, torch.Tensor, List[torch.Tensor]]]:
+    def overlap_kspace(
+        self,
+    ) -> Optional[Union[np.ndarray, torch.Tensor, List[torch.Tensor]]]:
         return self._overlap_kspace
 
     def _set_matrices(
@@ -423,19 +562,26 @@ class QMDataset:
         fock_realspace: Optional[Union[Dict, List]] = None,
         fock_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None,
         overlap_realspace: Optional[Union[Dict, List]] = None,
-        overlap_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None
+        overlap_kspace: Optional[Union[np.ndarray, torch.Tensor, List]] = None,
     ):
         self._fock_realspace, self._fock_kspace = self._assign_or_compute_matrices(
-            fock_realspace, fock_kspace, self._set_fock_kspace)
-        self._overlap_realspace, self._overlap_kspace = self._assign_or_compute_matrices(
-            overlap_realspace, overlap_kspace, self._set_overlap_kspace)
+            fock_realspace, fock_kspace, self._set_fock_kspace
+        )
+        (
+            self._overlap_realspace,
+            self._overlap_kspace,
+        ) = self._assign_or_compute_matrices(
+            overlap_realspace, overlap_kspace, self._set_overlap_kspace
+        )
 
     def _assign_or_compute_matrices(
         self,
         realspace: Optional[Union[Dict, List]],
         kspace: Optional[Union[np.ndarray, torch.Tensor, List]],
-        kspace_setter: Any
-    ) -> Tuple[Optional[Union[Dict, List]], Optional[Union[np.ndarray, torch.Tensor, List]]]:
+        kspace_setter: Any,
+    ) -> Tuple[
+        Optional[Union[Dict, List]], Optional[Union[np.ndarray, torch.Tensor, List]]
+    ]:
         if kspace is not None and realspace is None:
             kspace_setter(kspace)
             realspace = None
@@ -448,14 +594,20 @@ class QMDataset:
             realspace = None
             kspace = None
         elif kspace is not None and realspace is not None:
-            raise NotImplementedError("Check consistency between realspace and kspace matrices.")
+            raise NotImplementedError(
+                "Check consistency between realspace and kspace matrices."
+            )
         else:
             raise NotImplementedError("Unhandled condition.")
         return realspace, kspace
 
-    def _set_matrices_realspace(self, matrices_realspace: Union[Dict, List[Dict]]) -> List[Dict]:
+    def _set_matrices_realspace(
+        self, matrices_realspace: Union[Dict, List[Dict]]
+    ) -> List[Dict]:
         if not isinstance(matrices_realspace[0], dict):
-            assert self.is_molecule, "Matrices_realspace should be a dictionary unless it's a molecule"
+            assert (
+                self.is_molecule
+            ), "Matrices_realspace should be a dictionary unless it's a molecule"
             return matrices_realspace
         return [self._convert_matrix(m) for m in matrices_realspace]
 
@@ -470,21 +622,34 @@ class QMDataset:
         elif isinstance(data, list):
             return torch.tensor(data, device=self.device)
         else:
-            raise ValueError("Matrix elements should be torch.Tensor, numpy.ndarray, or list")
+            raise ValueError(
+                "Matrix elements should be torch.Tensor, numpy.ndarray, or list"
+            )
 
-    def _set_matrices_kspace(self, matrices_kspace: Union[List, np.ndarray, torch.Tensor]) -> List[torch.Tensor]:
+    def _set_matrices_kspace(
+        self, matrices_kspace: Union[List, np.ndarray, torch.Tensor]
+    ) -> List[torch.Tensor]:
         if isinstance(matrices_kspace, list):
             return [self._to_tensor(m) for m in matrices_kspace]
         elif isinstance(matrices_kspace, (np.ndarray, torch.Tensor)):
-            assert matrices_kspace.shape[0] == len(self.structures), "Provide matrices_kspace for each structure"
-            return [self._to_tensor(matrices_kspace[i]) for i in range(matrices_kspace.shape[0])]
+            assert matrices_kspace.shape[0] == len(
+                self.structures
+            ), "Provide matrices_kspace for each structure"
+            return [
+                self._to_tensor(matrices_kspace[i])
+                for i in range(matrices_kspace.shape[0])
+            ]
         else:
-            raise TypeError("Matrices_kspace should be a list, np.ndarray, or torch.Tensor")
+            raise TypeError(
+                "Matrices_kspace should be a list, np.ndarray, or torch.Tensor"
+            )
 
     def _set_fock_kspace(self, fock_kspace: Union[List, np.ndarray, torch.Tensor]):
         self._fock_kspace = self._set_matrices_kspace(fock_kspace)
 
-    def _set_overlap_kspace(self, overlap_kspace: Union[List, np.ndarray, torch.Tensor]):
+    def _set_overlap_kspace(
+        self, overlap_kspace: Union[List, np.ndarray, torch.Tensor]
+    ):
         self._overlap_kspace = self._set_matrices_kspace(overlap_kspace)
 
     def compute_matrices_realspace(self, matrices_kspace: Any):
@@ -496,9 +661,8 @@ class QMDataset:
         matrices_realspace: List[Dict],
         is_tensor: bool = True,
         structure_ids: Optional[List[int]] = None,
-        kpts_rel: Optional[np.ndarray] = None
+        kpts_rel: Optional[np.ndarray] = None,
     ) -> List[Optional[torch.Tensor]]:
-
         if kpts_rel is None:
             kpts_rel = self.kpts_rel
 
@@ -509,7 +673,9 @@ class QMDataset:
                 H_T = self._stack_tensors(H, is_tensor)
                 T_list = self._convert_keys_to_tensor(H, is_tensor)
                 k = torch.from_numpy(kpts_rel[ifr]).to(device=self.device)
-                matrices_kspace.append(inverse_fourier_transform(H_T, T_list=T_list, k=k, norm=1))
+                matrices_kspace.append(
+                    inverse_fourier_transform(H_T, T_list=T_list, k=k, norm=1)
+                )
             else:
                 matrices_kspace.append(None)
         return matrices_kspace
@@ -526,7 +692,9 @@ class QMDataset:
         if is_tensor:
             return torch.tensor(list(H.keys()), dtype=torch.float64, device=self.device)
         else:
-            return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(device=self.device)
+            return torch.from_numpy(np.array(list(H.keys()), dtype=np.float64)).to(
+                device=self.device
+            )
 
     def __len__(self) -> int:
         return self.nstructs
@@ -535,11 +703,11 @@ class QMDataset:
 def parse_slice(slice_str: str) -> slice:
     """
     Parse a slice string and return a slice object.
-    
+
     Args:
         slice_str (str): A string representing a slice (e.g., '0:4', '::10').
 
     Returns:
         slice: A slice object.
     """
-    return slice(*map(lambda x: int(x) if x else None, slice_str.split(':')))
+    return slice(*map(lambda x: int(x) if x else None, slice_str.split(":")))

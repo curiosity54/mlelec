@@ -1,17 +1,21 @@
 import argparse
-import torch 
-import hickle 
-import sys
-import os
-import warnings
 
-from mlelec.train_setup import ModelTrainer
-from mlelec.data.dataset import MLDataset, MoleculeDataset, precomputed_molecules, get_dataloader
+import hickle
+import torch
+
+from mlelec.data.dataset import (
+    MLDataset,
+    MoleculeDataset,
+    get_dataloader,
+    precomputed_molecules,
+)
 from mlelec.features.acdc import compute_features_for_target
 from mlelec.models.linear import LinearTargetModel
+from mlelec.train_setup import ModelTrainer
+
 parser = argparse.ArgumentParser()
 # parser.add_argument("--device", type=str, default='cuda')
-#----data related-----
+# ----data related-----
 parser.add_argument(
     "--molecule",
     type=str,
@@ -29,16 +33,18 @@ parser.add_argument(
     default="./data",
     help="path to data",
 )
-parser.add_argument("--target", type=str, nargs='+', default="fock")
-parser.add_argument("--aux_data", type=str, nargs='+')
-#----- model related-------
+parser.add_argument("--target", type=str, nargs="+", default="fock")
+parser.add_argument("--aux_data", type=str, nargs="+")
+# ----- model related-------
 parser.add_argument(
     "--model_type",
     type=str,
     default="acdc",
     help="acdc, se3-transformer",
 )
-parser.add_argument("--model_strategy", type=str, default="coupled", help="coupled, uncoupled")
+parser.add_argument(
+    "--model_strategy", type=str, default="coupled", help="coupled, uncoupled"
+)
 
 # ---- ACDC related -------
 parser.add_argument("--feature_path", type=str, default=None)
@@ -47,7 +53,7 @@ parser.add_argument("--nhidden", type=int, default=16)
 parser.add_argument("--nmax", type=int, default=6)
 parser.add_argument("--lmax", type=int, default=4)
 parser.add_argument("--cutoff", type=float, default=4.0)
-#---- training -------
+# ---- training -------
 parser.add_argument("--train_fraction", type=float, default=0.7)
 parser.add_argument("--val_fraction", type=float, default=0.1)
 parser.add_argument("--test_fraction", type=float, default=0.2)
@@ -68,7 +74,7 @@ parser.add_argument(
     default=2500,
     help="Max number of iterations to train the model",
 )
-#----checkpoint and logging -----
+# ----checkpoint and logging -----
 parser.add_argument(
     "--save_path",
     type=str,
@@ -87,34 +93,41 @@ parser.add_argument(
     default=False,
     help="Whether to load saved checkpoint and start from there, specify checkpoint by --starting_checkpoint",
 )
-parser.add_argument("--starting_checkpoint", 
-                    type=str, default='last', help='last, best, or checkpoint number to begin')
+parser.add_argument(
+    "--starting_checkpoint",
+    type=str,
+    default="last",
+    help="last, best, or checkpoint number to begin",
+)
 parser.add_argument(
     "--save_all_checkpoints",
     type=eval,
     default=False,
     help="set True to do save all checkpoints not only the best crossvalidated one",
 )
-#---- end of arguments ----
+# ---- end of arguments ----
 args = parser.parse_args()
 device = "cuda" if torch.cuda.is_available() else "cpu"
 precomp_datasets = [mol.name.lower() for mol in precomputed_molecules]
 frame_slice = slice(args.frame_begin, args.frame_end)
-mol_dataset =  MoleculeDataset(mol_name= args.molecule, 
-                               frame_slice=args.frame_slice, 
-                               aux = args.aux_data, 
-                               target=args.target,
-                               use_precomputed=args.use_precomputed_data)
+mol_dataset = MoleculeDataset(
+    mol_name=args.molecule,
+    frame_slice=args.frame_slice,
+    aux=args.aux_data,
+    target=args.target,
+    use_precomputed=args.use_precomputed_data,
+)
 
 ml_data = MLDataset(
     molecule_data=mol_dataset,
     model_strategy=args.model_strategy,
-    device= args.device,
+    device=args.device,
     shuffle=True,
     shuffle_seed=5380,
-    train_frac = args.train_frac, 
-    val_frac = args.val_frac
-) 
+    train_frac=args.train_frac,
+    val_frac=args.val_frac,
+)
+
 
 # instantiate model based on args['model_type'] -'linear', 'se3-transformer'..
 def instantiate_model(args, dataset: MLDataset, device):
@@ -131,20 +144,22 @@ def instantiate_model(args, dataset: MLDataset, device):
 
 
 if __name__ == "__main__":
-
     if args.model_type == "acdc":
-    # try to load saved features by default but
-    # check if hypers provided to generate features if not
-    # else compute default features
+        # try to load saved features by default but
+        # check if hypers provided to generate features if not
+        # else compute default features
         if args.feature_path is not None:
             features = hickle.load(args.feature_path)
         else:
-            acdc_hypers = {"cutoff":args.cutoff,
-                        "max_radial": args.nmax,
-                        "max_angular": args.lmax, 
-                        }
+            acdc_hypers = {
+                "cutoff": args.cutoff,
+                "max_radial": args.nmax,
+                "max_angular": args.lmax,
+            }
 
-            features=compute_features_for_target(dataset=ml_data, hypers=acdc_hypers, device=args.device)
+            features = compute_features_for_target(
+                dataset=ml_data, hypers=acdc_hypers, device=args.device
+            )
 
     train_dl, val_dl, test_dl = get_dataloader(ml_data, model_return="tensor")
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -165,7 +180,7 @@ if __name__ == "__main__":
         start_from_checkpoint=args.start_from_checkpoint,
         checkpoint=args.starting_checkpoint,
         save_all_checkpoints=args.save_all_checkpoints,
-        device = args.device
+        device=args.device,
     )
 
     # Training

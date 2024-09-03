@@ -1,5 +1,6 @@
 import lightning.pytorch as pl
 
+
 class LoggingCallback(pl.Callback):
     def __init__(self, log_every_n_epochs=1):
         super().__init__()
@@ -18,15 +19,15 @@ class LoggingCallback(pl.Callback):
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         # Store train loss every log_every_n_steps
         if (trainer.global_step + 1) % self.log_every_n_steps == 0:
-            train_loss = outputs['loss'] if isinstance(outputs, dict) else outputs
+            train_loss = outputs["loss"] if isinstance(outputs, dict) else outputs
             self.train_loss = train_loss.item()
 
     def on_validation_epoch_end(self, trainer, pl_module):
         # Store validation loss at the end of each validation epoch
-        val_loss = trainer.callback_metrics.get('val_loss')
-        rmse_eigenvalues = trainer.callback_metrics.get('rmse_eigenvalues')
-        rmse_ard = trainer.callback_metrics.get('rmse_atom_resolved_density')
-        rmse_dipoles = trainer.callback_metrics.get('rmse_dipoles')
+        val_loss = trainer.callback_metrics.get("val_loss")
+        rmse_eigenvalues = trainer.callback_metrics.get("rmse_eigenvalues")
+        rmse_ard = trainer.callback_metrics.get("rmse_atom_resolved_density")
+        rmse_dipoles = trainer.callback_metrics.get("rmse_dipoles")
         if val_loss:
             self.val_loss = val_loss.item()
             self.rmse_eigenvalues = rmse_eigenvalues
@@ -40,7 +41,7 @@ class LoggingCallback(pl.Callback):
 
         # Print train loss at the first epoch
         if epoch == 1:
-            train_loss = trainer.callback_metrics.get('train_loss')
+            train_loss = trainer.callback_metrics.get("train_loss")
             if train_loss:
                 self.train_loss = train_loss.item()
             print(f"Epoch {epoch}, Train Loss: {self.train_loss}")
@@ -49,16 +50,18 @@ class LoggingCallback(pl.Callback):
         elif log_val:
             # Log validation, and train loss if available
             val_loss = self.val_loss
-            train_loss = trainer.callback_metrics.get('train_loss')
+            train_loss = trainer.callback_metrics.get("train_loss")
             if val_loss:
                 if train_loss:
                     self.train_loss = train_loss.item()
-                print(f"Epoch {epoch}, Train Loss: {self.train_loss}, Validation Loss: {val_loss}, "
-                      f"RMSE Eigenvalues: {self.rmse_eigenvalues}, RMSE ARD: {self.rmse_ard}, , RMSE Dipoles: {self.rmse_dipoles}")
+                print(
+                    f"Epoch {epoch}, Train Loss: {self.train_loss}, Validation Loss: {val_loss}, "
+                    f"RMSE Eigenvalues: {self.rmse_eigenvalues}, RMSE ARD: {self.rmse_ard}, , RMSE Dipoles: {self.rmse_dipoles}"
+                )
                 self.train_loss = None  # Reset train_loss after printing
         elif log_train:
             # Log train loss
-            train_loss = trainer.callback_metrics.get('train_loss')
+            train_loss = trainer.callback_metrics.get("train_loss")
             if train_loss:
                 self.train_loss = train_loss.item()
             print(f"Epoch {epoch}, Train Loss: {self.train_loss}")

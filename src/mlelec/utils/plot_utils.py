@@ -1,15 +1,18 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import seekpath
 import torch
 from ase.units import Hartree
-import seekpath
+
 
 def plot_atoms(structure, ax=None):
     pass
 
-def print_matrix(matrix, fmt='{:15.10f}'):
+
+def print_matrix(matrix, fmt="{:15.10f}"):
     for row in matrix:
         print(" ".join(fmt.format(num) for num in row))
+
 
 def block_matrix_norm(block, dataset):
     rij = {}
@@ -20,23 +23,34 @@ def block_matrix_norm(block, dataset):
         frame_idx, I, J = b.samples.values[:, :3].T
         Ts = b.samples.values[:, -3:]
         for ifr, i, j, T, h in zip(frame_idx, I, J, Ts, b.values):
-            rij[*k.values.tolist()].append(np.linalg.norm(dataset.structures[ifr].cell.array.T.dot(T) + dataset.structures[ifr].get_distance(i, j, mic = False, vector = True)))
+            rij[*k.values.tolist()].append(
+                np.linalg.norm(
+                    dataset.structures[ifr].cell.array.T.dot(T)
+                    + dataset.structures[ifr].get_distance(i, j, mic=False, vector=True)
+                )
+            )
             Hij[*k.values.tolist()].append(torch.norm(h))
     return rij, Hij
 
+
 def matrix_norm(T, matrix, frame, nao):
     from skimage.util import view_as_blocks
+
     blocks = view_as_blocks(matrix.numpy(), (nao, nao))
     dist = []
     norms = []
     natm = frame.get_global_number_of_atoms()
     for i in range(natm):
         for j in range(natm):
-            rij = np.linalg.norm(frame.cell.array.T.dot(T) + frame.get_distance(i, j, mic = False, vector = True)) #np.linalg.norm(frame.cell.T.dot(T) + frame.positions[j] - frame.positions[i])
+            rij = np.linalg.norm(
+                frame.cell.array.T.dot(T)
+                + frame.get_distance(i, j, mic=False, vector=True)
+            )  # np.linalg.norm(frame.cell.T.dot(T) + frame.positions[j] - frame.positions[i])
             Hij = np.linalg.norm(blocks[i, j])
             dist.append(rij)
             norms.append(Hij)
     return np.array(dist).reshape(natm, natm), np.array(norms).reshape(natm, natm)
+
 
 def plot_hamiltonian(
     matrix,
@@ -159,43 +173,43 @@ def plot_block_errors(target_blocks, pred_blocks, plot_loss=False, ax=None):
 
     if return_ax:
         return fig, ax, ax_loss
-    
-def parity_plot(target, prediction):
 
+
+def parity_plot(target, prediction):
     pass
 
+
 def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
-    
-    from xitorch.linalg import symeig
     from xitorch import LinearOperator
-    
+    from xitorch.linalg import symeig
+
     def ase_to_structure(frame):
         return (frame.cell.array, frame.positions, frame.numbers)
 
     def label_dict(l):
-        if l == 'GAMMA':
-            return r'$\Gamma$'
-        elif len(l.split('_')) > 1:
-            l = l.split('_')
-            return rf'$\mathrm{{{l[0]}}}_{{{l[1]}}}$'
+        if l == "GAMMA":
+            return r"$\Gamma$"
+        elif len(l.split("_")) > 1:
+            l = l.split("_")
+            return rf"$\mathrm{{{l[0]}}}_{{{l[1]}}}$"
         else:
             return l
-    
+
     if fig is None and ax is None:
         fig, ax = plt.subplots()
     elif fig is not None and ax is None:
-        raise NotImplementedError('You cannot pass just `fig` for now')
-        
+        raise NotImplementedError("You cannot pass just `fig` for now")
+
     frame = qmdata.structures[idx]
     structure = ase_to_structure(frame)
-    
-    kpath = seekpath.get_explicit_k_path(structure)
-    kpts_rel = [kpath['explicit_kpoints_rel']]*len(qmdata)
 
-    Hk = qmdata.bloch_sum([HT], structure_ids = [idx], kpts_rel = kpts_rel)
+    kpath = seekpath.get_explicit_k_path(structure)
+    kpts_rel = [kpath["explicit_kpoints_rel"]] * len(qmdata)
+
+    Hk = qmdata.bloch_sum([HT], structure_ids=[idx], kpts_rel=kpts_rel)
     ST = qmdata.overlap_realspace[idx]
-    Sk = qmdata.bloch_sum([ST], structure_ids = [idx], kpts_rel = kpts_rel)
-    
+    Sk = qmdata.bloch_sum([ST], structure_ids=[idx], kpts_rel=kpts_rel)
+
     Hk_ = torch.stack(Hk).detach()
     try:
         Sk_ = torch.stack(Sk).detach()
@@ -204,44 +218,46 @@ def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
 
     bands, _ = symeig(LinearOperator.m(Hk_), M=LinearOperator.m(Sk_))
 
-    x = kpath['explicit_kpoints_linearcoord']
+    x = kpath["explicit_kpoints_linearcoord"]
 
-    color = kwargs.get('color', None)
-    ls = kwargs.get('ls', None)
-    lw = kwargs.get('lw', None)
+    color = kwargs.get("color", None)
+    ls = kwargs.get("ls", None)
+    lw = kwargs.get("lw", None)
 
     pl = []
-    for x0, x1 in kpath['explicit_segments']:
+    for x0, x1 in kpath["explicit_segments"]:
         for bs in bands:
             for b in bs.T:
-                pl_, = ax.plot(x[x0:x1], b[x0:x1]*Hartree, color = color, ls = ls, lw = lw)
+                (pl_,) = ax.plot(
+                    x[x0:x1], b[x0:x1] * Hartree, color=color, ls=ls, lw=lw
+                )
                 pl.append(pl_)
-    
+
     # Draw vertical lines
     vert = []
-    for p in kpath['explicit_segments']:
+    for p in kpath["explicit_segments"]:
         vert.append(p[0])
     vert = list(set(vert))
     for i in vert:
-        ax.axvline(x[i], color='k')
+        ax.axvline(x[i], color="k")
 
     # Define xticks and labels
     xticks = []
     xlabels = []
-    for p in kpath['explicit_segments']:
+    for p in kpath["explicit_segments"]:
         xticks.append(x[p[0]])
-        xlabels.append(label_dict(kpath['explicit_kpoints_labels'][p[0]]))
-    xticks.append(x[kpath['explicit_segments'][-1][1]-1])
-    xlabels.append(label_dict(kpath['explicit_kpoints_labels'][-1]))
+        xlabels.append(label_dict(kpath["explicit_kpoints_labels"][p[0]]))
+    xticks.append(x[kpath["explicit_segments"][-1][1] - 1])
+    xlabels.append(label_dict(kpath["explicit_kpoints_labels"][-1]))
     xticks = np.array(xticks)
-    
+
     # Fix xticklabels too close to one another
     new_ticks = [xticks[0]]
     new_labels = [xlabels[0]]
-    skip = False    
+    skip = False
     for i, (t, l) in enumerate(zip(xticks, xlabels)):
         try:
-            d = xticks[i+1]-xticks[i]
+            d = xticks[i + 1] - xticks[i]
         except:
             continue
         if skip:
@@ -252,19 +268,19 @@ def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
             new_labels.append(l)
             skip = False
         else:
-            new_ticks.append(0.5*(t + xticks[i+1]))
-            new_labels.append(f'{l}|{xlabels[i+1]}')
+            new_ticks.append(0.5 * (t + xticks[i + 1]))
+            new_labels.append(f"{l}|{xlabels[i+1]}")
             skip = True
     new_ticks.append(xticks[-1])
     new_labels.append(xlabels[-1])
-    
-    ax.axvline(x[-1], color='k')
+
+    ax.axvline(x[-1], color="k")
     ax.set_xlim(x[0], x[-1])
     ax.set_xticks(new_ticks)
     ax.set_xticklabels(new_labels)
-    
-    ax.set_xlabel('k point')
-    ax.set_ylabel('Band energy (eV)')
+
+    ax.set_xlabel("k point")
+    ax.set_ylabel("Band energy (eV)")
 
     return ax, tuple(pl)
 

@@ -1,6 +1,8 @@
 # script to generate data
 import argparse
+
 from pyscf_calculator import calculator
+
 from mlelec.data.dataset import precomputed_molecules
 
 if __name__ == "__main__":

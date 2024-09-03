@@ -1,10 +1,11 @@
-import torch
-from typing import Dict, Optional, List
-import numpy as np
-import scipy
-import mlelec.utils.twocenter_utils as twocenter_utils
-import ase
 import warnings
+from typing import Dict, List, Optional
+
+import ase
+import numpy as np
+import torch
+
+import mlelec.utils.twocenter_utils as twocenter_utils
 
 
 class ModelTargets:  # generic class for different targets
@@ -35,7 +36,6 @@ class SingleCenter:  # class for single center tensorial properties
         # decompose tensorial property to different SPH blocks if required
         # for now
         self.blocks = self.tensor
-        pass
 
 
 class TwoCenter:  # class for second-rank tensors
@@ -138,12 +138,13 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
         # project onto another basis
         pass
 
-    def _set_blocks(self, blocks):            
-        from metatensor import TensorMap      
-        assert isinstance(blocks, TensorMap)  
-        self.blocks = blocks                  
-        self.block_keys = blocks.keys         
-                                            
+    def _set_blocks(self, blocks):
+        from metatensor import TensorMap
+
+        assert isinstance(blocks, TensorMap)
+        self.blocks = blocks
+        self.block_keys = blocks.keys
+
 
 # class Eigenvalues:  # eigval of a second rank tensor
 #    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
@@ -178,7 +179,6 @@ class PBCHamiltonian(TwoCenter):
         translations: List[int] = None,
     ):
         super().__init__(hamiltonian, orbitals, frames)
-        pass
 
     def combine_phase():
         pass

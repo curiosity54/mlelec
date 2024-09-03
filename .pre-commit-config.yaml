@@ -1,0 +1,36 @@
+# .pre-commit-config.yaml
+
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.9.1  # Use the latest stable version of black
+    hooks:
+      - id: black
+        files: '.*\.pyi?$'
+        args: ['--line-length', '88']
+        language_version: python3  # or your project's Python version
+        
+  - repo: https://github.com/PyCQA/autoflake
+    rev: v2.3.1  # Use the latest stable version of flake8
+    hooks:
+      - id: autoflake
+        files: '.*\.pyi?$'
+        additional_dependencies: []
+        args: ['--in-place', '--remove-all-unused-imports', '--remove-unused-variables']
+        language_version: python3  # or your project's Python version
+        
+  - repo: https://github.com/PyCQA/flake8
+    rev: 6.1.0  # Use the latest stable version of flake8
+    hooks:
+      - id: flake8
+        files: '.*\.pyi?$'
+        additional_dependencies: []
+        args: ['--max-line-length=88']  # Ensure compatibility with black's default line length
+        language_version: python3  # or your project's Python version
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.13.2  # Use the latest stable version of isort
+    hooks:
+      - id: isort
+        files: '.*\.pyi?$'
+        args: ['--profile', 'black']  # Ensure compatibility with black
+        language_version: python3  # or your project's Python version

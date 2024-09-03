@@ -1,10 +1,10 @@
-import torch
+from typing import Dict, List, Optional
+
 import numpy as np
-import math
-from scipy.spatial.transform import Rotation
+import torch
 import wigners
-from typing import Dict, Optional, List, Union
 from metatensor import TensorMap
+from scipy.spatial.transform import Rotation
 
 # sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../.."))
 
@@ -98,7 +98,6 @@ def check_equivariance_tmap(
         print(
             "No rotated tensor map provided, will use first and seconf structure to test equivariance"
         )
-        test_samples = True
         raise NotImplementedError("Not implemented yet")
 
 
@@ -205,13 +204,12 @@ def xyz_to_spherical(data, axes=()):
         The array in spherical (l=1) form
     """
     shape = data.shape
-    rdata = data
     # automatically detect the xyz dimensions
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
         axes = tuple(axes.tolist())
-    if len(axes)>1:
-        shifts = tuple([-1]*len(axes))
+    if len(axes) > 1:
+        shifts = tuple([-1] * len(axes))
     return torch.roll(data, shifts=shifts, dims=axes)
 
 
@@ -225,9 +223,10 @@ def spherical_to_xyz(data, axes=()):
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
         axes = tuple(axes.tolist())
-    if len(axes)>1:
-        shifts = tuple([1]*len(axes))
+    if len(axes) > 1:
+        shifts = tuple([1] * len(axes))
     return torch.roll(data, shifts=shifts, dims=axes)
+
 
 def _complex_clebsch_gordan_matrix(l1: int, l2: int, L: int, device: str = None):
     """
@@ -308,13 +307,15 @@ class ClebschGordanReal:
         for l1 in range(self.lmax + 1):
             for l2 in range(self.lmax + 1):
                 for L in range(abs(l1 - l2), min(self.lmax, (l1 + l2)) + 1):
-                    rcg = _real_clebsch_gordan_matrix(l1,
-                                                      l2,
-                                                      L,
-                                                      r2c_l1=self.r2c[l1],
-                                                      r2c_l2=self.r2c[l2],
-                                                      c2r_L=self.c2r[L],
-                                                      device=self.device)
+                    rcg = _real_clebsch_gordan_matrix(
+                        l1,
+                        l2,
+                        L,
+                        r2c_l1=self.r2c[l1],
+                        r2c_l2=self.r2c[l2],
+                        c2r_L=self.c2r[L],
+                        device=self.device,
+                    )
 
                     # # sparsify: take only the non-zero entries (indices
                     # # of m1 and m2 components) for each M
@@ -330,15 +331,13 @@ class ClebschGordanReal:
                         cg_M[:, 1] = cg_nonzero[1].type(torch.int)
                         cg_M[:, 2] = rcg[cg_nonzero[0], cg_nonzero[1], M]
                         new_cg.append(cg_M)
-                    self._cgold [(l1, l2, L)]= new_cg
-                    self._cg[(l1, l2, L)] = rcg # new_cg
+                    self._cgold[(l1, l2, L)] = new_cg
+                    self._cg[(l1, l2, L)] = rcg  # new_cg
         # self._cg.to(self.device)
-        self._cgold = {
-            k: v for k, v in self._cgold.items()
-        }
+        self._cgold = {k: v for k, v in self._cgold.items()}
 
     def combine(
-        self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str=None
+        self, y1: torch.tensor, y2: torch.tensor, L: int, combination_string: str = None
     ) -> torch.tensor:
         """
         Combines two spherical tensors y1, y2 into a single one.
@@ -372,16 +371,23 @@ class ClebschGordanReal:
             n, M = cg.shape[1:]
 
             # slightly faster than torch.einsum('smp,snp,mnM->sMp', y1, y2, cg)
-            Y = (y1.swapaxes(1,2).reshape(s*p,1,m) @ (y2.swapaxes(1,2).reshape(s*p, n) @ cg).swapaxes(1,0)).reshape(s,p,M).swapaxes(1,2)
+            Y = (
+                (
+                    y1.swapaxes(1, 2).reshape(s * p, 1, m)
+                    @ (y2.swapaxes(1, 2).reshape(s * p, n) @ cg).swapaxes(1, 0)
+                )
+                .reshape(s, p, M)
+                .swapaxes(1, 2)
+            )
 
-                # for m1, m2, cg in self._cg[(l1, l2, L)][M]:
-                #     m1 = m1.type(torch.int)
-                #     m2 = m2.type(torch.int)
-                #     # print(m1, m2, M, m1.dtype)
-                #     Y[:, M, ...] += y1[:, m1, ...]*y2[:, m2, ...]*cg
-                #     # torch.einsum(
-                        # combination_string, y1[:, m1, ...], y2[:, m2, ...] * cg
-                    # )
+            # for m1, m2, cg in self._cg[(l1, l2, L)][M]:
+            #     m1 = m1.type(torch.int)
+            #     m2 = m2.type(torch.int)
+            #     # print(m1, m2, M, m1.dtype)
+            #     Y[:, M, ...] += y1[:, m1, ...]*y2[:, m2, ...]*cg
+            #     # torch.einsum(
+            # combination_string, y1[:, m1, ...], y2[:, m2, ...] * cg
+            # )
 
         return Y
 
@@ -466,13 +472,15 @@ class ClebschGordanReal:
                 device = dec_term.device
                 if device != self.device:
                     dec_term = dec_term.to(self.device)
-                
+
                 coupled[(l1, l2) + ltuple] = {}
                 for L in range(
                     max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1
                 ):
                     # Lterm = torch.einsum('spmn,mnM->spM', dec_term, self._cg[(l1, l2, L)])
-                    coupled[(l1, l2) + ltuple][L] = torch.tensordot(dec_term, self._cg[(l1, l2, L)].to(dec_term), dims=2)
+                    coupled[(l1, l2) + ltuple][L] = torch.tensordot(
+                        dec_term, self._cg[(l1, l2, L)].to(dec_term), dims=2
+                    )
 
         # repeat if required
         if iterate > 0:
@@ -498,7 +506,9 @@ class ClebschGordanReal:
             shape = next(iter(lcomponents.values())).shape[:-1]
             dtype_ = next(iter(lcomponents.values())).dtype
 
-            dec_term = torch.zeros(shape+ ( 2 * l1 + 1, 2 * l2 + 1),device=self.device, dtype = dtype_)
+            dec_term = torch.zeros(
+                shape + (2 * l1 + 1, 2 * l2 + 1), device=self.device, dtype=dtype_
+            )
             for L in range(max(l1, l2) - min(l1, l2), min(self.lmax, (l1 + l2)) + 1):
                 # supports missing L components, e.g. if they are zero because of symmetry
                 if L not in lcomponents:
@@ -506,7 +516,9 @@ class ClebschGordanReal:
                 # decouples the L term into m1, m2 components
                 # a = torch.einsum('spM,mnM->spmn', lcomponents[L], self._cg[(l1, l2, L)])
                 # dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([2],[2]))
-                dec_term+=torch.tensordot(lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([-1],[-1])) #CHECK<<<<<< 
+                dec_term += torch.tensordot(
+                    lcomponents[L], self._cg[(l1, l2, L)].to(dtype_), dims=([-1], [-1])
+                )  # CHECK<<<<<<
             if not ltuple[2:] in decoupled:
                 decoupled[ltuple[2:]] = {}
             decoupled[ltuple[2:]][l2] = dec_term
@@ -518,5 +530,3 @@ class ClebschGordanReal:
         if ltuple[2:] == ():
             decoupled = next(iter(decoupled[()].values()))
         return decoupled
-
-

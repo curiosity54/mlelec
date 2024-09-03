@@ -1,22 +1,19 @@
 # Handles 2 center objects - coupling decoupling
 # must include preprocessing and postprocessing utils
-from typing import Optional, List, Union, Tuple, Dict
 import warnings
-from collections import defaultdict
+from typing import Dict, List, Optional, Tuple, Union
 
-import torch
 import ase
 import numpy as np
-
-from metatensor.torch import TensorMap, TensorBlock, Labels
-import metatensor.torch as mts
+import torch
+from metatensor.torch import Labels, TensorBlock, TensorMap
 
 from mlelec.utils.metatensor_utils import TensorBuilder, labels_where
 from mlelec.utils.symmetry import ClebschGordanReal
 
 SQRT_2 = 2 ** (0.5)
 ISQRT_2 = 1 / SQRT_2
-dummy_property = Labels(['dummy'], torch.tensor([[0]]))
+dummy_property = Labels(["dummy"], torch.tensor([[0]]))
 
 
 def fix_orbital_order(
@@ -91,7 +88,7 @@ def unfix_orbital_order(
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
-        
+
         if isinstance(matrix, np.ndarray):
             return np.asarray(fixed_matrices)
         else:
@@ -114,7 +111,7 @@ def lowdin_orthogonalize(fock: torch.tensor, overlap: torch.tensor):
 
 def _components_idx(l):
     """Returns the m in {-l,...,l} indices"""
-    return torch.arange(-l, l + 1, dtype = torch.int32).reshape(2 * l + 1, 1)
+    return torch.arange(-l, l + 1, dtype=torch.int32).reshape(2 * l + 1, 1)
     # return np.arange(-l, l + 1, dtype=int).reshape(2 * l + 1, 1)
 
 
@@ -124,7 +121,9 @@ def _components_idx_2d(li, lj):
     # return np.asarray(
     #     np.meshgrid(_components_idx(li), _components_idx(lj)), dtype=int
     # ).T.reshape(-1, 2)
-    return torch.cartesian_prod(_components_idx(li).flatten(), _components_idx(lj).flatten()).to(dtype = torch.int32)
+    return torch.cartesian_prod(
+        _components_idx(li).flatten(), _components_idx(lj).flatten()
+    ).to(dtype=torch.int32)
 
 
 # TODO
@@ -190,6 +189,7 @@ def _to_blocks(
         ), "Matrix supposed to be hermitian but is not"
         return _matrix_to_blocks(matrices, frames, orbitals, device)
 
+
 def _matrix_to_blocks_NH_translations(
     matrices: dict,  # Union[List[torch.tensor], torch.tensor],
     frames: Union[ase.Atoms, List[ase.Atoms]],
@@ -223,7 +223,6 @@ def _matrix_to_blocks_NH_translations(
                     if (
                         ai > aj
                     ):  # only sorted element types - #TODO this doesnt hold i think
-
                         kj_base += orbs_tot[aj]
                         # continue
                     block_type = 2  # different species
@@ -330,7 +329,6 @@ def _matrix_to_blocks(
     orbitals: dict,
     device: str = None,
 ):
-    
     orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
@@ -454,7 +452,6 @@ def _to_matrix(
     NH=False,
     device=None,
 ) -> Union[np.ndarray, torch.Tensor]:
-
     return _blocks_to_matrix(
         blocks=blocks,
         frames=frames,
@@ -605,6 +602,7 @@ def _fill_NH(
         else:
             matrix[jjslice, iislice] -= values
 
+
 def _fill(
     type: int,
     matrix: Union[np.ndarray, torch.Tensor],
@@ -748,6 +746,7 @@ def _to_coupled_basis_OLD(
 
     return block_builder.build()
 
+
 def _to_coupled_basis(
     blocks: Union[torch.tensor, TensorMap],
     orbitals: Optional[dict] = None,
@@ -773,20 +772,44 @@ def _to_coupled_basis(
     else:
         if translations:
             block_builder = TensorBuilder(
-                ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
-                ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
+                [
+                    "block_type",
+                    "species_i",
+                    "n_i",
+                    "l_i",
+                    "species_j",
+                    "n_j",
+                    "l_j",
+                    "L",
+                ],
+                [
+                    "structure",
+                    "center",
+                    "neighbor",
+                    "cell_shift_a",
+                    "cell_shift_b",
+                    "cell_shift_c",
+                ],
                 [["M"]],
                 ["dummy"],
             )
         else:
             block_builder = TensorBuilder(
-                ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+                [
+                    "block_type",
+                    "species_i",
+                    "n_i",
+                    "l_i",
+                    "species_j",
+                    "n_j",
+                    "l_j",
+                    "L",
+                ],
                 ["structure", "center", "neighbor", "kpoint"],
                 [["M"]],
                 ["dummy"],
             )
-        
-        
+
     for idx, block in blocks.items():
         block_type = idx["block_type"]
         ai = idx["species_i"]
@@ -813,7 +836,10 @@ def _to_coupled_basis(
             # skip blocks that are zero because of symmetry
             if ai == aj and ni == nj and li == lj:
                 parity = (-1) ** (li + lj + L)
-                if ((parity == -1 and block_type in (0, 1)) or (parity == 1 and block_type == -1)) and not skip_symmetry:
+                if (
+                    (parity == -1 and block_type in (0, 1))
+                    or (parity == 1 and block_type == -1)
+                ) and not skip_symmetry:
                     continue
 
             new_block = block_builder.add_block(
@@ -823,8 +849,8 @@ def _to_coupled_basis(
             )
 
             new_block.add_samples(
-                labels = block.samples.values.reshape(block.samples.values.shape[0], -1),
-                data = torch.moveaxis(coupled[L], -1, -2),
+                labels=block.samples.values.reshape(block.samples.values.shape[0], -1),
+                data=torch.moveaxis(coupled[L], -1, -2),
             )
 
     return block_builder.build()
@@ -839,18 +865,18 @@ def _to_uncoupled_basis_old(
 ):
     if "l_i" not in blocks.keys.names:
         from mlelec.utils.pbc_utils import move_orbitals_to_keys
+
         blocks = move_orbitals_to_keys(blocks)
     if cg is None:
         lmax = max(blocks.keys["L"])
         cg = ClebschGordanReal(lmax, device=device)
-    if 'inversion_sigma' in blocks.keys.names:
+    if "inversion_sigma" in blocks.keys.names:
         has_sigma = True
         key_names = blocks.keys.names[:-2]
-    else: 
+    else:
         inv_sigma = None
         has_sigma = False
         key_names = blocks.keys.names[:-1]
-
 
     block_builder = TensorBuilder(
         # last key name is L, we remove it here
@@ -862,10 +888,9 @@ def _to_uncoupled_basis_old(
         blocks.sample_names,
         [["m_i"], ["m_j"]],
         ["dummy"],
-        device = device
+        device=device,
     )
     for idx, block in blocks.items():
-
         if block.values.numel() == 0:
             # Empty block
             continue
@@ -879,27 +904,36 @@ def _to_uncoupled_basis_old(
         lj = idx["l_j"]
         L = idx["L"]
         if has_sigma:
-            inv_sigma = idx["inversion_sigma"] 
+            inv_sigma = idx["inversion_sigma"]
         block_idx = (block_type, ai, ni, li, aj, nj, lj)
-            
+
         if translations:
-            
-            block_idx = (block_type, ai, ni, li, aj, nj, lj, idx["cell_shift_a"], idx["cell_shift_b"], idx["cell_shift_c"])
-        
-        
-        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
-        # if has_sigma:
-        #     block_idx = blocks.keys.position(block_idx + (L,))
-        # if block_idx in block_builder.blocks:
+            block_idx = (
+                block_type,
+                ai,
+                ni,
+                li,
+                aj,
+                nj,
+                lj,
+                idx["cell_shift_a"],
+                idx["cell_shift_b"],
+                idx["cell_shift_c"],
+            )
+
+            # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+            # if has_sigma:
+            #     block_idx = blocks.keys.position(block_idx + (L,))
+            # if block_idx in block_builder.blocks:
             continue
         coupled = {}
         for L in range(np.abs(li - lj), li + lj + 1):
             if has_sigma:
                 bidx = blocks.keys.position(block_idx + (L, inv_sigma))
-                
-            else: 
+
+            else:
                 bidx = blocks.keys.position(block_idx + (L,))
-            # if has_sigma: 
+            # if has_sigma:
             #     bidx = bidx + (inv_sigma,)
             if bidx is not None:
                 coupled[L] = torch.moveaxis(blocks.block(bidx).values, -1, -2)
@@ -908,16 +942,15 @@ def _to_uncoupled_basis_old(
         decoupled = cg.decouple({(li, lj): coupled})
         new_block = block_builder.add_block(
             key=block_idx,
-            properties=torch.tensor([[0]], dtype = torch.int32),
+            properties=torch.tensor([[0]], dtype=torch.int32),
             components=[_components_idx(li), _components_idx(lj)],
         )
         new_block.add_samples(
-            labels = block.samples.values.reshape(
-                block.samples.values.shape[0], -1
-            ),
+            labels=block.samples.values.reshape(block.samples.values.shape[0], -1),
             data=torch.moveaxis(decoupled, 1, -1),
         )
     return block_builder.build()
+
 
 def _to_uncoupled_basis(
     blocks: TensorMap,
@@ -927,55 +960,70 @@ def _to_uncoupled_basis(
 ):
     if cg is None:
         lmax = max(blocks.keys["L"])
-        cg = ClebschGordanReal(lmax, device = device)
+        cg = ClebschGordanReal(lmax, device=device)
 
     uncoupled_blocks = {}
     samples = {}
     for key, block in blocks.items():
-
         if block.values.numel() == 0:
             # Empty block
             continue
         values = block.values
         dtype = values.dtype
 
-        block_type, ai, aj, L  = key.values[:4].tolist()
+        block_type, ai, aj, L = key.values[:4].tolist()
 
         for ip, (ni, li, nj, lj) in enumerate(block.properties.values[:, :4].tolist()):
             k = block_type, ai, ni, li, aj, nj, lj
-            
-            if k not in uncoupled_blocks:
-                 uncoupled_blocks[k] = torch.zeros((values.shape[0], 2*li+1, 2*lj+1, 1), device = device, dtype = dtype)
-                 samples[k] = block.samples
 
-            uncoupled_blocks[k].add_(torch.tensordot(values[:,:,ip:ip+1], cg._cg[(li, lj, L)].to(dtype = dtype), dims=([1], [2])).permute(0, 2, 3, 1))
+            if k not in uncoupled_blocks:
+                uncoupled_blocks[k] = torch.zeros(
+                    (values.shape[0], 2 * li + 1, 2 * lj + 1, 1),
+                    device=device,
+                    dtype=dtype,
+                )
+                samples[k] = block.samples
+
+            uncoupled_blocks[k].add_(
+                torch.tensordot(
+                    values[:, :, ip : ip + 1],
+                    cg._cg[(li, lj, L)].to(dtype=dtype),
+                    dims=([1], [2]),
+                ).permute(0, 2, 3, 1)
+            )
 
     new_blocks = []
     new_keys = []
 
-    components_i = {}    
-    components_j = {}    
+    components_i = {}
+    components_j = {}
     for k in uncoupled_blocks:
         _, _, _, li, _, _, lj = k
         try:
             _ = components_i[li]
         except:
-            components_i[li] = Labels(['m_i'], torch.arange(-li, li+1).reshape(-1, 1))
+            components_i[li] = Labels(["m_i"], torch.arange(-li, li + 1).reshape(-1, 1))
         try:
             _ = components_j[lj]
         except:
-            components_j[lj] = Labels(['m_j'], torch.arange(-lj, lj+1).reshape(-1, 1))
-            
+            components_j[lj] = Labels(["m_j"], torch.arange(-lj, lj + 1).reshape(-1, 1))
+
         new_keys.append(k)
         new_blocks.append(
             TensorBlock(
-                values = uncoupled_blocks[k],
-                samples = samples[k],
-                properties = dummy_property,
-                components = [components_i[li], components_j[lj]]
-                )
+                values=uncoupled_blocks[k],
+                samples=samples[k],
+                properties=dummy_property,
+                components=[components_i[li], components_j[lj]],
+            )
         )
-    return TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks)
+    return TensorMap(
+        Labels(
+            ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
+            torch.tensor(new_keys),
+        ),
+        new_blocks,
+    )
 
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
@@ -1005,7 +1053,7 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
                         "species_center",
                         "species_neighbor",
                     ],
-                    values = torch.tensor(
+                    values=torch.tensor(
                         [
                             block_type,
                             L,
@@ -1018,11 +1066,11 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
             )
         block = features.block(
             dict(
-            block_type=block_type,
-            spherical_harmonics_l=L,
-            inversion_sigma=inversion_sigma,
-            species_center=species_center,
-            species_neighbor=species_neighbor,
+                block_type=block_type,
+                spherical_harmonics_l=L,
+                inversion_sigma=inversion_sigma,
+                species_center=species_center,
+                species_neighbor=species_neighbor,
             )
         )
         return block
@@ -1044,7 +1092,7 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
                         "cell_shift_b",
                         "cell_shift_c",
                     ],
-                    values = torch.tensor(
+                    values=torch.tensor(
                         [
                             block_type,
                             L,
@@ -1070,7 +1118,10 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
         )
         return block
 
-def map_targetkeys_to_featkeys_integrated(features, key, cell_shift=None, return_key=False):
+
+def map_targetkeys_to_featkeys_integrated(
+    features, key, cell_shift=None, return_key=False
+):
     try:
         block_type = key["block_type"]
         species_center = key["species_i"]
@@ -1098,7 +1149,7 @@ def map_targetkeys_to_featkeys_integrated(features, key, cell_shift=None, return
                         "species_center",
                         "species_neighbor",
                     ],
-                    values = torch.tensor(
+                    values=torch.tensor(
                         [
                             block_type,
                             L,
@@ -1111,11 +1162,11 @@ def map_targetkeys_to_featkeys_integrated(features, key, cell_shift=None, return
             )
         block = features.block(
             dict(
-            block_type=block_type,
-            spherical_harmonics_l=L,
-            inversion_sigma=inversion_sigma,
-            species_center=species_center,
-            species_neighbor=species_neighbor,
+                block_type=block_type,
+                spherical_harmonics_l=L,
+                inversion_sigma=inversion_sigma,
+                species_center=species_center,
+                species_neighbor=species_neighbor,
             )
         )
         return block
@@ -1137,7 +1188,7 @@ def map_targetkeys_to_featkeys_integrated(features, key, cell_shift=None, return
                         "cell_shift_b",
                         "cell_shift_c",
                     ],
-                    values = torch.tensor(
+                    values=torch.tensor(
                         [
                             block_type,
                             L,
@@ -1172,7 +1223,7 @@ def rotate_matrix(
 
     coupled_blocks = _to_coupled_basis(_to_blocks(matrix, frame, orbitals))
     wd_real = {}
-    for l in set(bc.keys["L"]): # FIXME: what is bc?
+    for l in set(bc.keys["L"]):  # FIXME: what is bc?
         wd_real[l] = (
             _wigner_d_real(l, *rotation_angles)
             .type(torch.float)
@@ -1212,15 +1263,19 @@ def discard_nonhermiticity(matrices, retain="upper"):
         ), "matrix to discard non-hermiticity from must be a 2D matrix"
         fixed[i] = _reflect_hermitian(mat, retain_upper=retain_upper)
     return fixed
+
+
+import ase
 import scipy
-import ase 
+
+
 def compute_eigenval(fock, overlap, eV=False):
-    
-    eigenval=scipy.linalg.eigvals(fock,overlap)#,UPLO='U')
-    eigval=sorted(eigenval)
-    e_shift=np.array(eigval)
+    eigenval = scipy.linalg.eigvals(fock, overlap)  # ,UPLO='U')
+    eigval = sorted(eigenval)
+    e_shift = np.array(eigval)
     if eV:
         from ase.units import Hartree
-        return e_shift*Hartree
- 
+
+        return e_shift * Hartree
+
     return e_shift

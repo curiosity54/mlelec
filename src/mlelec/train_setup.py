@@ -1,15 +1,15 @@
 # train utility - assembles required pipeline - trains/loads and saves model
-import sys
-import os
-import torch
 import datetime
-from tqdm.auto import tqdm
-from torch.utils import data
+import os
+from typing import Optional
+
+import hickle
+import torch
 
 # from torch.utils.tensorboard import SummaryWriter
 import torch.optim as optim  # Adam, AdamW, SGD
-import hickle
-from typing import Optional
+from tqdm.auto import tqdm
+
 import mlelec.metrics as metrics
 
 

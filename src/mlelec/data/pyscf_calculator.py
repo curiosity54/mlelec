@@ -1,20 +1,21 @@
 # write a functionality to take input structures, calculate desired target
-from typing import List, Optional, Union
-from ase.io import read
-import ase
-import numpy as np
-import pyscf  # eventually replace with pyscfad #TODO
 import os
-from pathlib import Path
-import hickle
-import pyscf.pbc.tools.pyscf_ase as pyscf_ase
-import torch
-from collections import defaultdict
-from ase.data import atomic_numbers
 
 # will be updated to work directly with datasets so that we have access
 # to the structures, all species present and ensure basis for all
 import re
+from collections import defaultdict
+from pathlib import Path
+from typing import List, Optional, Union
+
+import ase
+import hickle
+import numpy as np
+import pyscf  # eventually replace with pyscfad #TODO
+import pyscf.pbc.tools.pyscf_ase as pyscf_ase
+import torch
+from ase.data import atomic_numbers
+from ase.io import read
 
 
 def convert_str_to_nlm(x: str):
@@ -239,9 +240,10 @@ class calculator_PBC:
 
 # ------TODO: Incorporate the following into the above class -----
 
-import pyscf.pbc.gto as pbcgto
-from pyscf.pbc.tools.k2gamma import get_phase, kpts_to_kmesh, double_translation_indices
 from collections import defaultdict
+
+import pyscf.pbc.gto as pbcgto
+from pyscf.pbc.tools.k2gamma import get_phase
 
 
 def wrap_translation(i, Nk):
@@ -304,7 +306,9 @@ def map_mic_translations(
     return unique_Ls
 
 
-def translation_vectors_for_kmesh(cell, kmesh, R_vec_rel = None, wrap_around = False, return_rel = False):
+def translation_vectors_for_kmesh(
+    cell, kmesh, R_vec_rel=None, wrap_around=False, return_rel=False
+):
     from pyscf import lib
 
     """
@@ -465,9 +469,9 @@ def map_supercell_to_relativetrans(
                         key,
                         np.linalg.norm(xx - y),
                     )
-            output_Ls[key] = (
-                xx  # assign the first value to this relative translation vector
-            )
+            output_Ls[
+                key
+            ] = xx  # assign the first value to this relative translation vector
             weight_Ls[key] = len(
                 output_maps_Ls[key]
             )  # track how many times this relative translation vector appears
@@ -496,7 +500,7 @@ def map_supercell_to_kpoint(
     map_reltrans: dict of shape (NR, 4) where NR is the number of relative translations and 4 corresponds to (M-N, M, N, i) cor, where R_rel is the relative translation vector
 
     """
-    Nk = phase.shape[1]
+    phase.shape[1]
     if nao is None and cell is not None:
         nao = cell.nao
     elif nao is None and isinstance(output_tensor, dict):

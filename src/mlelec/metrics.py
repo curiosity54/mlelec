@@ -1,31 +1,24 @@
 # Evaluation metrics
-import warnings
-from typing import List, Optional, Union, Tuple
+from typing import List, Optional, Tuple, Union
 
-import numpy as np
 import torch
-
 from metatensor.torch import TensorMap
 
-from mlelec.utils.pbc_utils import blocks_to_matrix, inverse_fourier_transform
-from mlelec.data.qmdataset import QMDataset
-from mlelec.utils.symmetry import ClebschGordanReal
-
-# def L2_kspace_loss(pred: Union[TensorMap], 
+# def L2_kspace_loss(pred: Union[TensorMap],
 #                    target: Union[TensorMap, list],
 #                    dataset: QMDataset,
 #                    cg: Optional[ClebschGordanReal] = None,
 #                    kpts: Union[List, torch.Tensor] =  [[0.,0.,0.]],
 #                    norm = None,
 #                    desired_ifr = None):
-                   
-#     """L2 loss function for k-space matrices computed at given 'kpts' 
-#     kpts: list(list of kpts) per frame 
+
+#     """L2 loss function for k-space matrices computed at given 'kpts'
+#     kpts: list(list of kpts) per frame
 #     target: list of Hks per frame
-#     ASSUMPTION: len(target) = len(kpts) and target[ifr] has the associated kpts in kpt[ifr].  
+#     ASSUMPTION: len(target) = len(kpts) and target[ifr] has the associated kpts in kpt[ifr].
 #     Not implemented for ttarget = TensorMap
 #     """
-    
+
 #     assert isinstance(target, TensorMap) or isinstance(target, list), "Target must be a TensorMap or a list"
 #     assert isinstance(pred, TensorMap), "Prediction must be a TensorMap"
 
@@ -44,12 +37,12 @@ from mlelec.utils.symmetry import ClebschGordanReal
 #     if desired_ifr is not None:
 #         # for ifr in range(len(target_kspace)):
 #             pred_kspace = []
-            
+
 #             # for k in kpts[ifr]:
 #             #     # a = inverse_fourier_transform(torch.stack(list(pred_real[ifr].values())), torch.from_numpy(np.array(list(pred_real[ifr].keys()), dtype=np.float64)), k)
 #             #     # print('a', a.shape)
-#             #     pred_kspace.append(inverse_fourier_transform(torch.stack(list(pred_real[desired_ifr].values())), 
-#             #                                                  torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype=np.float64)), 
+#             #     pred_kspace.append(inverse_fourier_transform(torch.stack(list(pred_real[desired_ifr].values())),
+#             #                                                  torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype=np.float64)),
 #             #                                                  k))
 #             pred_H = torch.stack(list(pred_real[desired_ifr].values()))
 #             T = torch.from_numpy(np.array(list(pred_real[desired_ifr].keys()), dtype = np.float64))
@@ -57,7 +50,7 @@ from mlelec.utils.symmetry import ClebschGordanReal
 #                 # print('pred_kspace', pred_kspace[-1].shape)
 #             # pred_kspace = torch.stack(pred_kspace)
 #             # assert pred_kspace.shape == target_kspace[ifr].shape
-#             # print(pred_kspace.shape, target_kspace[ifr].shape)  
+#             # print(pred_kspace.shape, target_kspace[ifr].shape)
 #             loss += torch.sum([(pred_kspace[ifr] - target_kspace[ifr]) * torch.conj(pred_kspace[ifr] - target_kspace[ifr]) \
 #                                for ifr in range(len(target_kspace))])
 #     else:
@@ -70,13 +63,19 @@ from mlelec.utils.symmetry import ClebschGordanReal
 
 #             # assert pred_kspace.shape == target_kspace[ifr].shape
 #             loss += torch.sum((pred_kspace - target_kspace[ifr]) * torch.conj(pred_kspace - target_kspace[ifr])) / kpts[ifr].shape[0]
-            
+
 #     assert torch.norm(loss-loss.real) < 1e-10
 #     return loss.real
 
-def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tensor, TensorMap, Tuple, List], loss_per_block = False, norm = 1):
+
+def L2_loss(
+    pred: Union[torch.tensor, TensorMap, List],
+    target: Union[torch.tensor, TensorMap, Tuple, List],
+    loss_per_block=False,
+    norm=1,
+):
     """L2 loss function"""
-    
+
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)
         assert (
@@ -84,52 +83,61 @@ def L2_loss(pred: Union[torch.tensor, TensorMap, List], target: Union[torch.tens
         ), "Prediction and target must have the same shape"
         # target = target.to(pred)
         return torch.norm(pred - target) ** 2
-    
+
     elif isinstance(pred, torch.ScriptObject):
         if pred._type().name() == "TensorMap":
-            assert isinstance(target, torch.ScriptObject) and target._type().name() == "TensorMap", "Target must be a TensorMap if prediction is a TensorMap"
+            assert (
+                isinstance(target, torch.ScriptObject)
+                and target._type().name() == "TensorMap"
+            ), "Target must be a TensorMap if prediction is a TensorMap"
         losses = []
         for key, block in pred.items():
             targetblock = target.block(key)
-            blockval = torch.linalg.norm(targetblock.values)
+            torch.linalg.norm(targetblock.values)
             # if blockval > 1e-10:
             if True:
                 assert (
                     block.samples == targetblock.samples
                 ), "Prediction and target must have the same samples"
-                losses.append(torch.norm(block.values - targetblock.values)**2 / norm)
+                losses.append(torch.norm(block.values - targetblock.values) ** 2 / norm)
                 # losses.append(torch.sum((block.values - targetblock.values)*(block.values - targetblock.values).conj()))
                 # losses.append(torch.sum((block.values - targetblock.values) ** 2))
             else:
-                losses.append(torch.tensor(0.0, requires_grad = True).to(block.values))
+                losses.append(torch.tensor(0.0, requires_grad=True).to(block.values))
 
         # losses_b = []
         # for b in metatensor.pow(metatensor.subtract(pred, target), 2).blocks():
         #     losses.append(torch.sum(b.values)/norm)
         # return losses
 
-       
     elif isinstance(pred, dict):
         assert isinstance(target, dict), "Target must be a dictionary"
         losses = []
         for key, p in pred.items():
             t = target[key]
-            losses.append(torch.norm(p - t)**2 / norm)
+            losses.append(torch.norm(p - t) ** 2 / norm)
 
     elif isinstance(pred, list):
-
         losses = []
         for p, t in zip(pred, target):
-            losses.append(torch.norm(p - t)**2)
+            losses.append(torch.norm(p - t) ** 2)
 
     if loss_per_block:
         return losses, sum(losses)
     else:
         return sum(losses)
 
-def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = None, overlap = None, return_delta = False):
+
+def L2_loss_meanzero(
+    pred: Union[torch.tensor, TensorMap],
+    target: Union[torch.tensor, TensorMap],
+    loss_per_block=False,
+    norm=None,
+    overlap=None,
+    return_delta=False,
+):
     """L2 loss function"""
-    
+
     if isinstance(pred, torch.Tensor):
         assert isinstance(target, torch.Tensor)
         assert (
@@ -137,32 +145,49 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
         ), "Prediction and target must have the same shape"
         # target = target.to(pred)
         return torch.sum((pred - target) ** 2)
-    
+
     elif isinstance(pred, torch.ScriptObject):
         if pred._type().name() == "TensorMap":
-            assert isinstance(target, torch.ScriptObject) and target._type().name() == "TensorMap", "Target must be a TensorMap if prediction is a TensorMap"
+            assert (
+                isinstance(target, torch.ScriptObject)
+                and target._type().name() == "TensorMap"
+            ), "Target must be a TensorMap if prediction is a TensorMap"
 
         losses = []
 
         if norm is None:
-            norm = 1/sum([o.values.norm().item()**2 for o in overlap.blocks()])
-        delta = torch.stack([torch.sum(norm*(t.values - p.values)*o.values) for p, t, o in zip(pred.blocks(), target.blocks(), overlap.blocks())]).sum().item()
+            norm = 1 / sum([o.values.norm().item() ** 2 for o in overlap.blocks()])
+        delta = (
+            torch.stack(
+                [
+                    torch.sum(norm * (t.values - p.values) * o.values)
+                    for p, t, o in zip(pred.blocks(), target.blocks(), overlap.blocks())
+                ]
+            )
+            .sum()
+            .item()
+        )
         # delta = 1
 
         for (k, p), t, o in zip(pred.items(), target.blocks(), overlap.blocks()):
-
             # assert p.samples == t.samples == o.samples, "Prediction and target must have the same samples"
 
             # delta = torch.sum(norm*(t.values - p.values)*o.values)
             # print(delta.item(), t.values.norm().item())
-            losses.append(torch.norm(t.values - p.values - delta*o.values)**2)
-       
+            losses.append(torch.norm(t.values - p.values - delta * o.values) ** 2)
+
     elif isinstance(pred, dict):
         assert isinstance(target, dict), "Target must be a dictionary"
         losses = []
         for key, values in pred.items():
-            losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
-            norm)
+            losses.append(
+                torch.norm(
+                    torch.cat(list(values.values()))
+                    - torch.cat(list(target[key].values()))
+                )
+                ** 2
+                / norm
+            )
 
     if loss_per_block:
         if return_delta:
@@ -175,9 +200,10 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
         else:
             return sum(losses)
 
+
 # def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.tensor, TensorMap], loss_per_block = False, norm = 1, overlap = None):
 #     """L2 loss function"""
-    
+
 #     if isinstance(pred, torch.Tensor):
 #         assert isinstance(target, torch.Tensor)
 #         assert (
@@ -185,7 +211,7 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
 #         ), "Prediction and target must have the same shape"
 #         # target = target.to(pred)
 #         return torch.sum((pred - target) ** 2)
-    
+
 #     elif isinstance(pred, torch.ScriptObject):
 #         if pred._type().name() == "TensorMap":
 #             assert isinstance(target, torch.ScriptObject) and target._type().name() == "TensorMap", "Target must be a TensorMap if prediction is a TensorMap"
@@ -196,36 +222,39 @@ def L2_loss_meanzero(pred: Union[torch.tensor, TensorMap], target: Union[torch.t
 
 #             assert block.samples == targetblock.samples, "Prediction and target must have the same samples"
 
-#             blockmean = 0 
+#             blockmean = 0
 #             targetmean = 0
 
 #             if key['block_type'] == 0 and key['L'] == 0 and key['n_i'] == key['n_j']:
-#                 blockmean = torch.mean(block.values)     
-#                 targetmean = torch.mean(targetblock.values)     
+#                 blockmean = torch.mean(block.values)
+#                 targetmean = torch.mean(targetblock.values)
 
 #             losses.append(torch.norm(block.values - blockmean - targetblock.values + targetmean)**2 / norm)
-       
+
 #     elif isinstance(pred, dict):
 #         assert isinstance(target, dict), "Target must be a dictionary"
 #         losses = []
 #         for key, values in pred.items():
-#             losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 / 
+#             losses.append(torch.norm(torch.cat(list(values.values())) - torch.cat(list(target[key].values())))**2 /
 #             norm)
 
 #     if loss_per_block:
 #         return losses, sum(losses)
 #     else:
 #         return sum(losses)
-    
+
+
 def Eigval_loss(
-    pred: Union[torch.tensor, List], target: Union[torch.tensor, List], overlap: Optional[torch.tensor] = None
+    pred: Union[torch.tensor, List],
+    target: Union[torch.tensor, List],
+    overlap: Optional[torch.tensor] = None,
 ):
     """Loss function for eigenvalues"""
     try:
-        return torch.sum((pred - target)**2)
+        return torch.sum((pred - target) ** 2)
         # return torch.sum((pred - target - (pred.mean() - target.mean())) ** 2)
     except TypeError:
-        return sum([torch.sum((p - t)**2) for p, t in zip(pred, target)])
+        return sum([torch.sum((p - t) ** 2) for p, t in zip(pred, target)])
         # return sum([torch.sum((p - t - (p.mean() - t.mean())) ** 2) for p, t in zip(pred, target)])
 
 

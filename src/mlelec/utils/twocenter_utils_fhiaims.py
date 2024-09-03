@@ -1,13 +1,15 @@
 # Handles 2 center objects - coupling decoupling
 # must include preprocessing and postprocessing utils
-from typing import Optional, List, Union, Tuple, Dict
-from metatensor import TensorMap, TensorBlock
-import torch
+import warnings
+from typing import Dict, List, Optional, Tuple, Union
+
 import ase
 import numpy as np
-from mlelec.utils.metatensor_utils import TensorBuilder, _to_tensormap
+import torch
+from metatensor import TensorBlock, TensorMap
+
+from mlelec.utils.metatensor_utils import TensorBuilder
 from mlelec.utils.symmetry import ClebschGordanReal
-import warnings
 
 
 def fix_orbital_order(
@@ -210,7 +212,7 @@ def _matrix_to_blocks(
                 if i == j:
                     block_type = 0  # diagonal
                 elif ai == aj:
-                    #if i > j:
+                    # if i > j:
                     #    kj_base += orbs_tot[aj]
                     #    continue
                     block_type = 1  # same-species
@@ -234,22 +236,22 @@ def _matrix_to_blocks(
                 else:
                     raise ValueError
 
-                #w=block_data.shape[0]
-                #print(w)
-                #cs=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w+(w/2)),int(w-(w/2-1)))]).to(device)
-                #print(cs)
-                #print(L,Lterm, cs*Lterm)
+                # w=block_data.shape[0]
+                # print(w)
+                # cs=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w+(w/2)),int(w-(w/2-1)))]).to(device)
+                # print(cs)
+                # print(L,Lterm, cs*Lterm)
 
-                #print('A, i,j, ai, aj, ki_base, kj_base,orbsai,orbsaj,block_data.shape')
-                #print(A, i,j, ai, aj, ki_base, kj_base, orbs_tot[ai],orbs_tot[aj],block_data.shape)
+                # print('A, i,j, ai, aj, ki_base, kj_base,orbsai,orbsaj,block_data.shape')
+                # print(A, i,j, ai, aj, ki_base, kj_base, orbs_tot[ai],orbs_tot[aj],block_data.shape)
                 if block_type == 1:
                     # print(block_data)
                     block_data_plus = (block_data + block_data.T) / 2 ** (0.5)
                     block_data_minus = (block_data - block_data.T) / 2 ** (0.5)
- #               elif block_type==0:
- #                   block_data = (block_data + block_data.T) *0.5
-#                elif block_type==0:
-#                    print(i,j,block_data)
+                #               elif block_type==0:
+                #                   block_data = (block_data + block_data.T) *0.5
+                #                elif block_type==0:
+                #                    print(i,j,block_data)
 
                 ki_offset = 0
                 for ni, li, mi in orbitals[ai]:
@@ -320,12 +322,13 @@ def _matrix_to_blocks(
             ki_base += orbs_tot[ai]
     return block_builder.build()
 
-#def _matrix_to_condon_shortley(
+
+# def _matrix_to_condon_shortley(
 #    matrices: Union[List[torch.tensor], torch.tensor],
 #    frames: Union[ase.Atoms, List[ase.Atoms]],
 #    orbitals: dict,
 #    device: str = None,
-#):
+# ):
 #    # if not isinstance(frames, list):
 #    #     assert len(matrices.shape) == 2  # should be just one matrix (nao,nao)
 #    #     frames = [frames]
@@ -463,6 +466,7 @@ def _matrix_to_blocks(
 #            ki_base += orbs_tot[ai]
 #    return block_builder.build()
 
+
 def _to_matrix(
     blocks: TensorMap,
     frames: List[ase.Atoms],
@@ -557,7 +561,7 @@ def _blocks_to_matrix(
 
             # values to assign
             values = block_data[:, :, 0].reshape(2 * li + 1, 2 * lj + 1)
-            #print(block_type, values, li,lj)
+            # print(block_type, values, li,lj)
             # assign values
             _fill(
                 block_type,
@@ -589,7 +593,7 @@ def _fill(
     same_koff: bool,
     li: int,
     lj: int,
-    hermitian:bool=True,
+    hermitian: bool = True,
 ):
     """fill block of type <type> where type is either -1,0,1,2"""
     # TODO: check matrix device, values devide are the same
@@ -601,9 +605,9 @@ def _fill(
             if hermitian:
                 matrix[jslice, islice] = values.T
             else:
-                #print(li,lj)
-                matrix[jslice, islice] += values.T * (-1)**(li+lj)#+1)
-                #matrix[jslice, islice] = -values.T
+                # print(li,lj)
+                matrix[jslice, islice] += values.T * (-1) ** (li + lj)  # +1)
+                # matrix[jslice, islice] = -values.T
     if type == 2:
         matrix[islice, jslice] = values
         if hermitian:
@@ -612,30 +616,33 @@ def _fill(
             matrix[jslice, islice] = -values.T
 
     if abs(type) == 1:
-        #print('values',type, values)
+        # print('values',type, values)
         values_2norm = values / (2 ** (0.5))
         matrix[islice, jslice] += values_2norm
-#        if hermitian:
-#            matrix[jslice, islice] += values.T#_2norm.T
-#        else:
-#            matrix[jslice, islice] -= values.T#_2norm.T
+        #        if hermitian:
+        #            matrix[jslice, islice] += values.T#_2norm.T
+        #        else:
+        #            matrix[jslice, islice] -= values.T#_2norm.T
         if not same_koff:
             islice = slice(ki_base + kj_offset, ki_base + kj_offset + 2 * lj + 1)
             jslice = slice(kj_base + ki_offset, kj_base + ki_offset + 2 * li + 1)
             if type == 1:
                 matrix[islice, jslice] += values_2norm.T
-#                if hermitian:
-#                    matrix[jslice, islice] += values_2norm
-#                else:
-#                    matrix[jslice, islice] -= values_2norm
+            #                if hermitian:
+            #                    matrix[jslice, islice] += values_2norm
+            #                else:
+            #                    matrix[jslice, islice] -= values_2norm
             else:
                 matrix[islice, jslice] -= values_2norm.T
+
+
 #                if hermitian:
 #                    matrix[jslice, islice] -= values_2norm
 #                else:
 #                    matrix[jslice, islice] += values_2norm
 #                    print('v',values_2norm)
 #                    print('m',matrix[jslice,islice])
+
 
 def _to_coupled_basis(
     blocks: Union[torch.tensor, TensorMap],
@@ -888,68 +895,86 @@ def rotate_matrix(
     )
     return rot_matrix
 
+
 def to_coupled_blocks(matrices, frames, orbs, device=None):
-    q= {}
+    q = {}
     for s in matrices.keys():
-        q[tuple(s)] = _to_coupled_basis(_matrix_to_blocks(matrices[tuple(s)], frames=frames, orbitals=orbs,), orbs, device=device) # uncouple -> coupled    
+        q[tuple(s)] = _to_coupled_basis(
+            _matrix_to_blocks(
+                matrices[tuple(s)],
+                frames=frames,
+                orbitals=orbs,
+            ),
+            orbs,
+            device=device,
+        )  # uncouple -> coupled
     return q
 
-def to_uncoupled_matrices(b,frames, orbs):
-    new_matrices={}
+
+def to_uncoupled_matrices(b, frames, orbs):
+    new_matrices = {}
     for s in b.keys():
-        if s==(0,0,0):
-            hermitian=True
+        if s == (0, 0, 0):
+            hermitian = True
         else:
-            hermitian=False
-        new_matrices[s]=_to_matrix(_to_uncoupled_basis(b[s]), frames = frames, orbitals=orbs, hermitian=hermitian)    
+            hermitian = False
+        new_matrices[s] = _to_matrix(
+            _to_uncoupled_basis(b[s]), frames=frames, orbitals=orbs, hermitian=hermitian
+        )
     return new_matrices
 
+
 def to_block_and_back(matrices, frames, orbs):
-    q=to_coupled_blocks(matrices,frames,orbs)
-    p=to_uncoupled_matrices(q,frames,orbs)
+    q = to_coupled_blocks(matrices, frames, orbs)
+    p = to_uncoupled_matrices(q, frames, orbs)
     return p
 
+
 def symmetrize_matrices(q):
-    B={}
+    B = {}
     for s in q.keys():
-        #print(s)
-        #print('s',q[s])#[ifr])
-        ns=(-s[0],-s[1],-s[2])
+        # print(s)
+        # print('s',q[s])#[ifr])
+        ns = (-s[0], -s[1], -s[2])
         symmblocks = []
-        for i, (key,b) in enumerate(q[tuple(s)].items()):
-            x = b.values#.type(torch.complex128)
+        for i, (key, b) in enumerate(q[tuple(s)].items()):
+            x = b.values  # .type(torch.complex128)
 
-            block_type=key['block_type']
-            L=key['L']
-            if block_type==0:
-
-                inv=q[ns][key]
-                z=b.values
-                if torch.linalg.norm(b.values-inv.values)>10**-7:
-                    if L%2==0:
-                        z=(b.values+inv.values)/2
+            block_type = key["block_type"]
+            L = key["L"]
+            if block_type == 0:
+                inv = q[ns][key]
+                z = b.values
+                if torch.linalg.norm(b.values - inv.values) > 10**-7:
+                    if L % 2 == 0:
+                        z = (b.values + inv.values) / 2
                     else:
-                        z=(b.values-inv.values)/2
+                        z = (b.values - inv.values) / 2
 
-
-                symmblocks.append(TensorBlock(values = z,#.cpu(),#b.values,#*((-1)**(lam)),
-                                   components = b.components,
-                                   samples = b.samples,#Labels(names = b.samples.names[:], values=np.asarray(b.samples.values)[:]),
-                                   properties = b.properties)
-                                  )   
+                symmblocks.append(
+                    TensorBlock(
+                        values=z,  # .cpu(),#b.values,#*((-1)**(lam)),
+                        components=b.components,
+                        samples=b.samples,  # Labels(names = b.samples.names[:], values=np.asarray(b.samples.values)[:]),
+                        properties=b.properties,
+                    )
+                )
 
             else:
-                symmblocks.append(TensorBlock(values = b.values,#.cpu(),#b.values,#*((-1)**(lam)),
-                                   components = b.components,
-                                   samples = b.samples,#Labels(names = b.samples.names[:], values=np.asarray(b.samples.values)[:]),
-                                   properties = b.properties)
-                                  )       
+                symmblocks.append(
+                    TensorBlock(
+                        values=b.values,  # .cpu(),#b.values,#*((-1)**(lam)),
+                        components=b.components,
+                        samples=b.samples,  # Labels(names = b.samples.names[:], values=np.asarray(b.samples.values)[:]),
+                        properties=b.properties,
+                    )
+                )
 
         B[tuple(s)] = TensorMap(q[tuple(s)].keys, symmblocks)
     return B
 
 
-#def change_rotation_direction(matrices):
+# def change_rotation_direction(matrices):
 #    '''
 #    Function that takes a dictionary of matrices in block form, and changes the rotation direction from either active to passive or vise versa
 #    OUTDATED: aims has its own Condon Shortley convention
@@ -975,18 +1000,18 @@ def symmetrize_matrices(q):
 #                                       components = b.components,
 #                                 samples = b.samples,#Labels(names = b.samples.names[:], values=np.asarray(b.samples.values)[:]),
 #                                       properties = b.properties)
-#                                )       
+#                                )
 #
-#        H_inverse[tuple(shift)] = TensorMap(matrices[tuple(shift)].keys, blocks_inverse)    
+#        H_inverse[tuple(shift)] = TensorMap(matrices[tuple(shift)].keys, blocks_inverse)
 #    return H_inverse
 
-def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
-    matrix=torch.zeros(ham.shape, dtype=torch.tensor(ham[0]).dtype)
+
+def _matrix_to_block_fhiaims_to_cs(ham, frame, orbitals, orbs_tot, device="cpu"):
+    matrix = torch.zeros(ham.shape, dtype=torch.tensor(ham[0]).dtype)
     ki_base = 0
     for i, ai in enumerate(frame.numbers):
         kj_base = 0
         for j, aj in enumerate(frame.numbers):
-
             if isinstance(ham, np.ndarray):
                 block_data = torch.from_numpy(
                     ham[
@@ -998,7 +1023,6 @@ def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
                     ham[
                         kj_base : kj_base + orbs_tot[aj],
                         ki_base : ki_base + orbs_tot[ai],
-
                     ]
                 )
             elif isinstance(ham, torch.Tensor):
@@ -1029,17 +1053,40 @@ def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
                         kj_offset += 2 * lj + 1
                         continue
 
-
                     islice = slice(ki_offset, ki_offset + 2 * li + 1)
                     jslice = slice(kj_offset, kj_offset + 2 * lj + 1)
 
-                    w_i= 2 * li + 1
-                    w_j= 2 * lj + 1
-                    cs_i=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_i+(w_i/2)),int(w_i-(w_i/2-1)))]).to(device)
-                    cs_j=torch.tensor([(-1)**m if m>0 else 1 for m in range(int(-w_j+(w_j/2)),int(w_j-(w_j/2-1)))]).to(device)
-                    matrix[ki_base+ki_offset:ki_base+ki_offset+2 * li +1, kj_base+kj_offset:kj_base+kj_offset+2 * lj +1]=block_data[islice,jslice]*cs_i.unsqueeze(-1)*cs_j
-                    matrix[kj_base+kj_offset:kj_base+kj_offset+2 * lj +1,ki_base+ki_offset:ki_base+ki_offset+2 * li +1]=block_data2[jslice,islice]*cs_i*cs_j.unsqueeze(-1)
-                    
+                    w_i = 2 * li + 1
+                    w_j = 2 * lj + 1
+                    cs_i = torch.tensor(
+                        [
+                            (-1) ** m if m > 0 else 1
+                            for m in range(
+                                int(-w_i + (w_i / 2)), int(w_i - (w_i / 2 - 1))
+                            )
+                        ]
+                    ).to(device)
+                    cs_j = torch.tensor(
+                        [
+                            (-1) ** m if m > 0 else 1
+                            for m in range(
+                                int(-w_j + (w_j / 2)), int(w_j - (w_j / 2 - 1))
+                            )
+                        ]
+                    ).to(device)
+                    matrix[
+                        ki_base + ki_offset : ki_base + ki_offset + 2 * li + 1,
+                        kj_base + kj_offset : kj_base + kj_offset + 2 * lj + 1,
+                    ] = (
+                        block_data[islice, jslice] * cs_i.unsqueeze(-1) * cs_j
+                    )
+                    matrix[
+                        kj_base + kj_offset : kj_base + kj_offset + 2 * lj + 1,
+                        ki_base + ki_offset : ki_base + ki_offset + 2 * li + 1,
+                    ] = (
+                        block_data2[jslice, islice] * cs_i * cs_j.unsqueeze(-1)
+                    )
+
                     kj_offset += 2 * lj + 1
                 ki_offset += 2 * li + 1
             kj_base += orbs_tot[aj]
@@ -1047,16 +1094,18 @@ def _matrix_to_block_fhiaims_to_cs(ham,frame,orbitals,orbs_tot, device='cpu'):
         ki_base += orbs_tot[ai]
     return matrix
 
+
 def _condon_shortley_to_fhiaims(
     matrices: Union[List[torch.tensor], torch.tensor],
     frames: Union[ase.Atoms, List[ase.Atoms]],
     orbitals: dict,
     device: str = None,
 ):
-    '''
+    """
     Converting from Condon Shortley convention to FHI-aims convention works the same way as the convention from FHI-aims convention to Condon Shortley convention. To check, which convention one is in, use the check_rotation function (Needs rotated image of data..). It works only for Condon Shortley convention.
-    '''
-    return _fhiaims_to_condon_shortley(matrices,frames,orbitals,device)
+    """
+    return _fhiaims_to_condon_shortley(matrices, frames, orbitals, device)
+
 
 def _fhiaims_to_condon_shortley(
     matrices: Union[List[torch.tensor], torch.tensor],
@@ -1064,62 +1113,65 @@ def _fhiaims_to_condon_shortley(
     orbitals: dict,
     device: str = None,
 ):
-
-    '''
+    """
     Function that transforms a matrix in 'FHI-aims' spherical harmonics convention to Condon Shortley convention.
     It does this by decomposing the matrix into its orbital blocks and applying the phase factor.
     FHI-aims convention can be found in the aims source code in the cartesian_ylm.f90 file around line 1590.
     To go to Condon Shortly convention, one has to multiply the even states with m>0 by -1.
-    '''
+    """
 
-#    orbs_tot, _ = _orbs_offsets(orbitals)
+    #    orbs_tot, _ = _orbs_offsets(orbitals)
 
     block_builder = TensorBuilder(
         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
         [["m1"], ["m2"]],
         ["value"],
-    )    
+    )
     orbs_tot, _ = _orbs_offsets(orbitals)
 
-    matrices_cs=torch.zeros((len(matrices), *matrices[0].shape), dtype=torch.tensor(matrices)[0][0].dtype)
-    if len(matrices_cs.shape)==4:
-        multiple_shifts=True
+    matrices_cs = torch.zeros(
+        (len(matrices), *matrices[0].shape), dtype=torch.tensor(matrices)[0][0].dtype
+    )
+    if len(matrices_cs.shape) == 4:
+        multiple_shifts = True
     else:
-        multiple_shifts=False
-    #print(multiple_shifts)
+        multiple_shifts = False
+    # print(multiple_shifts)
     for A in range(len(frames)):
         frame = frames[A]
         if multiple_shifts:
-
             for shift in range(len(matrices[A])):
-
                 ham = matrices[A][shift]
-                #print('shift', shift)
-                matrices_cs[A][shift]=_matrix_to_block_fhiaims_to_cs(ham,frame, orbitals,orbs_tot, device=device)
+                # print('shift', shift)
+                matrices_cs[A][shift] = _matrix_to_block_fhiaims_to_cs(
+                    ham, frame, orbitals, orbs_tot, device=device
+                )
         else:
             ham = matrices[A]
-            matrices_cs[A]=_matrix_to_block_fhiaims_to_cs(ham,frame, orbitals,orbs_tot, device=device)
+            matrices_cs[A] = _matrix_to_block_fhiaims_to_cs(
+                ham, frame, orbitals, orbs_tot, device=device
+            )
 
     return matrices_cs
 
 
-def check_rotation(r1,  rotations, precision=10**-5):
-    '''This function takes a matrix r, rotates it by the angle rotations in active rotation. If the rotation direction is correct, the function should return no output. If it is wrong, the function returns the norm to the by 'rotations' matrix.
-    '''
+def check_rotation(r1, rotations, precision=10**-5):
+    """This function takes a matrix r, rotates it by the angle rotations in active rotation. If the rotation direction is correct, the function should return no output. If it is wrong, the function returns the norm to the by 'rotations' matrix."""
 
-    from mlelec.utils.metatensor_utils import labels_where  
-    from mlelec.utils.symmetry import _wigner_d_real
     import numpy as np
     from metatensor import Labels
 
-
+    from mlelec.utils.metatensor_utils import labels_where
+    from mlelec.utils.symmetry import _wigner_d_real
 
     for j, (shift, stmap) in enumerate(r1.items()):
-        for i, (k,b) in enumerate(stmap.items()): 
+        for i, (k, b) in enumerate(stmap.items()):
             unrot_idx = labels_where(
                 b.samples,
-                selection=Labels(["structure"], values=np.asarray([[0]]).reshape(-1, 1)),
+                selection=Labels(
+                    ["structure"], values=np.asarray([[0]]).reshape(-1, 1)
+                ),
                 return_idx=True,
             )[-1]
             rot_idx = labels_where(
@@ -1129,14 +1181,20 @@ def check_rotation(r1,  rotations, precision=10**-5):
                 ),
                 return_idx=True,
             )[-1]
-            L = k['L']
-            li = k['l_i']
-            lj = k['l_j']
+            L = k["L"]
+            k["l_i"]
+            k["l_j"]
             # L = k["spherical_harmonics_l"]
-            wd = _wigner_d_real(L, *rotations[1 -1]).to(b.values) #should be this after rotation
-            if torch.linalg.norm(wd @ b.values[unrot_idx] - b.values[rot_idx]) > precision:
-                print(j,i,k.values,torch.linalg.norm(wd @ b.values[unrot_idx] - b.values[rot_idx]))
-
-
-
-
+            wd = _wigner_d_real(L, *rotations[1 - 1]).to(
+                b.values
+            )  # should be this after rotation
+            if (
+                torch.linalg.norm(wd @ b.values[unrot_idx] - b.values[rot_idx])
+                > precision
+            ):
+                print(
+                    j,
+                    i,
+                    k.values,
+                    torch.linalg.norm(wd @ b.values[unrot_idx] - b.values[rot_idx]),
+                )
