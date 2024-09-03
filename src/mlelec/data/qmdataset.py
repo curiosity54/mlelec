@@ -155,21 +155,27 @@ class QMDataset:
         Returns:
             Union[Dict, List, torch.Tensor]: Loaded matrix.
         """
-        def convert_to_tensor(item):
+        def convert_to_tensor(item, device):
             if isinstance(item, np.ndarray):
                 # If it's an ndarray of objects, recursively convert elements
                 if item.dtype == np.object_:
                     return torch.tensor([convert_to_tensor(subitem) for subitem in item],
-                                        dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64)
+                                        dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64).to(device=device)
                 else:
                     return torch.tensor(item, 
-                                        dtype=torch.complex128 if np.issubdtype(item.dtype, np.complexfloating) else torch.float64)
+                                        dtype=torch.complex128 if np.issubdtype(item.dtype, np.complexfloating) else torch.float64).to(device=device)
+            elif isinstance(item, dict):
+                # Convert dictionaries to tensors
+                if isinstance(next(iter(item.values())), np.ndarray):
+                    return {k: torch.from_numpy(subitem).to(dtype=torch.complex128 if any(isinstance(s, complex) for s in item.values()) else torch.float64, device=device) for k, subitem in item.items()}
+                elif isinstance(next(iter(item.values())), list):
+                    return {k: torch.tensor(subitem, dtype=torch.complex128 if any(isinstance(s, complex) for s in item.values()) else torch.float64, device=device) for k, subitem in item.items()}
             elif isinstance(item, list):
                 # Convert lists to tensors
-                return torch.tensor(item, dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64)
+                return torch.tensor(item, dtype=torch.complex128 if any(isinstance(subitem, complex) for subitem in item) else torch.float64, device=device)
             else:
                 # Convert single elements
-                return torch.tensor(item, dtype=torch.complex128 if isinstance(item, complex) else torch.float64)
+                return torch.tensor(item, dtype=torch.complex128 if isinstance(item, complex) else torch.float64, device=device)
 
         if file_path.endswith('.pt'):
             matrix = torch.load(file_path, map_location=device)
@@ -178,9 +184,11 @@ class QMDataset:
             if isinstance(matrix, np.ndarray) and matrix.dtype == object:
                 # Handle potential ragged arrays or list of dictionaries
                 if any(isinstance(item, (list, np.ndarray)) and len(item) != len(matrix[0]) for item in matrix):
-                    matrix = [convert_to_tensor(item).to(device) for item in matrix]
+                    matrix = [convert_to_tensor(item, device) for item in matrix]
+                elif any(isinstance(item, dict) for item in matrix):
+                    matrix = [convert_to_tensor(item, device) for item in matrix]
                 else:
-                    matrix = convert_to_tensor([list(item) for item in matrix]).to(device)
+                    matrix = convert_to_tensor([list(item) for item in matrix], device)
             else:
                 matrix = torch.from_numpy(matrix).to(device)
         elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
@@ -487,16 +495,20 @@ class QMDataset:
         self,
         matrices_realspace: List[Dict],
         is_tensor: bool = True,
-        structure_ids: Optional[List[int]] = None
+        structure_ids: Optional[List[int]] = None,
+        kpts_rel: Optional[np.ndarray] = None
     ) -> List[Optional[torch.Tensor]]:
-        
+
+        if kpts_rel is None:
+            kpts_rel = self.kpts_rel
+
         matrices_kspace = []
         structure_ids = structure_ids or range(len(matrices_realspace))
         for ifr, H in zip(structure_ids, matrices_realspace):
             if H:
                 H_T = self._stack_tensors(H, is_tensor)
                 T_list = self._convert_keys_to_tensor(H, is_tensor)
-                k = torch.from_numpy(self.kpts_rel[ifr]).to(device=self.device)
+                k = torch.from_numpy(kpts_rel[ifr]).to(device=self.device)
                 matrices_kspace.append(inverse_fourier_transform(H_T, T_list=T_list, k=k, norm=1))
             else:
                 matrices_kspace.append(None)

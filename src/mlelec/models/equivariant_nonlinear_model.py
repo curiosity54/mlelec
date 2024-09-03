@@ -12,6 +12,53 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.model_selection import GridSearchCV
 
 
+# class EquivariantNonLinearity(nn.Module):
+#     """
+#     Applies a non-linear activation followed by optional Layer Normalization.
+#     The non-linear activation is applied to the inverse square root of the sum
+#     of squares of the input tensor's feature dimension.
+
+#     Args:
+#         nonlinearity (callable): The non-linear activation function to apply.
+#         epsilon (float): A small value to prevent division by zero in sqrt.
+#         norm (bool): Whether to apply Layer Normalization.
+#         layersize (int): The size of the layer (number of features).
+#         device (str): The device to use for the layer.
+#     """
+#     def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm=True, layersize=None, device=None):
+#         super().__init__()
+#         self.nonlinearity = nonlinearity
+#         self.epsilon = epsilon
+#         self.device = device or 'cpu'
+        
+#         self.nn = [self.nonlinearity]
+#         if norm:
+#             self.nn.append(nn.LayerNorm([layersize], device=self.device))
+#         self.nn = nn.Sequential(*self.nn)
+
+#     def forward(self, x: torch.Tensor) -> torch.Tensor:
+#         """
+#         Forward pass for the Equivariant NonLinearity.
+
+#         Args:
+#             x (torch.Tensor): Input tensor of shape (batch_size, num_samples, num_features).
+
+#         Returns:
+#             torch.Tensor: Output tensor of the same shape as input.
+#         """
+#         assert len(x.shape) == 3, "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
+        
+#         # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
+#         x_inv = torch.einsum("imf,imf->if", x, x)
+#         x_inv = torch.sqrt(x_inv + self.epsilon)
+        
+#         # Apply the nonlinearity and optional normalization
+#         x_inv = self.nn(x_inv)
+        
+#         # Scale the original tensor by the transformed inverse tensor
+#         out = torch.einsum("if, imf->imf", x_inv, x)
+#         return out
+
 class EquivariantNonLinearity(nn.Module):
     """
     Applies a non-linear activation followed by optional Layer Normalization.
@@ -30,34 +77,66 @@ class EquivariantNonLinearity(nn.Module):
         self.nonlinearity = nonlinearity
         self.epsilon = epsilon
         self.device = device or 'cpu'
-        
-        self.nn = [self.nonlinearity]
-        if norm:
-            self.nn.append(nn.LayerNorm([layersize], device=self.device))
-        self.nn = nn.Sequential(*self.nn)
+
+        # Use LayerNorm if norm is True
+        self.norm = nn.LayerNorm([layersize], device=self.device) if norm else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass for the Equivariant NonLinearity.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, num_samples, num_features).
-
-        Returns:
-            torch.Tensor: Output tensor of the same shape as input.
-        """
         assert len(x.shape) == 3, "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
-        
+
         # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
-        x_inv = torch.einsum("imf,imf->if", x, x)
-        x_inv = torch.sqrt(x_inv + self.epsilon)
+        x_inv = torch.sqrt(torch.einsum("imf,imf->if", x, x) + self.epsilon)
         
         # Apply the nonlinearity and optional normalization
-        x_inv = self.nn(x_inv)
+        if self.nonlinearity:
+            x_inv = self.nonlinearity(x_inv)
+        if self.norm:
+            x_inv = self.norm(x_inv)
         
         # Scale the original tensor by the transformed inverse tensor
-        out = torch.einsum("if, imf->imf", x_inv, x)
-        return out
+        return torch.einsum("if,imf->imf", x_inv, x)
+
+    
+class simpleMLP(nn.Module):
+    def __init__(self, nlayers: int, nin: int, nhidden: Union[int, list], nout: int = 1, activation: Union[str, callable] = None, bias: bool = False, device=None, apply_layer_norm=False):
+        super().__init__()
+        self.device = device or 'cpu'
+
+        if nlayers == 0:
+            # Single linear layer if no hidden layers
+            self.mlp = nn.Linear(nin, nout, bias=bias).to(self.device)
+        else:
+            # Ensure nhidden is a list of appropriate length
+            if isinstance(nhidden, int):
+                nhidden = [nhidden] * nlayers
+
+            # Build the network layers
+            layers = []
+            for i in range(nlayers):
+                in_dim = nin if i == 0 else nhidden[i-1]
+                out_dim = nhidden[i]
+                
+                layers.append(nn.Linear(in_dim, out_dim, bias=bias))
+                
+                if activation:
+                    nonlinearity = getattr(nn, activation)() if isinstance(activation, str) else activation
+                    layers.append(EquivariantNonLinearity(
+                        nonlinearity=nonlinearity, 
+                        layersize=out_dim,  
+                        device=self.device, 
+                        norm=apply_layer_norm
+                    ))
+            
+            # Final output layer
+            layers.append(nn.Linear(nhidden[-1], nout, bias=bias))
+
+            # Convert list of layers to a Sequential model
+            self.mlp = nn.Sequential(*layers).to(self.device)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.mlp(x)
+
+
 
 
 class MLP(nn.Module):
@@ -230,7 +309,7 @@ class EquivariantNonlinearModel(nn.Module):
             feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
             bias = k["L"] == 0 and set_bias
 
-            modules.append(MLP(
+            modules.append(simpleMLP(
                 nin=feat.values.shape[-1],
                 nout=nprop,
                 nhidden=nhidden,

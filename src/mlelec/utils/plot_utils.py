@@ -1,10 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-
-# plt.rcParams['figure.dpi'] = 400
-import scipy
-
+from ase.units import Hartree
+import seekpath
 
 def plot_atoms(structure, ax=None):
     pass
@@ -166,134 +164,238 @@ def parity_plot(target, prediction):
 
     pass
 
+def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
+    
+    from xitorch.linalg import symeig
+    from xitorch import LinearOperator
+    
+    def ase_to_structure(frame):
+        return (frame.cell.array, frame.positions, frame.numbers)
 
-from mlelec.data.pyscf_calculator import translation_vectors_for_kmesh
-from ase.dft.kpoints import sc_special_points as special_points  # , get_bandpath
-from ase.units import Hartree
-from typing import List, Optional
-import scipy
+    def label_dict(l):
+        if l == 'GAMMA':
+            return r'$\Gamma$'
+        elif len(l.split('_')) > 1:
+            l = l.split('_')
+            return rf'$\mathrm{{{l[0]}}}_{{{l[1]}}}$'
+        else:
+            return l
+    
+    if fig is None and ax is None:
+        fig, ax = plt.subplots()
+    elif fig is not None and ax is None:
+        raise NotImplementedError('You cannot pass just `fig` for now')
+        
+    frame = qmdata.structures[idx]
+    structure = ase_to_structure(frame)
+    
+    kpath = seekpath.get_explicit_k_path(structure)
+    kpts_rel = [kpath['explicit_kpoints_rel']]*len(qmdata)
+
+    Hk = qmdata.bloch_sum([HT], structure_ids = [idx], kpts_rel = kpts_rel)
+    ST = qmdata.overlap_realspace[idx]
+    Sk = qmdata.bloch_sum([ST], structure_ids = [idx], kpts_rel = kpts_rel)
+    
+    Hk_ = torch.stack(Hk).detach()
+    try:
+        Sk_ = torch.stack(Sk).detach()
+    except:
+        Sk_ = Sk.detach()
+
+    bands, _ = symeig(LinearOperator.m(Hk_), M=LinearOperator.m(Sk_))
+
+    x = kpath['explicit_kpoints_linearcoord']
+
+    color = kwargs.get('color', None)
+    ls = kwargs.get('ls', None)
+    lw = kwargs.get('lw', None)
+
+    pl = []
+    for x0, x1 in kpath['explicit_segments']:
+        for bs in bands:
+            for b in bs.T:
+                pl_, = ax.plot(x[x0:x1], b[x0:x1]*Hartree, color = color, ls = ls, lw = lw)
+                pl.append(pl_)
+    
+    # Draw vertical lines
+    vert = []
+    for p in kpath['explicit_segments']:
+        vert.append(p[0])
+    vert = list(set(vert))
+    for i in vert:
+        ax.axvline(x[i], color='k')
+
+    # Define xticks and labels
+    xticks = []
+    xlabels = []
+    for p in kpath['explicit_segments']:
+        xticks.append(x[p[0]])
+        xlabels.append(label_dict(kpath['explicit_kpoints_labels'][p[0]]))
+    xticks.append(x[kpath['explicit_segments'][-1][1]-1])
+    xlabels.append(label_dict(kpath['explicit_kpoints_labels'][-1]))
+    xticks = np.array(xticks)
+    
+    # Fix xticklabels too close to one another
+    new_ticks = [xticks[0]]
+    new_labels = [xlabels[0]]
+    skip = False    
+    for i, (t, l) in enumerate(zip(xticks, xlabels)):
+        try:
+            d = xticks[i+1]-xticks[i]
+        except:
+            continue
+        if skip:
+            skip = False
+            continue
+        if d > 0.1:
+            new_ticks.append(t)
+            new_labels.append(l)
+            skip = False
+        else:
+            new_ticks.append(0.5*(t + xticks[i+1]))
+            new_labels.append(f'{l}|{xlabels[i+1]}')
+            skip = True
+    new_ticks.append(xticks[-1])
+    new_labels.append(xlabels[-1])
+    
+    ax.axvline(x[-1], color='k')
+    ax.set_xlim(x[0], x[-1])
+    ax.set_xticks(new_ticks)
+    ax.set_xticklabels(new_labels)
+    
+    ax.set_xlabel('k point')
+    ax.set_ylabel('Band energy (eV)')
+
+    return ax, tuple(pl)
 
 
-def plot_bands_frame(
-    dataset,
-    ifr,
-    realfock,
-    realover,
-    special_symm=None,
-    bandpath_str=None,
-    kpath=None,
-    npoints=30,
-    y_min=-2 * Hartree,
-    y_max=2 * Hartree,
-    ax=None,
-    color="blue",
-    ls="-",
-    marker=None,
-):
-    from mlelec.utils.pbc_utils import inverse_fourier_transform
+# from mlelec.data.pyscf_calculator import translation_vectors_for_kmesh
+# from ase.dft.kpoints import sc_special_points as special_points  # , get_bandpath
+# from ase.units import Hartree
+# from typing import List, Optional
+# import scipy
 
-    """bloch"""
-    # print(npoints, bandpath_str, pbc, special_points[special_symm])
-    frame = dataset.structures[ifr]
-    pyscf_cell = dataset.cells[ifr]
-    kmesh = dataset.kmesh[ifr]
-    if bandpath_str is not None:
-        kpath = frame.cell.bandpath(
-            path=bandpath_str,
-            npoints=npoints,
-            pbc=frame.pbc,
-            special_points=special_points[special_symm],
-        )
-    else:
-        assert kpath is not None
-    kpts = kpath.kpts  # units of icell
-    kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
 
-    xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
-    special_xcoords = np.array(special_xcoords) / xcoords[-1]
-    xcoords = np.array(xcoords) / xcoords[-1]
-    Nk = np.prod(kmesh)
+# def plot_bands_frame(
+#     dataset,
+#     ifr,
+#     realfock,
+#     realover,
+#     special_symm=None,
+#     bandpath_str=None,
+#     kpath=None,
+#     npoints=30,
+#     y_min=-2 * Hartree,
+#     y_max=2 * Hartree,
+#     ax=None,
+#     color="blue",
+#     ls="-",
+#     marker=None,
+# ):
+#     from mlelec.utils.pbc_utils import inverse_fourier_transform
 
-    if isinstance(next(iter(realfock.values())), np.ndarray):
+#     """bloch"""
+#     # print(npoints, bandpath_str, pbc, special_points[special_symm])
+#     frame = dataset.structures[ifr]
+#     pyscf_cell = dataset.cells[ifr]
+#     kmesh = dataset.kmesh[ifr]
+#     if bandpath_str is not None:
+#         kpath = frame.cell.bandpath(
+#             path=bandpath_str,
+#             npoints=npoints,
+#             pbc=frame.pbc,
+#             special_points=special_points[special_symm],
+#         )
+#     else:
+#         assert kpath is not None
+#     kpts = kpath.kpts  # units of icell
+#     kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
 
-        Hk = []
-        Sk = []
-        for k in kpts:
-            Hk.append(
-                inverse_fourier_transform(
-                    np.array(list(realfock.values())),
-                    np.array(list(realfock.keys())),
-                    k,
-                )
-            )
-            Sk.append(
-                inverse_fourier_transform(
-                    np.array(list(realover.values())),
-                    np.array(list(realover.keys())),
-                    k,
-                )
-            )
+#     xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
+#     special_xcoords = np.array(special_xcoords) / xcoords[-1]
+#     xcoords = np.array(xcoords) / xcoords[-1]
+#     Nk = np.prod(kmesh)
 
-    elif isinstance(next(iter(realfock.values())), torch.Tensor):
+#     if isinstance(next(iter(realfock.values())), np.ndarray):
 
-        Hk = []
-        Sk = []
-        for k in kpts:
-            Hk.append(
-                inverse_fourier_transform(
-                    torch.stack(list(realfock.values())).detach(),
-                    torch.from_numpy(np.array(list(realfock.keys()))),
-                    k,
-                )
-            )
-            Sk.append(
-                inverse_fourier_transform(
-                    torch.stack(list(realover.values())).detach(),
-                    torch.from_numpy(np.array(list(realover.keys()))),
-                    k,
-                )
-            )
+#         Hk = []
+#         Sk = []
+#         for k in kpts:
+#             Hk.append(
+#                 inverse_fourier_transform(
+#                     np.array(list(realfock.values())),
+#                     np.array(list(realfock.keys())),
+#                     k,
+#                 )
+#             )
+#             Sk.append(
+#                 inverse_fourier_transform(
+#                     np.array(list(realover.values())),
+#                     np.array(list(realover.keys())),
+#                     k,
+#                 )
+#             )
 
-    e_nk = []
-    for n in range(len(kpts)):
-        e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
+#     elif isinstance(next(iter(realfock.values())), torch.Tensor):
 
-    vbmax = -99
-    for en in e_nk:
-        vb_k = en[pyscf_cell.nelectron // 2 - 1]
-        if vb_k > vbmax:
-            vbmax = vb_k
-    e_nk = [en - vbmax for en in e_nk]
-    emin = y_min
-    emax = y_max
-    fs = plt.rcParams["figure.figsize"]
+#         Hk = []
+#         Sk = []
+#         for k in kpts:
+#             Hk.append(
+#                 inverse_fourier_transform(
+#                     torch.stack(list(realfock.values())).detach(),
+#                     torch.from_numpy(np.array(list(realfock.keys()))),
+#                     k,
+#                 )
+#             )
+#             Sk.append(
+#                 inverse_fourier_transform(
+#                     torch.stack(list(realover.values())).detach(),
+#                     torch.from_numpy(np.array(list(realover.keys()))),
+#                     k,
+#                 )
+#             )
 
-    if ax is None:
-        ax_was_none = True
-        fig, ax = plt.subplots(figsize=(fs[0] * 0.8, fs[1] * 1.2))
-    else:
-        ax_was_none = False
-    nbands = pyscf_cell.nao_nr()
+#     e_nk = []
+#     for n in range(len(kpts)):
+#         e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
 
-    for n in range(nbands):
-        ax.plot(
-            xcoords, [e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
-        )
+#     vbmax = -99
+#     for en in e_nk:
+#         vb_k = en[pyscf_cell.nelectron // 2 - 1]
+#         if vb_k > vbmax:
+#             vbmax = vb_k
+#     e_nk = [en - vbmax for en in e_nk]
+#     emin = y_min
+#     emax = y_max
+#     fs = plt.rcParams["figure.figsize"]
 
-    for p in special_xcoords:
-        ax.plot([p, p], [emin, emax], "k-")
-    # plt.plot([0, sp_points[-1]], [0, 0], 'k-')
-    # plt.xticks(x, labels)
-    ax.set_xticks(special_xcoords, labels)
-    ax.axis(xmin=0, xmax=special_xcoords[-1], ymin=emin, ymax=emax)
-    ax.set_xlabel(r"$\mathbf{k}$")
+#     if ax is None:
+#         ax_was_none = True
+#         fig, ax = plt.subplots(figsize=(fs[0] * 0.8, fs[1] * 1.2))
+#     else:
+#         ax_was_none = False
+#     nbands = pyscf_cell.nao_nr()
 
-    ax.set_ylim(y_min, y_max)
+#     for n in range(nbands):
+#         ax.plot(
+#             xcoords, [e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker
+#         )
 
-    if ax_was_none:
-        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
-    else:
-        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
+#     for p in special_xcoords:
+#         ax.plot([p, p], [emin, emax], "k-")
+#     # plt.plot([0, sp_points[-1]], [0, 0], 'k-')
+#     # plt.xticks(x, labels)
+#     ax.set_xticks(special_xcoords, labels)
+#     ax.axis(xmin=0, xmax=special_xcoords[-1], ymin=emin, ymax=emax)
+#     ax.set_xlabel(r"$\mathbf{k}$")
+
+#     ax.set_ylim(y_min, y_max)
+
+#     if ax_was_none:
+#         return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
+#     else:
+#         return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)]
 
 
 # def plot_bands_frame_(
@@ -398,148 +500,148 @@ def plot_bands_frame(
 #     else:
 #         return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
 
-def plot_bands_frame_(
-    frame,
-    realfock,
-    realover,
-    pyscf_cell,
-    kmesh,
-    R_vec_rel,
-    special_symm=None,
-    bandpath_str=None,
-    kpath=None,
-    npoints=30,
-    pbc=[True, True, False],
-    y_min=-2 * Hartree,
-    y_max=2 * Hartree,
-    ax=None,
-    color="blue",
-    ls = "-",
-    lw = 1,
-    marker=None,
-    factor = 1,
-    ):
-    """fourier"""
+# def plot_bands_frame_(
+#     frame,
+#     realfock,
+#     realover,
+#     pyscf_cell,
+#     kmesh,
+#     R_vec_rel,
+#     special_symm=None,
+#     bandpath_str=None,
+#     kpath=None,
+#     npoints=30,
+#     pbc=[True, True, False],
+#     y_min=-2 * Hartree,
+#     y_max=2 * Hartree,
+#     ax=None,
+#     color="blue",
+#     ls = "-",
+#     lw = 1,
+#     marker=None,
+#     factor = 1,
+#     ):
+#     """fourier"""
 
-    # R_vec_rel = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, return_rel=True, wrap_around=True)
-    # R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, wrap_around=True)
-
-
-    # mask_x = np.where(R_vec_rel[:, 0] == -kmesh[0] // 2)[0]
-    # R_vec_rel[:, 0][mask_x] = kmesh[0] // 2
-    # R_vec_abs[:, 0][mask_x] = -1 * R_vec_abs[:, 0][mask_x]
-
-    # mask_y = np.where(R_vec_rel[:, 1] == -kmesh[1] // 2)[0]
-    # R_vec_rel[:, 1][mask_y] = kmesh[1] // 2
-    # R_vec_abs[:, 1][mask_y] = -1 * R_vec_abs[:, 1][mask_y]
-
-    # print(npoints, bandpath_str, pbc, special_points[special_symm])
-    if bandpath_str is not None:
-        kpath = frame.cell.bandpath(
-            path=bandpath_str,
-            npoints=npoints,
-            pbc=pbc,
-            special_points=special_points[special_symm],
-        )
-    else:
-        assert kpath is not None
-    kpts = kpath.kpts  # units of icell
-    # kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
-
-    xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
-    special_xcoords = np.array(special_xcoords) / xcoords[-1]
-    xcoords = np.array(xcoords) / xcoords[-1]
-    Nk = np.prod(kmesh)
-
-    # phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
-    print(kpts.shape)
-    phase = np.exp(2j * np.pi * np.einsum('ta,ka->tk', R_vec_rel, kpts))
-    Hk = np.einsum("tk, tij ->kij", phase, realfock)
-    Sk = np.einsum("tk, tij ->kij", phase, realover)
-
-    e_nk = []
-    for n in range(len(kpts)):
-        e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
-
-    vbmax = -99
-    for en in e_nk:
-        vb_k = en[pyscf_cell.nelectron // 2 - 1]
-        if vb_k > vbmax:
-            vbmax = vb_k
-    print(vbmax)
-    e_nk = [en - vbmax for en in e_nk]
-    emin = y_min
-    emax = y_max
-    fs = plt.rcParams["figure.figsize"]
-
-    if ax is None:
-        ax_was_none = True
-        fig, ax = plt.subplots(figsize=(fs[0] * 0.8, fs[1] * 1.2))
-    else:
-        ax_was_none = False
-    nbands = pyscf_cell.nao_nr()
-
-    bandplot = []
-    for n in range(nbands):
-        pl, = ax.plot(
-            xcoords, [factor * e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker, lw = lw,
-        )
-        bandplot.append(pl)
-
-    for p in special_xcoords:
-        ax.plot([p, p], [emin, emax], "k-")
-    # plt.plot([0, sp_points[-1]], [0, 0], 'k-')
-    # plt.xticks(x, labels)
-    ax.set_xticks(special_xcoords, labels)
-    ax.axis(xmin=0, xmax=special_xcoords[-1], ymin=emin, ymax=emax)
-    ax.set_xlabel(r"$\mathbf{k}$")
-
-    ax.set_ylim(y_min, y_max)
-
-    if ax_was_none:
-        return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
-    else:
-        return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
+#     # R_vec_rel = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, return_rel=True, wrap_around=True)
+#     # R_vec_abs = translation_vectors_for_kmesh(pyscf_cell, kmesh, R_vec_rel=R_vec_rel_in, wrap_around=True)
 
 
-def plot_bands(
-    frames,
-    realfock,
-    realover,
-    pyscf_cell,
-    kmesh: List,
-    special_symm: Optional[List] = "hexagonal",
-    bandpath_str="GMKG",
-    npoints=30,
-    pbc=[True, True, False],
-    y_min=-2 * Hartree,
-    y_max=2 * Hartree,
-):
-    # makes sense to plot multiple bamds with the same bandpath
-    if isinstance(frames, List):
-        if not isinstance(kmesh[0], List):
-            kmesh = [kmesh for _ in range(len(frames))]
-        assert len(realover) == len(realfock) == len(frames) == len(pyscf_cell)
-    axes = []
-    # fig, ax_ = plt.subplots()
-    for ifr, frame in enumerate(frames):
-        fig, ax = plot_bands_frame(
-            frame,
-            realfock[ifr],
-            realover[ifr],
-            pyscf_cell[ifr],
-            kmesh[ifr],
-            special_symm=special_symm,
-            bandpath_str=bandpath_str,
-            npoints=npoints,
-            pbc=pbc,
-            y_min=y_min,
-            y_max=y_max,
-        )
-        axes.append(ax)
-        # ax_.plot(ax.get_xticks(), ax.get_yticks(), "k-")
+#     # mask_x = np.where(R_vec_rel[:, 0] == -kmesh[0] // 2)[0]
+#     # R_vec_rel[:, 0][mask_x] = kmesh[0] // 2
+#     # R_vec_abs[:, 0][mask_x] = -1 * R_vec_abs[:, 0][mask_x]
 
-    return axes
+#     # mask_y = np.where(R_vec_rel[:, 1] == -kmesh[1] // 2)[0]
+#     # R_vec_rel[:, 1][mask_y] = kmesh[1] // 2
+#     # R_vec_abs[:, 1][mask_y] = -1 * R_vec_abs[:, 1][mask_y]
+
+#     # print(npoints, bandpath_str, pbc, special_points[special_symm])
+#     if bandpath_str is not None:
+#         kpath = frame.cell.bandpath(
+#             path=bandpath_str,
+#             npoints=npoints,
+#             pbc=pbc,
+#             special_points=special_points[special_symm],
+#         )
+#     else:
+#         assert kpath is not None
+#     kpts = kpath.kpts  # units of icell
+#     # kpts_pyscf = pyscf_cell.get_abs_kpts(kpts)
+
+#     xcoords, special_xcoords, labels = kpath.get_linear_kpoint_axis()
+#     special_xcoords = np.array(special_xcoords) / xcoords[-1]
+#     xcoords = np.array(xcoords) / xcoords[-1]
+#     Nk = np.prod(kmesh)
+
+#     # phase = np.exp(1j * np.dot(R_vec_abs, kpts_pyscf.T))
+#     print(kpts.shape)
+#     phase = np.exp(2j * np.pi * np.einsum('ta,ka->tk', R_vec_rel, kpts))
+#     Hk = np.einsum("tk, tij ->kij", phase, realfock)
+#     Sk = np.einsum("tk, tij ->kij", phase, realover)
+
+#     e_nk = []
+#     for n in range(len(kpts)):
+#         e_nk.append(scipy.linalg.eigvalsh(Hk[n], Sk[n]))
+
+#     vbmax = -99
+#     for en in e_nk:
+#         vb_k = en[pyscf_cell.nelectron // 2 - 1]
+#         if vb_k > vbmax:
+#             vbmax = vb_k
+#     print(vbmax)
+#     e_nk = [en - vbmax for en in e_nk]
+#     emin = y_min
+#     emax = y_max
+#     fs = plt.rcParams["figure.figsize"]
+
+#     if ax is None:
+#         ax_was_none = True
+#         fig, ax = plt.subplots(figsize=(fs[0] * 0.8, fs[1] * 1.2))
+#     else:
+#         ax_was_none = False
+#     nbands = pyscf_cell.nao_nr()
+
+#     bandplot = []
+#     for n in range(nbands):
+#         pl, = ax.plot(
+#             xcoords, [factor * e[n] * Hartree for e in e_nk], color=color, ls=ls, marker=marker, lw = lw,
+#         )
+#         bandplot.append(pl)
+
+#     for p in special_xcoords:
+#         ax.plot([p, p], [emin, emax], "k-")
+#     # plt.plot([0, sp_points[-1]], [0, 0], 'k-')
+#     # plt.xticks(x, labels)
+#     ax.set_xticks(special_xcoords, labels)
+#     ax.axis(xmin=0, xmax=special_xcoords[-1], ymin=emin, ymax=emax)
+#     ax.set_xlabel(r"$\mathbf{k}$")
+
+#     ax.set_ylim(y_min, y_max)
+
+#     if ax_was_none:
+#         return fig, ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
+#     else:
+#         return ax, [[e[n] * Hartree for e in e_nk] for n in range(nbands)], bandplot
+
+
+# def plot_bands(
+#     frames,
+#     realfock,
+#     realover,
+#     pyscf_cell,
+#     kmesh: List,
+#     special_symm: Optional[List] = "hexagonal",
+#     bandpath_str="GMKG",
+#     npoints=30,
+#     pbc=[True, True, False],
+#     y_min=-2 * Hartree,
+#     y_max=2 * Hartree,
+# ):
+#     # makes sense to plot multiple bamds with the same bandpath
+#     if isinstance(frames, List):
+#         if not isinstance(kmesh[0], List):
+#             kmesh = [kmesh for _ in range(len(frames))]
+#         assert len(realover) == len(realfock) == len(frames) == len(pyscf_cell)
+#     axes = []
+#     # fig, ax_ = plt.subplots()
+#     for ifr, frame in enumerate(frames):
+#         fig, ax = plot_bands_frame(
+#             frame,
+#             realfock[ifr],
+#             realover[ifr],
+#             pyscf_cell[ifr],
+#             kmesh[ifr],
+#             special_symm=special_symm,
+#             bandpath_str=bandpath_str,
+#             npoints=npoints,
+#             pbc=pbc,
+#             y_min=y_min,
+#             y_max=y_max,
+#         )
+#         axes.append(ax)
+#         # ax_.plot(ax.get_xticks(), ax.get_yticks(), "k-")
+
+#     return axes
 
 
 ## Trying to use Hanna's code - Not working as expected

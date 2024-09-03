@@ -75,7 +75,7 @@ class MLDataset:
     ):
         self._qmdata = qmdata
         self.device = device or self.qmdata.device
-        self._cutoff = cutoff
+        self._cutoff = cutoff if cutoff is not None else hypers_pair['cutoff']
         self.rng = None
         self.kwargs = kwargs
         self._model_type = model_type

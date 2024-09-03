@@ -164,7 +164,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         optimizer = None,
         learning_rate: float = 1e-3,
         lr_scheduler_patience: int=10,
-        lr_scheduler_factor: float=0.1,
+        lr_scheduler_factor: float=0.8,
         lr_scheduler_min_lr: float=1e-6,
         loss_fn: BaseLoss = MSELoss(),
         is_indirect: bool = False,
@@ -241,11 +241,15 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             targets = batch.fock_blocks
             # predictions = self.forward(features, targets)
             predictions = self.forward(features, self.metadata)
-            target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
-            overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
-            derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps = overlaps, target_properties = target_properties)
 
-            loss = self.compute_weighted_loss(derived_predictions, batch)
+            if self.is_indirect:
+                target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+                overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+                derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps = overlaps, target_properties = target_properties)
+
+                loss = self.compute_weighted_loss(derived_predictions, batch)
+            else:
+                loss = self.loss_fn.compute(predictions, targets)
 
             # Perform backward pass
             loss.backward()
@@ -260,38 +264,46 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             loss = closure()
             optimizer.step()
 
-        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log('train_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=len(batch.sample_id))
         return loss
     
     def on_train_epoch_end(self):
         """
         Called at the end of the training epoch to store the losses for adaptive weighting.
         """
-        # Aggregate losses across all batches in the epoch
-        if self.current_epoch_losses:
-            epoch_losses = torch.stack(self.current_epoch_losses).sum(dim=0)
+        if self.is_indirect:
+            # Aggregate losses across all batches in the epoch
+            if self.current_epoch_losses:
+                epoch_losses = torch.stack(self.current_epoch_losses).sum(dim=0)
 
-        # Update the current weights using the losses from the previous epoch
-        if self.adaptive_loss_weights:
-            self.current_weights = adaptive_weighting_scheme(epoch_losses, self.previous_epoch_losses)
+            # Update the current weights using the losses from the previous epoch
+            if self.adaptive_loss_weights:
+                self.current_weights = adaptive_weighting_scheme(epoch_losses, self.previous_epoch_losses)
 
-        self.previous_epoch_losses = epoch_losses.clone()
+            self.previous_epoch_losses = epoch_losses.clone()
 
     def validation_step(self, batch, batch_idx):
         features = batch.features
         targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
-        target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
-        overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
-        derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
 
-        derived_metrics = {}
+        if self.is_indirect:
+            target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+            overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+            derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
 
-        loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
+            derived_metrics = {}
 
-        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        for metric_name, metric_value in derived_metrics.items():
-            self.log(metric_name, metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+            loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
+        else:
+            loss = self.loss_fn.compute(predictions, targets)
+
+
+        self.log('val_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=len(batch.sample_id))
+
+        if self.is_indirect:
+            for metric_name, metric_value in derived_metrics.items():
+                self.log(metric_name, metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=len(batch.sample_id))
 
         return loss
 
@@ -299,15 +311,21 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         features = batch.features
         targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
-        target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
-        overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
-        derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
-       
-        loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
 
-        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        for metric_name, metric_value in derived_metrics.items():
-            self.log(metric_name, metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        if self.is_indirect:
+            target_properties = [k for k in self.derived_pred_kwargs if self.derived_pred_kwargs[k]]
+            overlaps = batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
+            derived_predictions = self.compute_derived_predictions(predictions, batch_sample_id=batch.sample_id, overlaps=overlaps, target_properties=target_properties)
+        
+            loss, derived_metrics = self.compute_weighted_loss(derived_predictions, batch, compute_metrics = True)
+        else:
+            loss = self.loss_fn.compute(predictions, targets)
+
+        self.log('test_loss', loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=len(batch.sample_id))
+
+        if self.is_indirect:
+            for metric_name, metric_value in derived_metrics.items():
+                self.log(metric_name, metric_value, on_step=False, on_epoch=True, prog_bar=True, logger=True, batch_size=len(batch.sample_id))
 
         return loss
 
