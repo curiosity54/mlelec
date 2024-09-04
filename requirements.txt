@@ -1,8 +1,16 @@
-metatensor=0.1.0 #0.2.0dev11
-rascaline=0.1.0.dev491 
 torch 
 numpy 
-scipy 
-
-#pyscf=2.3.0 
-#pyscfad=git+https://github.com/fishjojo/pyscfad.git@ml#egg=pyscfad 
+scipy
+jupyter
+ase==3.22.1
+seekpath
+metatensor
+metatensor-core
+metatensor-learn
+metatensor-operations
+metatensor-torch
+--extra-index-url https://download.pytorch.org/whl/cpu 
+git+https://github.com/luthaf/rascaline#subdirectory=python/rascaline-torch
+pyscf==2.3.0 
+git+https://github.com/fishjojo/pyscfad.git@ml#egg=pyscfad
+lightning

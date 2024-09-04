@@ -12,7 +12,8 @@ class LoggingCallback(pl.Callback):
         self.log_every_n_epochs = log_every_n_epochs
 
     def on_fit_start(self, trainer, pl_module):
-        # Ensure log_every_n_steps and check_val_every_n_epoch are taken from the Trainer config
+        # Ensure log_every_n_steps and check_val_every_n_epoch are taken from the
+        # Trainer config
         self.log_every_n_steps = trainer.log_every_n_steps
         self.check_val_every_n_epoch = trainer.check_val_every_n_epoch
 
@@ -44,9 +45,10 @@ class LoggingCallback(pl.Callback):
             train_loss = trainer.callback_metrics.get("train_loss")
             if train_loss:
                 self.train_loss = train_loss.item()
-            print(f"Epoch {epoch}, Train Loss: {self.train_loss}")
+            print(f"Epoch {epoch:>10d} Train Loss: {self.train_loss:15.10f}")
 
-        # If both train and val should be logged in the same epoch, ensure it is printed only once
+        # If both train and val should be logged in the same epoch, ensure it is
+        # printed only once
         elif log_val:
             # Log validation, and train loss if available
             val_loss = self.val_loss
@@ -54,15 +56,27 @@ class LoggingCallback(pl.Callback):
             if val_loss:
                 if train_loss:
                     self.train_loss = train_loss.item()
-                print(
-                    f"Epoch {epoch}, Train Loss: {self.train_loss}, Validation Loss: {val_loss}, "
-                    f"RMSE Eigenvalues: {self.rmse_eigenvalues}, RMSE ARD: {self.rmse_ard}, , RMSE Dipoles: {self.rmse_dipoles}"
-                )
+                    log_string = [
+                        f"Epoch {epoch:>10d}",
+                        f"Train Loss: {self.train_loss:15.10f}",
+                        f"Val Loss: {self.val_loss:15.10f}",
+                    ]
+                    for name, metrics in zip(
+                        ["Eigenvalues", "ARD", "Dipoles"],
+                        [self.rmse_eigenvalues, self.rmse_ard, self.rmse_dipoles],
+                    ):
+                        if metrics is None:
+                            continue
+                        print(name)
+                        log_string.append(f"RMSE {name}: {metrics:15.10f}")
+                    log_string = " ".join(log_string)
+                    print(log_string)
+
                 self.train_loss = None  # Reset train_loss after printing
         elif log_train:
             # Log train loss
             train_loss = trainer.callback_metrics.get("train_loss")
             if train_loss:
                 self.train_loss = train_loss.item()
-            print(f"Epoch {epoch}, Train Loss: {self.train_loss}")
+            print(f"Epoch {epoch:>10d} Train Loss: {self.train_loss:15.10f}")
             self.train_loss = None  # Reset train_loss after printing

@@ -91,7 +91,7 @@ class QMDataset:
         orbs_name: str = "sto-3g",
         orbs: List = None,
         dimension: int = 3,
-        frame_slice: Optional[Union[slice, str]] = None,
+        frame_slice: Optional[Union[slice, str]] = ":",
     ) -> "QMDataset":
         """
         Create a QMDataset instance by loading frames and matrices from files.
