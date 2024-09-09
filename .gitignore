@@ -71,3 +71,8 @@ TRAIN-Copy1.py
 train_new_model.py
 benzene-deformations.png
 benzene_test.py
+*yaml
+*csv
+epoch*
+events*
+notebooks/features

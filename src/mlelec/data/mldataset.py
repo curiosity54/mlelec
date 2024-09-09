@@ -644,9 +644,10 @@ class MLDataset():
                 )
             )
 
-        self.model_metadata = mts.sort(TensorMap(Labels(key_names, torch.tensor(keys, device = qmdata.device)), blocks))
+        self.model_metadata = TensorMap(Labels(key_names, torch.tensor(keys, device = qmdata.device)), blocks)
         if self.orbitals_to_properties:
             self.model_metadata = self.model_metadata.keys_to_properties(['n_i', 'l_i', 'n_j', 'l_j'])
+        self.model_metadata = mts.sort(self.model_metadata)
 
 
     def group_and_join(self,
