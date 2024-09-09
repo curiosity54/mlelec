@@ -13,6 +13,9 @@ from mlelec.data.derived_properties import (
     compute_dipoles,
     compute_eigenvalues,
 )
+import metatensor.torch as mts
+
+from mlelec.data.mldataset import MLDataset
 from mlelec.models.equivariant_nonlinear_model import EquivariantNonlinearModel
 from mlelec.utils.pbc_utils import blocks_to_matrix
 
@@ -26,7 +29,8 @@ class BaseLoss(ABC):
 
 def compute_difference(tensor1, tensor2):
     """
-    Compute the difference between two tensors, masking the larger one to match the size of the smaller one.
+    Compute the difference between two tensors, masking the larger one to match the
+    size of the smaller one.
 
     Args:
         tensor1 (torch.Tensor): The first tensor (smaller or same size).
@@ -49,8 +53,10 @@ def adaptive_weighting_scheme(loss_values, previous_epoch_losses):
     Function to compute adaptive weights based on the current loss values.
 
     Args:
-        loss_values (torch.Tensor): A tensor containing the different loss contributions.
-        previous_epoch_losses (torch.Tensor): A tensor containing the previous epoch's loss contributions.
+        loss_values (torch.Tensor): A tensor containing the different loss
+        contributions.
+        previous_epoch_losses (torch.Tensor): A tensor containing the previous epoch's
+        loss contributions.
 
     Returns:
         torch.Tensor: A tensor containing the adaptive weights, summing to 1.
@@ -203,7 +209,8 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         self.lr_scheduler_min_lr = lr_scheduler_min_lr
         self.loss_fn = loss_fn
 
-        # Buffers to accumulate losses for the current and previous epochs for adaptive loss weighting
+        # Buffers to accumulate losses for the current and previous epochs for adaptive
+        # loss weighting
         self.adaptive_loss_weights = adaptive_loss_weights
         self.previous_epoch_losses = None
         self.current_epoch_losses = []
@@ -272,8 +279,10 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 
             features = batch.features
             targets = batch.fock_blocks
-            # predictions = self.forward(features, targets)
             predictions = self.forward(features, self.metadata)
+            # print(features[0].samples)
+            # print(predictions[0].samples)
+            # print(batch.sample_id)
 
             if self.is_indirect:
                 target_properties = [
@@ -321,7 +330,8 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 
     def on_train_epoch_end(self):
         """
-        Called at the end of the training epoch to store the losses for adaptive weighting.
+        Called at the end of the training epoch to store the losses for adaptive
+        weighting.
         """
         if self.is_indirect:
             # Aggregate losses across all batches in the epoch
@@ -340,6 +350,9 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         features = batch.features
         targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
+        # print(features[0].samples)
+        # print(predictions[0].samples)
+        # print(batch.sample_id)
 
         if self.is_indirect:
             target_properties = [
@@ -580,14 +593,11 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
 ####
 # Maybe move to separate file
 
-import lightning as pl
-import metatensor.torch as mts
-
-from mlelec.data.mldataset import MLDataset
-
 
 class MLDatasetDataModule(pl.LightningDataModule):
-    def __init__(self, mldata: MLDataset, batch_size=32, shuffle=False, num_workers=0):
+    def __init__(
+        self, mldata: MLDataset, batch_size=32, shuffle=False, num_workers=None
+    ):
         super().__init__()
         self.collate_fn = mldata.group_and_join
         self.train_dataset = mldata.train_dataset
@@ -603,6 +613,7 @@ class MLDatasetDataModule(pl.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=self.shuffle,
             collate_fn=self.collate_fn,
+            num_workers=self.num_workers,
         )
 
     def val_dataloader(self):
@@ -610,6 +621,7 @@ class MLDatasetDataModule(pl.LightningDataModule):
             self.val_dataset,
             batch_size=self.batch_size,
             collate_fn=self.collate_fn,
+            shuffle=self.shuffle,
             num_workers=self.num_workers,
         )
 
@@ -618,5 +630,6 @@ class MLDatasetDataModule(pl.LightningDataModule):
             self.test_dataset,
             batch_size=self.batch_size,
             collate_fn=self.collate_fn,
+            shuffle=self.shuffle,
             num_workers=self.num_workers,
         )

@@ -708,8 +708,8 @@ class MLDataset:
 
     def _create_indexed_dataset(self, split_items, indices, grouped_labels):
         _dict = {k: [split_items[k][A] for A in indices] for k in split_items}
-        _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in indices]
-        return IndexedDataset(sample_id=_group_lbl, **_dict)
+        # _group_lbl = [grouped_labels[A].values.tolist()[0][0] for A in indices]
+        return IndexedDataset(sample_id=indices.tolist(), **_dict)
 
     def _compute_model_metadata(self):
         basis = self.model_basis
