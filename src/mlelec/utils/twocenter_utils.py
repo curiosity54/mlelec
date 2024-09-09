@@ -742,6 +742,7 @@ def _to_coupled_basis_OLD(
 
     return block_builder.build()
 
+
 def _to_coupled_basis(
     blocks: Union[torch.tensor, TensorMap],
     orbitals: Optional[dict] = None,
@@ -749,6 +750,7 @@ def _to_coupled_basis(
     device: str = "cpu",
     skip_symmetry: bool = False,
     translations: bool = None,
+    high_rank= False # means rank_three  for now TODO: Support a general high rank?
 ):
     if torch.is_tensor(blocks):
         print("Converting matrix to blocks before coupling")
@@ -757,27 +759,33 @@ def _to_coupled_basis(
     if cg is None:
         lmax = max(blocks.keys["l_i"] + blocks.keys["l_j"])
         cg = ClebschGordanReal(lmax, device=device)
+   
+    key_names = ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"]
+    if high_rank:
+        key_names = ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "l_3", "K", "L"]
+    property_names = ["dummy"]
+
     if translations is None:
         block_builder = TensorBuilder(
-            ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+            key_names,
             ["structure", "center", "neighbor"],
             [["M"]],
-            ["dummy"],
+            property_names,
         )
     else:
         if translations:
             block_builder = TensorBuilder(
-                ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
+                key_names,
                 ["structure", "center", "neighbor", "cell_shift_a", "cell_shift_b", "cell_shift_c"],
                 [["M"]],
-                ["dummy"],
+                property_names,
             )
         else:
             block_builder = TensorBuilder(
                 ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
                 ["structure", "center", "neighbor", "kpoint"],
                 [["M"]],
-                ["dummy"],
+                property_names,
             )
         
         
@@ -789,37 +797,64 @@ def _to_coupled_basis(
         aj = idx["species_j"]
         nj = idx["n_j"]
         lj = idx["l_j"]
+        if high_rank:
+            l3 = idx["l_3"]
+            assert l3==1, "Only tensors of type position supported for now"
+        
 
         # Moves the components at the end as cg.couple assumes so
-        decoupled = torch.moveaxis(block.values, -1, -2).reshape(
+        if high_rank:
+            decoupled = torch.moveaxis(block.values, 1, 4).reshape(
+            (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1, 2 * l3 + 1))
+            # decoupled = block.values.reshapoperties), 2 * li + 1, 2 * lj + 1, 2 * l3 + 1))
+            assert decoupled.shape[-1] == 3, "Only tensors of type position supported for now"
+            coupled = cg.couple(decoupled, iterate = 1)
+            
+            for coupledkey in coupled:
+                k = coupledkey[1]
+                for L in coupled[coupledkey]:
+                    block_idx = tuple(idx) + (k, L)
+                    # skip blocks that are zero because of symmetry - TBD 
+                    # if ai == aj and ni == nj and li == lj:
+                    #     parity = (-1) ** (li + lj + L)
+                    #     if ((parity == -1 and block_type in (0, 1)) or (parity == 1 and block_type == -1)) and not skip_symmetry:
+                    #         continue
+                    new_block = block_builder.add_block(
+                        key=block_idx,
+                        properties=torch.tensor([[0]], dtype=torch.int32),
+                        components=[_components_idx(L).reshape(-1, 1)],
+                    )
+                    new_block.add_samples(
+                            labels = block.samples.values.reshape(block.samples.values.shape[0], -1),
+                            data = torch.moveaxis(coupled[coupledkey][L], -1, -2),
+                        )
+
+        else:
+            decoupled = torch.moveaxis(block.values, -1, -2).reshape(
             (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1)
         )
+            coupled = cg.couple(decoupled)[(li, lj)]
+            # selects the (only) key in the coupled dictionary (l1 and l2
+            # that contribute to the coupled terms L, with L going from
+            # |l1 - l2| up to |l1 + l2|
+            for L in coupled:
+                block_idx = tuple(idx) + (L,)
+                # skip blocks that are zero because of symmetry
+                if ai == aj and ni == nj and li == lj:
+                    parity = (-1) ** (li + lj + L)
+                    if ((parity == -1 and block_type in (0, 1)) or (parity == 1 and block_type == -1)) and not skip_symmetry:
+                        continue
 
-        # selects the (only) key in the coupled dictionary (l1 and l2
-        # that contribute to the coupled terms L, with L going from
-        # |l1 - l2| up to |l1 + l2|
-        coupled = cg.couple(decoupled)[(li, lj)]
-        # if ai == aj == 1 and block_type == -1:
-        #     print(idx, coupled)  # decoupled)
+                new_block = block_builder.add_block(
+                    key=block_idx,
+                    properties=torch.tensor([[0]], dtype=torch.int32),
+                    components=[_components_idx(L).reshape(-1, 1)],
+                )
 
-        for L in coupled:
-            block_idx = tuple(idx) + (L,)
-            # skip blocks that are zero because of symmetry
-            if ai == aj and ni == nj and li == lj:
-                parity = (-1) ** (li + lj + L)
-                if ((parity == -1 and block_type in (0, 1)) or (parity == 1 and block_type == -1)) and not skip_symmetry:
-                    continue
-
-            new_block = block_builder.add_block(
-                key=block_idx,
-                properties=torch.tensor([[0]], dtype=torch.int32),
-                components=[_components_idx(L).reshape(-1, 1)],
-            )
-
-            new_block.add_samples(
-                labels = block.samples.values.reshape(block.samples.values.shape[0], -1),
-                data = torch.moveaxis(coupled[L], -1, -2),
-            )
+                new_block.add_samples(
+                    labels = block.samples.values.reshape(block.samples.values.shape[0], -1),
+                    data = torch.moveaxis(coupled[L], -1, -2),
+                )
 
     return block_builder.build()
 
