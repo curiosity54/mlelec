@@ -1210,7 +1210,7 @@ def blocks_to_matrix_working(blocks, dataset, device=None, cg = None, all_pairs 
 
     return reconstructed_matrices
 
-def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, check_hermiticity = True):
+def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False, sort_orbs = True, detach = False, check_hermiticity = True, high_rank = False):
 
     if device is None:
         device = dataset.device
@@ -1250,12 +1250,16 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
     for A in range(len(dataset.structures)):
         norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
         reconstructed_matrices.append({})
-
+    
     # loops over block types
     for key, block in blocks.items():
         block_type = key["block_type"]
         ai, ni, li = key["species_i"], key["n_i"], key["l_i"]
         aj, nj, lj = key["species_j"], key["n_j"], key["l_j"]
+        if "l_3" in key.names: 
+            warnings.warn("l_3 detected, setting high_rank to True")    
+            high_rank = True
+        matshape = (norbs, norbs) if not high_rank else (norbs, norbs, 2*key["l_3"]+1)
         
         #----sorting ni,li,nj,lj---
         if sort_orbs:
@@ -1329,8 +1333,8 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
                 norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
-                reconstructed_matrices[A][T] = torch.zeros(norbs, norbs, device = device)
-                reconstructed_matrices[A][mT] = torch.zeros(norbs, norbs, device = device)
+                reconstructed_matrices[A][T] = torch.zeros(matshape, device = device)
+                reconstructed_matrices[A][mT] = torch.zeros(matshape, device = device)
 
             matrix_T  = reconstructed_matrices[A][T]
             matrix_mT = reconstructed_matrices[A][mT]
@@ -1340,7 +1344,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
             # where does orbital (nj, lj) end (or how large is it)
             psi_end = shapes[(ni, li, nj, lj)][1]  
-
+            print(li, lj)
             iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
                               slice(j_start + psioffset , j_start + psioffset + psi_end)
             ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
@@ -1368,9 +1372,9 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                 #         ff = 1
                 #     else:
                 #         ff = 0.5
-
+                print(bv.shape )
                 matrix_T[iphi_jpsi_slice] += bv*bt0_factor_p
-                matrix_mT[jpsi_iphi_slice] += bv.T*bt0_factor_m
+                matrix_mT[jpsi_iphi_slice] += bv.transpose(0,1)*bt0_factor_m
                 
             elif block_type == 2:
                 
@@ -1379,7 +1383,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                 #     ff=1
                 
                 matrix_T[iphi_jpsi_slice] += bv*bt2_factor_p
-                matrix_mT[jpsi_iphi_slice] += bv.T*bt2_factor_m
+                matrix_mT[jpsi_iphi_slice] += bv.transpose(0,1)*bt2_factor_m
                 
             elif abs(block_type) == 1:
                 # Eq (1) <i \phi| H(T)|j \psi> = # block_(+1)ijT + block_(-1)ijT 
@@ -1394,9 +1398,9 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                     # first half of Eq (2)
                     matrix_mT[jphi_ipsi_slice] += bv
                     # first half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += bv.T
+                    matrix_mT[jpsi_iphi_slice] += bv.transpose(0,1)
                     # first half of Eq (4)
-                    matrix_T[ ipsi_jphi_slice] += bv.T
+                    matrix_T[ ipsi_jphi_slice] += bv.transpose(0,1)
         
                 else:
                     # second half of Eq (1)
@@ -1404,9 +1408,9 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                     # second half of Eq (2)
                     matrix_mT[jphi_ipsi_slice] -= bv
                     # second half of Eq (3)
-                    matrix_mT[jpsi_iphi_slice] += bv.T
+                    matrix_mT[jpsi_iphi_slice] += bv.transpose(0,1)
                     # second half of Eq (4)
-                    matrix_T[ipsi_jphi_slice ] -= bv.T
+                    matrix_T[ipsi_jphi_slice ] -= bv.transpose(0,1)
          
     if check_hermiticity:
         for A, matrix in enumerate(reconstructed_matrices):
@@ -1414,7 +1418,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             for T in Ts:
                 mT = tuple(-t for t in T)
             
-                assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].T, torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].T).item()
+                assert torch.all(torch.isclose(matrix[T] - reconstructed_matrices[A][mT].transpose(0,1), torch.zeros_like(matrix[T]))), torch.norm(matrix[T] - reconstructed_matrices[A][mT].transpose(0,1)).item()
 
     return reconstructed_matrices
 
