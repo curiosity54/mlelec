@@ -804,10 +804,11 @@ def _to_coupled_basis(
 
         # Moves the components at the end as cg.couple assumes so
         if high_rank:
-            decoupled = torch.moveaxis(block.values, 1, 4).reshape(
-            (len(block.samples), len(block.properties), 2 * li + 1, 2 * lj + 1, 2 * l3 + 1))
+            decoupled = torch.moveaxis(block.values, (4,3), (1,2)).reshape(
+            (len(block.samples), len(block.properties), 2 * l3 + 1, 2 * lj + 1, 2 * li + 1))
+            # reshapes into nsamples, nprops, 2*l3+1, 2*lj+1, 2*li+1
             # decoupled = block.values.reshapoperties), 2 * li + 1, 2 * lj + 1, 2 * l3 + 1))
-            assert decoupled.shape[-1] == 3, "Only tensors of type position supported for now"
+            assert decoupled.shape[2] == 3, "Only tensors of type position supported for now"
             coupled = cg.couple(decoupled, iterate = 1)
             
             for coupledkey in coupled:
@@ -858,105 +859,20 @@ def _to_coupled_basis(
 
     return block_builder.build()
 
-
-def _to_uncoupled_basis_old(
-    blocks: TensorMap,
-    # orbitals: Optional[dict] = None,
-    cg: Optional[ClebschGordanReal] = None,
-    device: str = "cpu",
-    translations: bool = False,
-):
-    if "l_i" not in blocks.keys.names:
-        from mlelec.utils.pbc_utils import move_orbitals_to_keys
-        blocks = move_orbitals_to_keys(blocks)
-    if cg is None:
-        lmax = max(blocks.keys["L"])
-        cg = ClebschGordanReal(lmax, device=device)
-    if 'inversion_sigma' in blocks.keys.names:
-        has_sigma = True
-        key_names = blocks.keys.names[:-2]
-    else: 
-        inv_sigma = None
-        has_sigma = False
-        key_names = blocks.keys.names[:-1]
-
-
-    block_builder = TensorBuilder(
-        # last key name is L, we remove it here
-        key_names,
-        # sample_names from the blocks
-        # this is because, e.g. for multiple molecules, we
-        # may have an additional sample name indexing the
-        # molecule id
-        blocks.sample_names,
-        [["m_i"], ["m_j"]],
-        ["dummy"],
-        device = device
-    )
-    for idx, block in blocks.items():
-
-        if block.values.numel() == 0:
-            # Empty block
-            continue
-
-        block_type = idx["block_type"]
-        ai = idx["species_i"]
-        ni = idx["n_i"]
-        li = idx["l_i"]
-        aj = idx["species_j"]
-        nj = idx["n_j"]
-        lj = idx["l_j"]
-        L = idx["L"]
-        if has_sigma:
-            inv_sigma = idx["inversion_sigma"] 
-        block_idx = (block_type, ai, ni, li, aj, nj, lj)
-            
-        if translations:
-            
-            block_idx = (block_type, ai, ni, li, aj, nj, lj, idx["cell_shift_a"], idx["cell_shift_b"], idx["cell_shift_c"])
-        
-        
-        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
-        # if has_sigma:
-        #     block_idx = blocks.keys.position(block_idx + (L,))
-        # if block_idx in block_builder.blocks:
-            continue
-        coupled = {}
-        for L in range(np.abs(li - lj), li + lj + 1):
-            if has_sigma:
-                bidx = blocks.keys.position(block_idx + (L, inv_sigma))
-                
-            else: 
-                bidx = blocks.keys.position(block_idx + (L,))
-            # if has_sigma: 
-            #     bidx = bidx + (inv_sigma,)
-            if bidx is not None:
-                coupled[L] = torch.moveaxis(blocks.block(bidx).values, -1, -2)
-        # if ai == aj== 6 and ni == nj == 2 and li == lj == 1 and block_type == 0:
-        #     print(idx, coupled)
-        decoupled = cg.decouple({(li, lj): coupled})
-        new_block = block_builder.add_block(
-            key=block_idx,
-            properties=torch.tensor([[0]], dtype = torch.int32),
-            components=[_components_idx(li), _components_idx(lj)],
-        )
-        new_block.add_samples(
-            labels = block.samples.values.reshape(
-                block.samples.values.shape[0], -1
-            ),
-            data=torch.moveaxis(decoupled, 1, -1),
-        )
-    return block_builder.build()
-
 def _to_uncoupled_basis(
     blocks: TensorMap,
     cg: Optional[ClebschGordanReal] = None,
     device: str = "cpu",
     translations: bool = False,
+    high_rank= False # means rank_three  for now TODO: Support a general high rank?
 ):
+    # ----------li, lj in properties------
     if cg is None:
         lmax = max(blocks.keys["L"])
         cg = ClebschGordanReal(lmax, device = device)
+    key_names = ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"]
+    if high_rank:
+        key_names = key_names +["l_3"]
 
     uncoupled_blocks = {}
     samples = {}
@@ -1006,6 +922,138 @@ def _to_uncoupled_basis(
         )
     return TensorMap(Labels(['block_type', 'species_i', 'n_i', 'l_i', 'species_j', 'n_j', 'l_j'], torch.tensor(new_keys)), new_blocks)
 
+def _to_uncoupled_basis_old(
+    blocks: TensorMap,
+    # orbitals: Optional[dict] = None,
+    cg: Optional[ClebschGordanReal] = None,
+    device: str = "cpu",
+    translations: bool = False,
+    high_rank= False # means rank_three  for now TODO: Support a general high rank?
+):
+    # ------li, lj in keys------
+    if "l_i" not in blocks.keys.names:
+        from mlelec.utils.pbc_utils import move_orbitals_to_keys
+        blocks = move_orbitals_to_keys(blocks)
+    if cg is None:
+        lmax = max(blocks.keys["L"])
+        cg = ClebschGordanReal(lmax, device=device)
+    if 'inversion_sigma' in blocks.keys.names:
+        has_sigma = True
+        key_names = blocks.keys.names[:-2]
+        if high_rank:
+            raise NotImplementedError("High rank not supported for inversion symmetry")
+    else: 
+        inv_sigma = None
+        has_sigma = False
+        if not high_rank:    
+            key_names = blocks.keys.names[:-1]
+        else:
+            key_names = blocks.keys.names[:-2]
+    component_names = [["m_i"], ["m_j"]]
+    if high_rank:
+        component_names += [ "m_3"]
+    
+
+    block_builder = TensorBuilder(
+        # last key name is L, we remove it here
+        key_names,
+        # sample_names from the blocks
+        # this is because, e.g. for multiple molecules, we
+        # may have an additional sample name indexing the
+        # molecule id
+        blocks.sample_names,
+        component_names,
+        ["dummy"],
+        device = device
+    )
+    for idx, block in blocks.items():
+
+        if block.values.numel() == 0:
+            # Empty block
+            continue
+
+        block_type = idx["block_type"]
+        ai = idx["species_i"]
+        ni = idx["n_i"]
+        li = idx["l_i"]
+        aj = idx["species_j"]
+        nj = idx["n_j"]
+        lj = idx["l_j"]
+        L = idx["L"]
+        block_idx = (block_type, ai, ni, li, aj, nj, lj)
+        if high_rank:
+            l3 = idx["l_3"]
+            position_components = Labels(['m_3'], values = torch.tensor([-1,0,1]).reshape(3,-1))
+            block_idx = block_idx + (l3,)
+        if has_sigma:
+            inv_sigma = idx["inversion_sigma"] 
+       
+            
+        if translations:
+            
+            block_idx = (block_type, ai, ni, li, aj, nj, lj, idx["cell_shift_a"], idx["cell_shift_b"], idx["cell_shift_c"])
+        
+        
+        # block_type, ai, ni, li, aj, nj, lj, L = tuple(idx)
+        # if has_sigma:
+        #     block_idx = blocks.keys.position(block_idx + (L,))
+        # if block_idx in block_builder.blocks:
+            continue
+        coupled = {}
+        if high_rank:
+            for K in range(np.abs(li - lj), li + lj + 1):
+                coupled[(l3, K, li, lj)]={}
+                for L in range(np.abs(K -l3), K + l3 + 1): # l3 
+                    if has_sigma:
+                        bidx = blocks.keys.position(block_idx + (K, L, inv_sigma))
+                    else: 
+                        bidx = blocks.keys.position(block_idx + (K, L))
+                        # if bidx is None:
+                            # print(bidx, 'bidx', block_idx)
+                    if bidx is not None:
+                        coupled[(l3, K, li, lj)][L] = torch.moveaxis(blocks.block(bidx).values, -1, -2)
+
+            decoupled = cg.decouple(coupled, iterate = 1)
+            decoupled = torch.moveaxis(decoupled, (4,3,2,1), (2,1,3,4))#(1,2,3,4))
+            new_block = block_builder.add_block(
+                key=block_idx,
+                properties=torch.tensor([[0]], dtype = torch.int32),
+                components=[_components_idx(li), _components_idx(lj), _components_idx(l3)],
+            )
+            new_block.add_samples(
+                labels = block.samples.values.reshape(
+                    block.samples.values.shape[0], -1
+                ),
+                data=decoupled,
+            )
+            
+        else: 
+            for L in range(np.abs(li - lj), li + lj + 1):
+
+                if has_sigma:
+                    bidx = blocks.keys.position(block_idx + (L, inv_sigma))
+                    
+                else: 
+                    bidx = blocks.keys.position(block_idx + (L,))
+                # if has_sigma: 
+                #     bidx = bidx + (inv_sigma,)
+                if bidx is not None:
+                    coupled[L] = torch.moveaxis(blocks.block(bidx).values, -1, -2)
+            # if ai == aj== 6 and ni == nj == 2 and li == lj == 1 and block_type == 0:
+            #     print(idx, coupled)
+                decoupled = cg.decouple({(li, lj): coupled})
+                new_block = block_builder.add_block(
+                    key=block_idx,
+                    properties=torch.tensor([[0]], dtype = torch.int32),
+                    components=[_components_idx(li), _components_idx(lj)],
+                )
+                new_block.add_samples(
+                    labels = block.samples.values.reshape(
+                        block.samples.values.shape[0], -1
+                    ),
+                    data=torch.moveaxis(decoupled, 1, -1),
+                )
+    return block_builder.build()
 
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
     try:

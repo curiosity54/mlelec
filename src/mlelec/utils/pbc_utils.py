@@ -66,7 +66,7 @@ def inverse_bloch_sum(dataset, matrix, A, cutoff):
         H_T[tuple(T)] = H
     return H_T
 
-def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', matrix=None, sort_orbs = True):
+def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, target='fock', matrix=None, sort_orbs = True, high_rank = False):
     from mlelec.utils.metatensor_utils import TensorBuilder
 
     if device is None:
@@ -77,7 +77,9 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
     property_names = ["dummy"]
     property_values = np.asarray([[0]])
     component_names = [["m_i"], ["m_j"]]
-
+    if high_rank:
+        component_names += [["m_3"]]
+        key_names += ["l_3"]
     # multiplicity
     orbs_mult = {}
     for species in dataset.basis:
@@ -128,15 +130,25 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                     raise ValueError("target must be either 'fock' or 'overlap'")
             else: 
                 matrices = matrix[A]
+                
         else: 
             matrices= {}
-            if target.lower() == "fock":
-                matrices[0,0,0] = dataset.fock_realspace[A]
-            elif target.lower() == "overlap":
-                matrices[0,0,0] = dataset.overlap_realspace[A]
-            else:
-                raise ValueError("target must be either 'fock' or 'overlap")
+            if matrix is None:
+                if target.lower() == "fock":
+                    matrices[0,0,0] = dataset.fock_realspace[A]
+                elif target.lower() == "overlap":
+                    matrices[0,0,0] = dataset.overlap_realspace[A]
+                else:
+                    raise ValueError("target must be either 'fock' or 'overlap")
+            else: 
+                matrices[0,0,0] = matrix[A]
+                if len(matrix[A].shape)==3:
+                    high_rank = True
+                    warnings.warn("high_rank must be True if matrix is a 3D tensor, setting to True")
+                    l3 = matrix[A].shape[-1]//2 # assuming the last dimension is 2*l+1
         
+        
+
         for iii,T in enumerate(matrices):
             mT = tuple(-t for t in T)
             assert mT in matrices, f"{mT} not in the real space matrix keys"
@@ -188,7 +200,8 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
 
                     for iorbital, (ni, li, nj, lj) in enumerate(n1l1n2l2):
                         value = block_split[iorbital]
-
+                        components_idx=[_components_idx(li), _components_idx(lj)]
+                        data_shape =  (1, 2 * li + 1, 2 * lj + 1, 2*l3 + 1,1) if high_rank else (1, 2 * li + 1, 2 * lj + 1,1)
                         if i == j and np.linalg.norm(T) == 0:
                             if sort_orbs:
                                 if ni > nj or (ni == nj and li > lj):
@@ -218,15 +231,19 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                             # skip ai>aj if not all_pairs
                             block_type = 2
                             key = (block_type, ai, ni, li, aj, nj, lj)
-
+                        
+                        if high_rank: 
+                            key += (l3,)
+                            components_idx += [_components_idx(l3)]
+                            
                         if key not in block_builder.blocks:
                             # add blocks if not already present
-                            block = block_builder.add_block(key=key, properties=property_values, components=[_components_idx(li), _components_idx(lj)])
+                            block = block_builder.add_block(key=key, properties=property_values, components = components_idx)
                             if block_type == 1:
                                 block = block_builder.add_block(
                                     key=(-1,) + key[1:],
                                     properties=property_values,
-                                    components=[_components_idx(li), _components_idx(lj)],
+                                    components=components_idx,
                                 )
 
                         # add samples to the blocks when present
@@ -243,11 +260,11 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
                             # block_(-1)ijT = <i \phi| H(T)|j \psi> - <j \phi| H(-T)|i \psi>
                             bminus = (value - value_ji) * ISQRT_2
 
-                            block.add_samples(     labels = [(A, i, j, *T)], data =  bplus.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
-                            block_asym.add_samples(labels = [(A, i, j, *T)], data = bminus.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
+                            block.add_samples(     labels = [(A, i, j, *T)], data =  bplus.reshape(data_shape))
+                            block_asym.add_samples(labels = [(A, i, j, *T)], data = bminus.reshape(data_shape))
 
                         elif block_type == 0 or block_type == 2:
-                            block.add_samples(labels = [(A, i, j, *T)], data = value.reshape(1, 2 * li + 1, 2 * lj + 1, 1))
+                            block.add_samples(labels = [(A, i, j, *T)], data = value.reshape(data_shape))
                         
                         else:
                             raise ValueError("Block type not implemented")
