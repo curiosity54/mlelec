@@ -181,6 +181,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         nlayers: int,
         activation: Union[str, callable] = "SiLU",
         apply_norm: bool = True,
+        set_bias: bool = True,
         optimizer=None,
         learning_rate: float = 1e-3,
         lr_scheduler_patience: int = 10,
@@ -189,6 +190,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         loss_fn: BaseLoss = MSELoss(),
         is_indirect: bool = False,
         adaptive_loss_weights: bool = False,
+        init_from_ridge: bool = False,
         **kwargs,
     ):
         super().__init__()
@@ -199,9 +201,17 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
             nlayers=nlayers,
             activation=activation,
             apply_norm=apply_norm,
+            set_bias=set_bias,
             **kwargs,
         )
         self.model = self.model.double()
+        if init_from_ridge:
+            assert nlayers == 0, (
+                "`nlayers` must be zero to initialize weights "
+                "from Ridge regression"
+                )
+            self.model.init_with_ridge_weights(mldata.items.fock_blocks, alphas=kwargs.get('alphas', np.logspace(-10, 0, 10)))
+
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
         self.lr_scheduler_patience = lr_scheduler_patience

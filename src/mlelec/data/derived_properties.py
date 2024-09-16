@@ -2,6 +2,15 @@ import numpy as np
 import torch
 import xitorch
 from xitorch.linalg import symeig
+import os
+
+from pyscfad import ops
+from pyscfad.ml.scf import hf as hf_ad
+
+from mlelec.data.pyscf_calculator import _instantiate_pyscf_mol
+from mlelec.utils.twocenter_utils import unfix_orbital_order
+
+os.environ["PYSCFAD_BACKEND"] = "torch"
 
 
 def compute_eigenvalues(As, Ms, return_eigenvectors=False):
@@ -14,7 +23,8 @@ def compute_eigenvalues(As, Ms, return_eigenvectors=False):
         # indices = itertools.product(*[range(dim) for dim in leading_shape])
 
         # eigenvalues = torch.empty(leading_shape + (shape[-1],), dtype=torch.float64)
-        # eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]), dtype=torch.complex128) if return_eigenvectors else None
+        # eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]),
+        #  dtype=torch.complex128) if return_eigenvectors else None
 
         Ax = xitorch.LinearOperator.m(A)
         Mx = xitorch.LinearOperator.m(M)
@@ -79,20 +89,11 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore, overlaps=N
         ard.append(
             torch.einsum("i...->...i", (torch.stack(blocks_flat) ** 2).sum(dim=(1, 2)))
         )
-        # ard.append(torch.einsum('i...->...i', torch.stack(blocks_flat).norm(dim=(1,2))))
+        # ard.append(torch.einsum('i...->...i',
+        # torch.stack(blocks_flat).norm(dim=(1,2))))
         rhos.append(torch.einsum("ij...->...ij", rho))
 
     return ard, rhos
-
-
-import os
-
-os.environ["PYSCFAD_BACKEND"] = "torch"
-from pyscfad import ops
-from pyscfad.ml.scf import hf as hf_ad
-
-from mlelec.data.pyscf_calculator import _instantiate_pyscf_mol
-from mlelec.utils.twocenter_utils import unfix_orbital_order
 
 
 def compute_dipoles(
@@ -132,7 +133,8 @@ def compute_dipoles(
     for H, S, mol in zip(focks, overlaps, mols):
         mf = hf_ad.SCF(mol)
         mo_energy, mo_coeff = mf.eig(H, S)
-        # mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H), M=xitorch.LinearOperator.m(S))
+        # mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H),
+        # M=xitorch.LinearOperator.m(S))
         # print(requires_grad)
         # print('mo_energy', mo_energy)
         # print('mo_coeff', mo_coeff)

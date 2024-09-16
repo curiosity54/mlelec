@@ -330,6 +330,7 @@ class EquivariantNonlinearModel(nn.Module):
         nlayers: int,
         activation: Union[str, callable] = "SiLU",
         apply_norm: bool = True,
+        set_bias: bool = True,
         **kwargs,
     ):
         super().__init__()
@@ -343,16 +344,17 @@ class EquivariantNonlinearModel(nn.Module):
         self.apply_norm = apply_norm
         self.device = mldata.device
         self.dummy_property = self.target_blocks[0].properties
+        self.set_bias = set_bias
         self._initialize_submodels(
-            set_bias=kwargs.get("bias", False),
+            set_bias=self.set_bias,
             nhidden=nhidden,
             nlayers=nlayers,
             activation=activation,
         )
-        self.ridges = None
+        # self.ridges = None
 
     def _initialize_submodels(
-        self, set_bias=False, nhidden=16, nlayers=2, activation=None, **kwargs
+        self, nhidden=16, nlayers=2, activation=None, **kwargs
     ):
         """
         Initialize submodels for each target block.
@@ -371,7 +373,7 @@ class EquivariantNonlinearModel(nn.Module):
             out_properties.append(b.properties)
 
             feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
-            bias = k["L"] == 0 and set_bias
+            bias = k["L"] == 0 and self.set_bias
 
             modules.append(
                 simpleMLP(
@@ -415,12 +417,16 @@ class EquivariantNonlinearModel(nn.Module):
         feat_map = mts.TensorMap(keys, feat_blocks)
         pred = self.model.forward(feat_map)
 
+        if return_matrix:
+            raise NotImplementedError("`return_matrix not implemented yet")
+        
         return pred
 
     def fit_ridge_analytical(
         self,
+        target_blocks,
         return_matrix=False,
-        set_bias=False,
+        set_bias=None,
         kernel_ridge=False,
         alphas=None,
         alpha=5e-9,
@@ -444,17 +450,18 @@ class EquivariantNonlinearModel(nn.Module):
         if alphas is None:
             alphas = np.logspace(-18, 1, 35)
 
-        self.recon = {}
+        # self.recon = {}
         pred_blocks = []
-        self.ridges = []
+        self.ridges = {}
+        set_bias = set_bias if set_bias is not None else self.set_bias
 
-        for k, block in self.target_blocks.items():
+        for k, block in target_blocks.items():
             bias = False
             if k["L"] == 0 and set_bias:
                 bias = True
 
             feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
-            nsamples, ncomp, _ = block.values.shape
+            nsamples, ncomp, nprop = block.values.shape
             feat = _match_feature_and_target_samples(block, feat, return_idx=True)
             assert torch.all(
                 block.samples.values == feat.samples.values[:, :]
@@ -514,7 +521,8 @@ class EquivariantNonlinearModel(nn.Module):
                     ridge_c = RidgeCV(alphas=alphas, fit_intercept=bias).fit(x2, y2)
 
             pred = ridge.predict(x)
-            self.ridges.append(ridge)
+            self.ridges[tuple(k.values.tolist())] = ridge
+
             if is_complex:
                 pred2 = ridge_c.predict(x2)
                 self.ridges.append(ridge_c)
@@ -524,18 +532,18 @@ class EquivariantNonlinearModel(nn.Module):
 
             pred_blocks.append(
                 TensorBlock(
-                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, 1))).to(
+                    values=torch.from_numpy(pred.reshape((nsamples, ncomp, nprop))).to(
                         self.device
                     ),
                     samples=block.samples,
                     components=block.components,
-                    properties=self.dummy_property,
+                    properties=block.properties,
                 )
             )
 
-        pred_tmap = TensorMap(self.target_blocks.keys, pred_blocks)
-        self.recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
-        return self.recon_blocks, self.ridges
+        pred_tmap = mts.sort(TensorMap(target_blocks.keys, pred_blocks))
+        recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
+        return recon_blocks #, self.ridges
 
     def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):
         """
@@ -562,7 +570,7 @@ class EquivariantNonlinearModel(nn.Module):
             )
 
         pred_blocks = []
-        for imdl, (key, tkey) in enumerate(zip(self.ridges, target_blocks.keys)):
+        for imdl, (key, tkey) in enumerate(zip(self.ridges.values(), target_blocks.keys)):
             feat = map_targetkeys_to_featkeys_integrated(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
             x = (
@@ -581,7 +589,35 @@ class EquivariantNonlinearModel(nn.Module):
                     properties=self.dummy_property,
                 )
             )
-        return TensorMap(target_blocks.keys, pred_blocks)
+        return mts.sort(TensorMap(target_blocks.keys, pred_blocks))
+
+    def init_with_ridge_weights(self, target_blocks=None, **kwargs):
+        
+        set_bias = kwargs.get('set_bias', self.set_bias)
+        kernel_ridge = kwargs.get('kernel_ridge', False)
+        alphas = kwargs.get('alphas', np.logspace(-10, 0, 10))
+
+        if target_blocks is None:
+            assert hasattr(self, 'ridges'), "You must provide `target_blocks`"
+        else:
+            _ = self.fit_ridge_analytical(
+                target_blocks,
+                kernel_ridge=kernel_ridge,
+                set_bias=set_bias,
+                alphas=alphas
+                )
+        for k in self.model.in_keys:
+            mlp = self.model.get_module(k).mlp
+            ridge = self.ridges[tuple(k.values.tolist())]
+            ridge_weights = ridge.coef_
+            ridge_bias = ridge.intercept_
+            with torch.no_grad():
+                mlp.weight.copy_(torch.from_numpy(ridge_weights))
+                if mlp.bias is not None:
+                    mlp.bias.copy_(torch.tensor(ridge_bias))
+                else:
+                    assert ridge_bias == 0
+        return 
 
     def regularization_loss(self, regularization: float) -> torch.Tensor:
         """

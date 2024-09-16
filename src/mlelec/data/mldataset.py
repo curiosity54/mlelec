@@ -801,9 +801,9 @@ class MLDataset:
             TensorMap(Labels(key_names, torch.tensor(keys, device=self.device)), blocks)
         )
         if self.orbitals_to_properties:
-            self.model_metadata = self.model_metadata.keys_to_properties(
+            self.model_metadata = mts.sort(self.model_metadata.keys_to_properties(
                 ["n_i", "l_i", "n_j", "l_j"]
-            )
+            ))
 
     def compute_tensors(self, tensors: Union[torch.Tensor, List], basis_dict: dict):
         out_tensors = []
