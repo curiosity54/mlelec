@@ -210,7 +210,10 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
                 "`nlayers` must be zero to initialize weights "
                 "from Ridge regression"
                 )
-            self.model.init_with_ridge_weights(mldata.items.fock_blocks, alphas=kwargs.get('alphas', np.logspace(-10, 0, 10)))
+            self.model.init_with_ridge_weights(
+                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks), 
+                alphas=kwargs.get('alphas', np.logspace(-10, 0, 10))
+                )
 
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
