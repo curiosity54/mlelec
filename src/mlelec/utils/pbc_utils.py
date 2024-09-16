@@ -1218,6 +1218,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
     if "L" in blocks.keys.names:
         from mlelec.utils.twocenter_utils import _to_uncoupled_basis
         blocks = _to_uncoupled_basis(blocks, cg = cg, device = device)
+        # TODO: handle high_rank for coupled basis
 
     orbs_tot, orbs_offset = _orbs_offsets(dataset.basis)
     atom_blocks_idx = _atom_blocks_idx(dataset.structures, orbs_tot)
@@ -1294,7 +1295,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
         if detach:
             blockvalues = blockvalues.detach() #.clone()
 
-        for sample, blockval in zip(samples, blockvalues[:,:,:,0]):
+        for sample, blockval in zip(samples, blockvalues[...,0]):
     
         # for sample, blockval in zip(block.samples.values, block.values):
 
@@ -1344,7 +1345,6 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             phi_end = shapes[(ni, li, nj, lj)][0]  # orb end
             # where does orbital (nj, lj) end (or how large is it)
             psi_end = shapes[(ni, li, nj, lj)][1]  
-            print(li, lj)
             iphi_jpsi_slice = slice(i_start + phioffset , i_start + phioffset + phi_end),\
                               slice(j_start + psioffset , j_start + psioffset + psi_end)
             ipsi_jphi_slice = slice(i_start + psioffset , i_start + psioffset + psi_end),\
@@ -1372,7 +1372,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
                 #         ff = 1
                 #     else:
                 #         ff = 0.5
-                print(bv.shape )
+                
                 matrix_T[iphi_jpsi_slice] += bv*bt0_factor_p
                 matrix_mT[jpsi_iphi_slice] += bv.transpose(0,1)*bt0_factor_m
                 
