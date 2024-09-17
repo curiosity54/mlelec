@@ -107,14 +107,14 @@ def compute_dipoles(
     unfix=True,
 ):
     if mols is not None:
-        l = len(mols)
+        num = len(mols)
     else:
         assert (
             frames is not None and basis_name is not None
         ), "frames and basis_name must be provided when mols is None"
-        l = len(frames)
+        num = len(frames)
     assert (
-        l == len(focks) == len(overlaps)
+        num == len(focks) == len(overlaps)
     ), "Length of frames/mols, fock_predictions, and overlaps must be the same"
 
     dipoles = []
@@ -157,5 +157,6 @@ def compute_dipoles(
 
     try:
         return torch.stack(dipoles)
-    except:
+    except Exception as e:
+        del e
         return dipoles

@@ -37,7 +37,8 @@ class Items(NamedTuple):
 
 class MLDataset:
     """
-    Converts DFT data stored in QMDataset to a torch-compatible dataset ready for machine learning.
+    Converts DFT data stored in QMDataset to a torch-compatible dataset ready for
+    machine learning.
     """
 
     def __init__(
@@ -361,15 +362,16 @@ class MLDataset:
             ), "`hypers_atom` must be present when `features` is not provided."
             assert (
                 lcut is not None
-            ), f"`lcut` must be present when `features` is not provided."
+            ), "`lcut` must be present when `features` is not provided."
 
             if self.training_strategy == "twocenter":
-                assert (
-                    hypers_pair is not None
-                ), f"`hypers_pair` must be present when `features` is not provided and `training_strategy` is {self.training_strategy}."
+                assert hypers_pair is not None, (
+                    "`hypers_pair` must be present when `features` is not provided "
+                    f"and `training_strategy` is {self.training_strategy}."
+                )
                 assert (
                     hypers_pair["cutoff"] == self.cutoff
-                ), f"`hypers_pair['cutoff']` must be equal to self.cutoff."
+                ), "`hypers_pair['cutoff']` must be equal to self.cutoff."
 
                 self.features = compute_features(
                     self.qmdata,
@@ -466,14 +468,19 @@ class MLDataset:
 
             else:
                 raise ValueError(
-                    f"This looks like a bug! {flat_name} is in MLDataset._implemented_items but it is not properly handled in the loop."
+                    (
+                        f"This looks like a bug! {flat_name} is in "
+                        "MLDataset.implemented_items but it is not "
+                        "properly handled in the loop."
+                    )
                 )
 
         self.items = Items(**items_dict)
 
     def _initialize_tensors(self):
         """
-        Initialize working copies of tensors with fixed orbital order and Condon-Shortley phase if necessary.
+        Initialize working copies of tensors with fixed orbital order
+        and Condon-Shortley phase if necessary.
         """
         frames = self.qmdata.structures
 
@@ -647,7 +654,8 @@ class MLDataset:
 
     def _update_items_on_cutoff_change(self):
         """
-        Update items affected by compute_tensors and compute_coupled_blocks when cutoff is changed.
+        Update items affected by compute_tensors and compute_coupled_blocks
+        when cutoff is changed.
         """
         item_names = [
             name
@@ -666,7 +674,8 @@ class MLDataset:
 
     def _update_datasets(self):
         """
-        Update datasets based on current train_frac, val_frac, test_frac, and shuffle properties.
+        Update datasets based on current train_frac, val_frac, test_frac,
+        and shuffle properties.
         """
         self._shuffle_indices()
         self._split_indices()
@@ -801,9 +810,9 @@ class MLDataset:
             TensorMap(Labels(key_names, torch.tensor(keys, device=self.device)), blocks)
         )
         if self.orbitals_to_properties:
-            self.model_metadata = mts.sort(self.model_metadata.keys_to_properties(
-                ["n_i", "l_i", "n_j", "l_j"]
-            ))
+            self.model_metadata = mts.sort(
+                self.model_metadata.keys_to_properties(["n_i", "l_i", "n_j", "l_j"])
+            )
 
     def compute_tensors(self, tensors: Union[torch.Tensor, List], basis_dict: dict):
         out_tensors = []
@@ -1010,14 +1019,14 @@ def _sqrtm_newton_schulz(
     dim = matrix.size(0)
     norm_of_matrix = matrix.norm(p="fro")
     Y = matrix.div(norm_of_matrix)
-    I = torch.eye(dim, dim, requires_grad=False).to(matrix)
+    Id = torch.eye(dim, dim, requires_grad=False).to(matrix)
     Z = torch.eye(dim, dim, requires_grad=False).to(matrix)
 
     s_matrix = torch.empty_like(matrix)
     error = torch.empty(1).to(matrix)
 
     for _ in range(num_iters):
-        T = 0.5 * (3.0 * I - Z.mm(Y))
+        T = 0.5 * (3.0 * Id - Z.mm(Y))
         Y = Y.mm(T)
         Z = T.mm(Z)
 
