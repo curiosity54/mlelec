@@ -3,9 +3,9 @@ import warnings
 from collections import defaultdict, namedtuple
 from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
-import metatensor.torch as mts
 import numpy as np
 import torch
+import metatensor.torch as mts
 from metatensor.learn import IndexedDataset
 from metatensor.torch import Labels, TensorBlock, TensorMap
 
@@ -23,10 +23,10 @@ from mlelec.utils.twocenter_utils import fix_orbital_order
 class Items(NamedTuple):
     fock_blocks: Optional[TensorMap] = None
     overlap_blocks: Optional[TensorMap] = None
-    fock_realspace: Optional[List[TensorMap]] = None
-    overlap_realspace: Optional[List[TensorMap]] = None
-    fock_kspace: Optional[TensorMap] = None
-    overlap_kspace: Optional[TensorMap] = None
+    fock_realspace: Optional[List[Dict]] = None
+    overlap_realspace: Optional[List[torch.Tensor]] = None
+    fock_kspace: Optional[List[torch.Tensor]] = None
+    overlap_kspace: Optional[List[torch.Tensor]] = None
     eigenvalues: Optional[List[torch.Tensor]] = None
     eigenvectors: Optional[List[torch.Tensor]] = None
     atom_resolved_density: Optional[List[torch.Tensor]] = None
