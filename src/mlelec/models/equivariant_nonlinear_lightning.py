@@ -207,13 +207,16 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         self.model = self.model.double()
         if init_from_ridge:
             assert nlayers == 0, (
-                "`nlayers` must be zero to initialize weights "
-                "from Ridge regression"
-                )
+                "`nlayers` must be zero to initialize weights " "from Ridge regression"
+            )
+            ridge_target_blocks = kwargs.get(
+                "ridge_target_blocks",
+                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks),
+            )
             self.model.init_with_ridge_weights(
-                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks), 
-                alphas=kwargs.get('alphas', np.logspace(-10, 0, 10))
-                )
+                ridge_target_blocks,
+                alphas=kwargs.get("alphas", np.logspace(-10, 0, 10)),
+            )
 
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
