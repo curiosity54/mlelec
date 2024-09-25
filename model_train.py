@@ -37,7 +37,7 @@ torch.set_default_dtype(torch.float64)
 # ------------------ CHANGE THE PARAMETERS -------------
 NUM_FRAMES = 1000
 BATCH_SIZE = 100
-NUM_EPOCHS = 1000
+NUM_EPOCHS = 1001
 SHUFFLE_SEED = 1234
 TRAIN_FRAC = 0.7
 TEST_FRAC = 0.1
@@ -45,13 +45,13 @@ VALIDATION_FRAC = 0.2
 
 LR = 1e-4
 VAL_INTERVAL = 10
-W_EVA = 1e4
-W_DIP = 1e3
-W_POL = 1e2
+W_EVA = 1e6
+W_DIP = 0
+W_POL = 1e3
 DEVICE = 'cpu'
 
 ORTHOGONAL = True  # set to 'FALSE' if working in the non-orthogonal basis
-FOLDER_NAME = 'multitask_learn_normalised_with_weights'
+FOLDER_NAME = 'multitask_learn_alpha_eva'
 # ---------------------------------------------------------
 
 os.makedirs(FOLDER_NAME, exist_ok=True)
@@ -118,7 +118,7 @@ def loss_fn_combined(
     weight_polar = 1.0,
     weight_dipole = 1.0):
     
-    pred_dipole, pred_polar, pred_eigval = compute_batch_polarisability(ml_data, pred_focks, indices, mfs, device=DEVICE)
+    pred_dipole, pred_polar, pred_eigval = compute_batch_polarisability(ml_data, pred_focks, indices, mfs)
 
     loss_polar = loss_fn(frames, pred_polar, polar)/var_polar
     loss_dipole = loss_fn(frames, pred_dipole, dipole)/var_dipole
@@ -211,17 +211,16 @@ for i in range(len(molecule_data.lb_target["fock"])):
 
 ref_polar = molecule_data.target["polarisability"]
 ref_dip = molecule_data.target["dipole_moment"]
-
-var_eigval = torch.cat([ref_eva_lb[i].flatten() for i in range(len(ref_eva_lb))]).var()
-var_dipole = torch.cat([ref_dip_lb[i].flatten() for i in range(len(ref_dip_lb))]).var()
-var_polar = torch.cat([ref_polar_lb[i].flatten() for i in range(len(ref_polar_lb))]).var()
-
 ref_eva = []
 for i in range(len(molecule_data.target["fock"])):
     f = molecule_data.target["fock"][i]
     s = molecule_data.aux_data["overlap"][i]
     eig = scipy.linalg.eigvalsh(f, s)
     ref_eva.append(torch.from_numpy(eig))
+
+var_eigval = torch.linalg.norm(torch.cat([ref_eva_lb[i].flatten() for i in range(len(ref_eva_lb))]))
+var_dipole = torch.linalg.norm(torch.cat([ref_dip_lb[i].flatten() for i in range(len(ref_dip_lb))]))
+var_polar = torch.linalg.norm(torch.cat([ref_polar_lb[i].flatten() for i in range(len(ref_polar_lb))]))
 
 loss_fn = getattr(mlmetrics, "mse_qm7")
 
@@ -341,7 +340,7 @@ for epoch in range(nepochs):
         new_best = avg_val_loss < best
         if new_best:
             best = val_loss
-            # torch.save(model.state_dict(), 'model_output_combined/best_model_dipole.pt')
+            torch.save(model.state_dict(), f'{FOLDER_NAME}/model_output/best_model_dipole.pt')
             early_stop_count = 0
         else:
             early_stop_count += 1
@@ -398,7 +397,7 @@ with io.capture_output() as captured:
         ml_data.feat_train, return_type="tensor", batch_indices=batch_indices
     )
     train_dipole_pred, train_polar_pred, train_eva_pred = compute_batch_polarisability(
-        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
+        ml_data, train_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
     )
 
 train_error_pol = mlmetrics.mse_qm7(ml_data.train_frames,
@@ -420,7 +419,7 @@ with io.capture_output() as captured:
         ml_data.feat_test, return_type="tensor", batch_indices=ml_data.test_idx,
     )
     test_dip_pred, test_polar_pred, test_eva_pred = compute_batch_polarisability(
-        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs, device=DEVICE
+        ml_data, test_fock_predictions, batch_indices=batch_indices, mfs=all_mfs
     )
 
 error_dip = mlmetrics.mse_qm7(ml_data.test_frames,
@@ -502,13 +501,13 @@ for target, predicted in zip(test_eva_ref, [ref_eva[i] for i in ml_data.test_idx
     plt.scatter(x, y, color='chocolate', marker='^',
                 label='STO-3G' if 'STO-3G' not in plt.gca().get_legend_handles_labels()[1] else "")
     
-plt.plot([-35, 100], [-35, 100], linestyle='--', color='black', linewidth=1)
+plt.plot([-35, 20], [-35, 20], linestyle='--', color='black', linewidth=1)
 plt.xlabel('Target MO Energies (eV)')
 plt.ylabel('Predicted MO Energies (eV)')
 
 rmse_ml = torch.sqrt(error_eva).item() * Hartree
 rmse_sto3g = torch.sqrt(error_eva_STO3G).item() * Hartree
-plt.text(5, -35,
+plt.text(-1, -35,
          f'$RMSE_{{ML}}$ = {rmse_ml:.4f} eV\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} eV.',
          fontsize=10,
          bbox=dict(facecolor='white', alpha=0.5))
@@ -535,7 +534,7 @@ plt.ylabel('Predicted polarisability (A.U.)')
 
 rmse_ml = torch.sqrt(error_pol).item()
 rmse_sto3g = torch.sqrt(error_polar_STO3G).item()
-plt.text(100, -50,
+plt.text(85, -50,
          f'$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.',
          fontsize=10,
          bbox=dict(facecolor='white', alpha=0.5))

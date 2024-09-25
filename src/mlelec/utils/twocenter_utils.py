@@ -236,7 +236,7 @@ def _matrix_to_blocks(
         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
         ["structure", "center", "neighbor"],
         [["m1"], ["m2"]],
-        ["dummy"],
+        ["value"],
     )
     orbs_tot, _ = _orbs_offsets(orbitals)
     for A in range(len(frames)):
@@ -542,7 +542,7 @@ def _to_coupled_basis(
             ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
             ["structure", "center", "neighbor"],
             [["M"]],
-            ["dummy"],
+            ["value"],
         )
     else:
         block_builder = TensorBuilder(
@@ -561,7 +561,7 @@ def _to_coupled_basis(
             ],
             ["structure", "center", "neighbor"],
             [["M"]],
-            ["dummy"],
+            ["value"],
         )
     for idx, block in blocks.items():
         block_type = idx["block_type"]
@@ -632,7 +632,7 @@ def _to_uncoupled_basis(
         # molecule id
         blocks.sample_names,
         [["m1"], ["m2"]],
-        ["dummy"],
+        ["value"],
     )
     for idx, block in blocks.items():
         block_type = idx["block_type"]

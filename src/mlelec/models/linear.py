@@ -14,12 +14,16 @@ import mlelec.metrics as mlmetrics
 from mlelec.utils.metatensor_utils import labels_where
 import numpy as np
 
+
 def drop_zero_blocks(tensor):
-    for i1,b1 in tensor.items():
+    for i1, b1 in tensor.items():
         if b1.values.shape[0] == 0:
-            tensor = metatensor.drop_blocks(tensor, Labels(i1.names, i1.values.reshape(1,-1)))
+            tensor = metatensor.drop_blocks(
+                tensor, Labels(i1.names, i1.values.reshape(1, -1))
+            )
     return tensor
-            
+
+
 def norm_over_components(x):
     x = x.swapaxes(1, 2)
     return torch.einsum("ifm, mfi-> if", x, x.T) + 1e-7
@@ -82,6 +86,7 @@ class EquivariantNonLinearity(nn.Module):
         out = out * norm / normout
         return out
 
+
 class BlockModel(nn.Module):
     "other custom models"
     ## Could be the MLP as below or other custom model
@@ -134,7 +139,7 @@ class LinearTargetModel(nn.Module):
     def __init__(
         self,
         dataset: MLDataset,
-        device=None,
+        device="cpu",
         **kwargs,
     ):
         self.dataset = dataset
@@ -186,6 +191,7 @@ class LinearTargetModel(nn.Module):
         return_type: str = "tensor",
         batch_indices=None,
         ridge_fit: bool = False,
+        add_noise: bool = False,
         **kwargs,
     ):
         return_choice = [
@@ -237,7 +243,13 @@ class LinearTargetModel(nn.Module):
                 for w_layer in submodel.children():
                     assert w_layer.weight.data.shape == weights.shape
                     w_layer.weight.data = torch.from_numpy(weights).to(self.device)
-    
+
+                    if add_noise:
+                        noise = torch.normal(
+                            mean=0, std=0.01, size=w_layer.weight.data.shape
+                        ).to(self.device)
+                        w_layer.weight.data += noise
+
                 feat = map_targetkeys_to_featkeys(
                     features, self.dataset.target.block_keys[i]
                 )
@@ -287,7 +299,7 @@ class LinearTargetModel(nn.Module):
                 self.dataset.target.orbitals,
                 device=self.device,
             )
-            #print(self.reconstructed_tensor)
+            # print(self.reconstructed_tensor)
             return self.reconstructed_tensor
         elif return_type == "loss":
             loss = loss_fn(self.reconstructed_tensor, self.dataset.target.tensor)
@@ -305,7 +317,7 @@ class LinearTargetModel(nn.Module):
         self.ridges = {}
         # kernels = []
         for k, block in self.dataset.target_train.items():
-            
+
             bias = False
             if True:  # blockval > 1e-10:
                 if k["L"] == 0 and set_bias:
@@ -339,9 +351,7 @@ class LinearTargetModel(nn.Module):
                     .numpy()
                 )
 
-                ridge = RidgeCV(
-                    alpha, fit_intercept=bias, cv=cv
-                ).fit(x, y)
+                ridge = RidgeCV(alpha, fit_intercept=bias, cv=cv).fit(x, y)
 
                 # print(ridge.alpha_)
 
@@ -377,7 +387,9 @@ class LinearTargetModel(nn.Module):
 
         return self.recon_blocks, self.ridges
 
-    def predict_ridge_analytical(self, test_target, test_features, return_matrix=False) -> None:
+    def predict_ridge_analytical(
+        self, test_target, test_features, return_matrix=False
+    ) -> None:
 
         # set_bias will set bias=True for the invariant model
         self.recon_val = {}
@@ -387,7 +399,7 @@ class LinearTargetModel(nn.Module):
         for imdl, tkey in enumerate(test_target.keys):
             target = test_target.block(tkey)
             nsamples, ncomp, nprops = target.values.shape
-            
+
             feat = map_targetkeys_to_featkeys(test_features, tkey)
             x = (
                 (

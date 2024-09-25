@@ -1,5 +1,6 @@
 import warnings
 
+import numpy as np
 import ase
 import torch
 from pyscfad import numpy as pynp
@@ -208,7 +209,7 @@ def compute_batch_dipole_moment(ml_data: MLDataset, batch_fockvars, batch_indice
     return dipoles, eigenvalues
 
 
-def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal, device=None):
+def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
     # computes polarisability, dipole moment and eigenvalues for each molecule in batch
     polarisability = []
     eigenvalues = []
@@ -217,17 +218,17 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal, device=
     for i in range(len(mfs)):
         mf = mfs[i]
         ao_dip = mf.mol.intor("int1e_r", comp=3)
-        ao_dip = ops.convert_to_tensor(ao_dip).to(device)
+        ao_dip = ops.convert_to_tensor(ao_dip)
         fock = fock_vars[i]
         if overlaps is None:
-            ovlp = torch.from_numpy(mf.mol.intor("int1e_ovlp")).to(device)
+            ovlp = torch.from_numpy(mf.mol.intor("int1e_ovlp"))
             fock = torch.einsum("ij,jk,kl->il", isqrtp(ovlp),
-                                fock, isqrtp(ovlp)).to(device)
+                                fock, isqrtp(ovlp))
         else:
             ovlp = overlaps[i]
 
         def apply_perturb(E):
-            p_fock = fock + torch.tensor(pynp.einsum("x,xij->ij", E, ao_dip)).to(device)
+            p_fock = fock + pynp.einsum("x,xij->ij", E, ao_dip)
             mo_energy, mo_coeff = mf.eig(p_fock, ovlp)
             mo_occ = mf.get_occ(mo_energy)
             mo_occ = ops.convert_to_tensor(mo_occ)
@@ -236,16 +237,31 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal, device=
             return dip
 
         eva, _ = mf.eig(fock, ovlp)
-        E = torch.zeros((3,), dtype=float, device=device)
+        E = torch.zeros((3,), dtype=float)
         dip = apply_perturb(E)
         pol = jacobian(apply_perturb, E, create_graph=True)
-        dipoles.append(dip.to(device))
-        polarisability.append(pol.to(device))
-        eigenvalues.append(eva.to(device))
+        dipoles.append(dip)
+        polarisability.append(pol)
+        eigenvalues.append(eva)
     return torch.stack(dipoles), torch.stack(polarisability), eigenvalues
 
+    
+def apply_cutoff(mat, frame, basis, cutoff):
+    out = mat.clone()
+    split = [len(basis[s]) for s in frame.numbers]
+    split = np.insert(np.cumsum(split), 0, 0)
+    dist_ij = frame.get_all_distances()
+    for i in range(len(frame)):
+        for j in range(len(frame)):
+            d = dist_ij[j,i]
+            mat_i = slice(split[i],split[i+1])
+            mat_j = slice(split[j],split[j+1])
+            #print(i,j,mat_i, mat_j,d)
+            if d > cutoff:
+                out[mat_i, mat_j] = 0
+    return out
 
-def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, orthogonal=True, device=None):
+def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, orthogonal=True):
 
     batch_frames = [ml_data.structures[i] for i in batch_indices]
     batch_fock = unfix_orbital_order(
@@ -254,9 +270,12 @@ def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, or
     if orthogonal:
         batch_overlap = None
     else:
-        batch_overlap = [
-            ml_data.molecule_data.aux_data["overlap"][i]
-            for i in batch_indices]
+        batch_overlap = [apply_cutoff(ml_data.molecule_data.aux_data["overlap"][i], ml_data.structures[i], ml_data.aux_data['orbitals'], 4)
+                            for i in batch_indices]
+        #batch_overlap = [
+        #    ml_data.molecule_data.aux_data["overlap"][i]
+        #    for i in batch_indices]
+        
     batch_mfs = [mfs[i] for i in batch_indices]
-    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal, device=device)
+    dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal)
     return dipoles, polars, eigenvalues
