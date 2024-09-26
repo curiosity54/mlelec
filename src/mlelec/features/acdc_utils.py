@@ -337,7 +337,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         )
         blocks.append(
             TensorBlock(
-                values=block.values.clone().detach(),
+                values=block.values,
                 samples=new_samples,
                 components=new_components,
                 properties=Labels(
@@ -347,9 +347,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
             )
         )
 
-    return TensorMap(
-        keys=Labels(names=key_names, values=torch.tensor(keys)), blocks=blocks
-    )
+    return TensorMap(keys=Labels(names=key_names, values=np.array(keys)), blocks=blocks)
 
 
 def flatten(x):
