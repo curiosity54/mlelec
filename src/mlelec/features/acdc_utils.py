@@ -172,81 +172,183 @@ def _remove_suffix(names, new_suffix=""):
     return rname
 
 
+# def acdc_standardize_keys(descriptor, drop_pair_id=True):
+#     """Standardize the naming scheme of density expansion coefficient blocks (nu=1)"""
+
+#     key_names = np.array(descriptor.keys.names)
+#     if not "spherical_harmonics_l" in key_names:
+#         raise ValueError(
+#             "Descriptor missing spherical harmonics channel key `spherical_harmonics_l`"
+#         )
+#     if "species_atom_1" in key_names:
+#         key_names[np.where(key_names == "species_atom_1")[0]] = "species_center"
+#     if "species_atom_2" in key_names:
+#         key_names[np.where(key_names == "species_atom_2")[0]] = "species_neighbor"
+#     key_names = tuple(key_names)
+#     blocks = []
+#     keys = []
+#     for key, block in descriptor.items():
+#         key = tuple(key)
+#         if not "inversion_sigma" in key_names:
+#             key = (1,) + key
+#         if not "order_nu" in key_names:
+#             key = (1,) + key
+#         keys.append(key)
+#         property_names = _remove_suffix(block.properties.names, "_1")
+#         sample_names = [
+#             "center" if b == "first_atom" else ("neighbor" if b == "second_atom" else b)
+#             for b in block.samples.names
+#         ]
+#         # converts pair_id to shifted neighbor numbers
+#         if "pair_id" in sample_names and drop_pair_id:
+#             new_samples = block.samples.values.copy().reshape(-1, len(sample_names))
+#             # dtype=np.int32
+#             icent = np.where(np.asarray(sample_names) == "center")[0]
+#             ineigh = np.where(np.asarray(sample_names) == "neighbor")[0]
+#             ipid = np.where(np.asarray(sample_names) == "pair_id")[0]
+#             new_samples[:, ineigh] += new_samples[:, ipid] * new_samples[:, icent].max()
+#             new_samples = Labels(
+#                 [n for n in sample_names if n != "pair_id"],
+#                 new_samples[
+#                     :,
+#                     [
+#                         i
+#                         for i in range(len(block.samples.names))
+#                         if block.samples.names[i] != "pair_id"
+#                     ],
+#                 ],
+#             )
+#         else:
+#             new_samples = Labels(
+#                 sample_names,
+#                 np.asarray(block.samples.values).reshape(-1, len(sample_names)),
+#             )
+#         # convert values to TORCH TENSOR <<<<
+#         blocks.append(
+#             TensorBlock(
+#                 values=torch.tensor(block.values),
+#                 # values=np.asarray(block.values),
+#                 samples=new_samples,
+#                 components=block.components,
+#                 properties=Labels(
+#                     property_names,
+#                     np.asarray(block.properties.values).reshape(
+#                         -1, len(property_names)
+#                     ),
+#                 ),
+#             )
+#         )
+
+#     if not "inversion_sigma" in key_names:
+#         key_names = ("inversion_sigma",) + key_names
+#     if not "order_nu" in key_names:
+#         key_names = ("order_nu",) + key_names
+
+#     return TensorMap(
+#         keys=Labels(names=key_names, values=np.asarray(keys, dtype=np.int32)),
+#         blocks=blocks,
+#     )
+
+
 def acdc_standardize_keys(descriptor, drop_pair_id=True):
     """Standardize the naming scheme of density expansion coefficient blocks (nu=1)"""
 
-    key_names = np.array(descriptor.keys.names)
+    key_names = np.array(descriptor.keys.names, dtype="<U22")
     if not "spherical_harmonics_l" in key_names:
-        raise ValueError(
-            "Descriptor missing spherical harmonics channel key `spherical_harmonics_l`"
-        )
-    if "species_atom_1" in key_names:
-        key_names[np.where(key_names == "species_atom_1")[0]] = "species_center"
-    if "species_atom_2" in key_names:
-        key_names[np.where(key_names == "species_atom_2")[0]] = "species_neighbor"
+        try:
+            key_names[np.where(key_names == "o3_lambda")[0]] = "spherical_harmonics_l"
+        except:
+            raise ValueError(
+                "Descriptor missing spherical harmonics channel key `spherical_harmonics_l` or `o3_lambda`"
+            )
+    try:
+
+        if "center_type" in key_names:
+            key_names[np.where(key_names == "center_type")[0]] = "species_center"
+        elif (
+            "first_atom_type" in key_names
+        ):  # rascaline decided to name these keys differently if computing ACDC or pair term
+            key_names[np.where(key_names == "first_atom_type")[0]] = "species_center"
+    except:  # check old rascaline
+        if "species_atom_1" in key_names:
+            key_names[np.where(key_names == "species_atom_1")[0]] = "species_center"
+        else:
+            raise ValueError(
+                "Descriptor missing species center key `species_center` or `center_type`"
+            )
+
+    try:
+        if "neighbor_type" in key_names:
+            key_names[np.where(key_names == "neighbor_type")[0]] = "species_neighbor"
+        elif "second_atom_type" in key_names:
+            key_names[np.where(key_names == "second_atom_type")[0]] = "species_neighbor"
+    except:  # check old rascaline
+        if "species_atom_2" in key_names:
+            key_names[np.where(key_names == "species_atom_2")[0]] = "species_neighbor"
+        else:
+            raise ValueError(
+                "Descriptor missing species neighbor key `species_neighbor` or `neighbor_type`"
+            )
+
+    if not "inversion_sigma" in key_names:
+        if "o3_sigma" not in key_names:
+            key_names = np.asarray(["inversion_sigma"] + list(key_names), dtype="<U22")
+
+        else:
+            key_names[np.where(key_names == "o3_sigma")[0]] = "inversion_sigma"
+
+    if not "order_nu" in key_names:
+        key_names = np.asarray(["order_nu"] + list(key_names), dtype="<U22")
+
     key_names = tuple(key_names)
+    component_names = [
+        "spherical_harmonics_m" if b == "o3_mu" else b
+        for b in descriptor.component_names
+    ]
+
     blocks = []
     keys = []
     for key, block in descriptor.items():
         key = tuple(key)
-        if not "inversion_sigma" in key_names:
+        if "o3_sigma" not in key_names:
             key = (1,) + key
-        if not "order_nu" in key_names:
+        if "order_nu" not in key_names:
             key = (1,) + key
         keys.append(key)
         property_names = _remove_suffix(block.properties.names, "_1")
+        new_components = [
+            Labels(component_names[i], c.values) for i, c in enumerate(block.components)
+        ]
+
         sample_names = [
-            "center" if b == "first_atom" else ("neighbor" if b == "second_atom" else b)
+            (
+                "center"
+                if b == "first_atom" or b == "atom"
+                else (
+                    "neighbor"
+                    if b == "second_atom"
+                    else ("structure" if b == "system" else b)
+                )
+            )
             for b in block.samples.names
         ]
-        # converts pair_id to shifted neighbor numbers
-        if "pair_id" in sample_names and drop_pair_id:
-            new_samples = block.samples.values.copy().reshape(-1, len(sample_names))
-            # dtype=np.int32
-            icent = np.where(np.asarray(sample_names) == "center")[0]
-            ineigh = np.where(np.asarray(sample_names) == "neighbor")[0]
-            ipid = np.where(np.asarray(sample_names) == "pair_id")[0]
-            new_samples[:, ineigh] += new_samples[:, ipid] * new_samples[:, icent].max()
-            new_samples = Labels(
-                [n for n in sample_names if n != "pair_id"],
-                new_samples[
-                    :,
-                    [
-                        i
-                        for i in range(len(block.samples.names))
-                        if block.samples.names[i] != "pair_id"
-                    ],
-                ],
-            )
-        else:
-            new_samples = Labels(
-                sample_names,
-                np.asarray(block.samples.values).reshape(-1, len(sample_names)),
-            )
-        # convert values to TORCH TENSOR <<<<
+        new_samples = Labels(
+            sample_names, block.samples.values.reshape(-1, len(sample_names))
+        )
         blocks.append(
             TensorBlock(
-                values=torch.tensor(block.values),
-                # values=np.asarray(block.values),
+                values=block.values.clone().detach(),
                 samples=new_samples,
-                components=block.components,
+                components=new_components,
                 properties=Labels(
                     property_names,
-                    np.asarray(block.properties.values).reshape(
-                        -1, len(property_names)
-                    ),
+                    block.properties.values.reshape(-1, len(property_names)),
                 ),
             )
         )
 
-    if not "inversion_sigma" in key_names:
-        key_names = ("inversion_sigma",) + key_names
-    if not "order_nu" in key_names:
-        key_names = ("order_nu",) + key_names
-
     return TensorMap(
-        keys=Labels(names=key_names, values=np.asarray(keys, dtype=np.int32)),
-        blocks=blocks,
+        keys=Labels(names=key_names, values=torch.tensor(keys)), blocks=blocks
     )
 
 
