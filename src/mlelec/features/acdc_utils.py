@@ -348,7 +348,8 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         )
 
     return TensorMap(
-        keys=Labels(names=key_names, values=torch.tensor(keys)), blocks=blocks
+        keys=Labels(names=key_names, values=np.asarray(keys, dtype=np.int32)),
+        blocks=blocks,
     )
 
 
