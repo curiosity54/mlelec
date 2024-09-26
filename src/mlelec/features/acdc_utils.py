@@ -337,7 +337,7 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         )
         blocks.append(
             TensorBlock(
-                values=block.values,
+                values=torch.from_numpy(block.values),
                 samples=new_samples,
                 components=new_components,
                 properties=Labels(
