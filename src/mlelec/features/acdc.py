@@ -49,7 +49,7 @@ def single_center_features(
     """
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
-    rhoi = rhoi.keys_to_properties(["species_neighbor"])
+    rhoi = rhoi.keys_to_properties(["neighbor_type"])
     rho1i = acdc_standardize_keys(rhoi)
     if order_nu == 1:
         return drop_blocks_L(rho1i, lcut)
