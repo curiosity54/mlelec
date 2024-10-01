@@ -13,53 +13,6 @@ from sklearn.model_selection import GridSearchCV
 
 from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys_integrated
 
-# class EquivariantNonLinearity(nn.Module):
-#     """
-#     Applies a non-linear activation followed by optional Layer Normalization.
-#     The non-linear activation is applied to the inverse square root of the sum
-#     of squares of the input tensor's feature dimension.
-
-#     Args:
-#         nonlinearity (callable): The non-linear activation function to apply.
-#         epsilon (float): A small value to prevent division by zero in sqrt.
-#         norm (bool): Whether to apply Layer Normalization.
-#         layersize (int): The size of the layer (number of features).
-#         device (str): The device to use for the layer.
-#     """
-#     def __init__(self, nonlinearity: callable = None, epsilon=1e-6, norm=True, layersize=None, device=None):
-#         super().__init__()
-#         self.nonlinearity = nonlinearity
-#         self.epsilon = epsilon
-#         self.device = device or 'cpu'
-
-#         self.nn = [self.nonlinearity]
-#         if norm:
-#             self.nn.append(nn.LayerNorm([layersize], device=self.device))
-#         self.nn = nn.Sequential(*self.nn)
-
-#     def forward(self, x: torch.Tensor) -> torch.Tensor:
-#         """
-#         Forward pass for the Equivariant NonLinearity.
-
-#         Args:
-#             x (torch.Tensor): Input tensor of shape (batch_size, num_samples, num_features).
-
-#         Returns:
-#             torch.Tensor: Output tensor of the same shape as input.
-#         """
-#         assert len(x.shape) == 3, "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
-
-#         # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
-#         x_inv = torch.einsum("imf,imf->if", x, x)
-#         x_inv = torch.sqrt(x_inv + self.epsilon)
-
-#         # Apply the nonlinearity and optional normalization
-#         x_inv = self.nn(x_inv)
-
-#         # Scale the original tensor by the transformed inverse tensor
-#         out = torch.einsum("if, imf->imf", x_inv, x)
-#         return out
-
 
 class EquivariantNonLinearity(nn.Module):
     """
@@ -92,11 +45,13 @@ class EquivariantNonLinearity(nn.Module):
         self.norm = nn.LayerNorm([layersize], device=self.device) if norm else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        assert (
-            len(x.shape) == 3
-        ), "Input tensor must have 3 dimensions (batch_size, num_samples, num_features)."
+        assert len(x.shape) == 3, (
+            "Input tensor must have 3 dimensions"
+            " (batch_size, num_samples, num_features)."
+        )
 
-        # Compute the inverse square root of the sum of squares of the input tensor's feature dimension
+        # Compute the inverse square root of the sum of squares of the input tensor's
+        # feature dimension
         x_inv = torch.sqrt(torch.einsum("imf,imf->if", x, x) + self.epsilon)
 
         # Apply the nonlinearity and optional normalization
@@ -167,7 +122,8 @@ class simpleMLP(nn.Module):
 
 class MLP(nn.Module):
     """
-    Multi-Layer Perceptron (MLP) with optional Layer Normalization and Equivariant Nonlinearity.
+    Multi-Layer Perceptron (MLP) with optional Layer Normalization and
+    Equivariant Nonlinearity.
 
     Args:
         nlayers (int): Number of hidden layers.
@@ -243,7 +199,8 @@ class MLP(nn.Module):
             apply_layer_norm (bool): Whether to apply layer normalization.
 
         Returns:
-            List[nn.Module]: List of layers including Linear, activation, and normalization.
+            List[nn.Module]: List of layers including Linear, activation,
+            and normalization.
         """
         layers = [nn.Linear(n_in, n_out, bias=bias)]
         # self._initialize_layer(layers[-1])
@@ -300,22 +257,22 @@ def compute_ncore(basis_dict):
         nmin = np.min(basis[:, 0])
         ncore[s] = 0
         for n in np.arange(nmin):
-            for l in range(n):
-                ncore[s] += 2 * (2 * l + 1)
+            for l_ in range(n):
+                ncore[s] += 2 * (2 * l_ + 1)
         llist = set(basis[np.argwhere(basis[:, 0] == nmin)][:, 0, 1])
         llist_nmin = set(range(max(llist) + 1))
         l_diff = llist_nmin - llist
-        for l in l_diff:
-            ncore[s] += 2 * (2 * l + 1)
+        for l_ in l_diff:
+            ncore[s] += 2 * (2 * l_ + 1)
     return ncore
 
 
-class EquivariantNonlinearModel(nn.Module):
+class EquivariantModel(nn.Module):
     """
     A model for equivariant nonlinear transformations with support for ridge regression.
 
     Args:
-        mldata (MLDataset): The dataset containing features, target blocks, and metadata.
+        mldata (MLDataset): The dataset containing features, target blocks and metadata.
         nhidden (Union[int, list]): Number of hidden units in each layer.
         nlayers (int): Number of hidden layers.
         activation (Union[str, callable]): Activation function.
@@ -353,9 +310,7 @@ class EquivariantNonlinearModel(nn.Module):
         )
         # self.ridges = None
 
-    def _initialize_submodels(
-        self, nhidden=16, nlayers=2, activation=None, **kwargs
-    ):
+    def _initialize_submodels(self, nhidden=16, nlayers=2, activation=None, **kwargs):
         """
         Initialize submodels for each target block.
 
@@ -406,7 +361,7 @@ class EquivariantNonlinearModel(nn.Module):
         if target_blocks is None:
             keys = self.model.in_keys
             warnings.warn(
-                "Using training target_blocks; provide test target_blocks for inference."
+                "Using training target_blocks; provide test target_blocks for inference"
             )
         else:
             keys = target_blocks.keys
@@ -419,7 +374,7 @@ class EquivariantNonlinearModel(nn.Module):
 
         if return_matrix:
             raise NotImplementedError("`return_matrix not implemented yet")
-        
+
         return pred
 
     def fit_ridge_analytical(
@@ -543,7 +498,7 @@ class EquivariantNonlinearModel(nn.Module):
 
         pred_tmap = mts.sort(TensorMap(target_blocks.keys, pred_blocks))
         recon_blocks = self.model_return(pred_tmap, return_matrix=return_matrix)
-        return recon_blocks #, self.ridges
+        return recon_blocks  # , self.ridges
 
     def predict_ridge_analytical(self, ridges=None, hfeat=None, target_blocks=None):
         """
@@ -570,7 +525,9 @@ class EquivariantNonlinearModel(nn.Module):
             )
 
         pred_blocks = []
-        for imdl, (key, tkey) in enumerate(zip(self.ridges.values(), target_blocks.keys)):
+        for imdl, (key, tkey) in enumerate(
+            zip(self.ridges.values(), target_blocks.keys)
+        ):
             feat = map_targetkeys_to_featkeys_integrated(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
             x = (
@@ -592,20 +549,20 @@ class EquivariantNonlinearModel(nn.Module):
         return mts.sort(TensorMap(target_blocks.keys, pred_blocks))
 
     def init_with_ridge_weights(self, target_blocks=None, **kwargs):
-        
-        set_bias = kwargs.get('set_bias', self.set_bias)
-        kernel_ridge = kwargs.get('kernel_ridge', False)
-        alphas = kwargs.get('alphas', np.logspace(-10, 0, 10))
+
+        set_bias = kwargs.get("set_bias", self.set_bias)
+        kernel_ridge = kwargs.get("kernel_ridge", False)
+        alphas = kwargs.get("alphas", np.logspace(-10, 0, 10))
 
         if target_blocks is None:
-            assert hasattr(self, 'ridges'), "You must provide `target_blocks`"
+            assert hasattr(self, "ridges"), "You must provide `target_blocks`"
         else:
             _ = self.fit_ridge_analytical(
                 target_blocks,
                 kernel_ridge=kernel_ridge,
                 set_bias=set_bias,
-                alphas=alphas
-                )
+                alphas=alphas,
+            )
         for k in self.model.in_keys:
             mlp = self.model.get_module(k).mlp
             ridge = self.ridges[tuple(k.values.tolist())]
@@ -617,7 +574,7 @@ class EquivariantNonlinearModel(nn.Module):
                     mlp.bias.copy_(torch.tensor(ridge_bias))
                 else:
                     assert ridge_bias == 0
-        return 
+        return
 
     def regularization_loss(self, regularization: float) -> torch.Tensor:
         """

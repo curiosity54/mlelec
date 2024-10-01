@@ -16,7 +16,7 @@ from mlelec.data.derived_properties import (
 import metatensor.torch as mts
 
 from mlelec.data.mldataset import MLDataset
-from mlelec.models.equivariant_nonlinear_model import EquivariantNonlinearModel
+from mlelec.models.equivariant_model import EquivariantModel
 from mlelec.utils.pbc_utils import blocks_to_matrix
 
 
@@ -172,8 +172,7 @@ class CustomDerivedLoss(BaseLoss):
         return torch.mean(torch.square(derived_diff))
 
 
-# EquivariantNonlinearLightningModel definition
-class LitEquivariantNonlinearModel(pl.LightningModule):
+class LitEquivariantModel(pl.LightningModule):
     def __init__(
         self,
         mldata,
@@ -195,7 +194,7 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
     ):
         super().__init__()
         self.automatic_optimization = False
-        self.model = EquivariantNonlinearModel(
+        self.model = EquivariantModel(
             mldata=mldata,
             nhidden=nhidden,
             nlayers=nlayers,
@@ -207,13 +206,12 @@ class LitEquivariantNonlinearModel(pl.LightningModule):
         self.model = self.model.double()
         if init_from_ridge:
             assert nlayers == 0, (
-                "`nlayers` must be zero to initialize weights "
-                "from Ridge regression"
-                )
+                "`nlayers` must be zero to initialize weights " "from Ridge regression"
+            )
             self.model.init_with_ridge_weights(
-                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks), 
-                alphas=kwargs.get('alphas', np.logspace(-10, 0, 10))
-                )
+                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks),
+                alphas=kwargs.get("alphas", np.logspace(-10, 0, 10)),
+            )
 
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
