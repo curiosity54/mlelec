@@ -11,6 +11,7 @@ import pyscf.pbc.tools.pyscf_ase as pyscf_ase
 import torch
 from collections import defaultdict
 from ase.data import atomic_numbers
+import warnings
 
 # will be updated to work directly with datasets so that we have access
 # to the structures, all species present and ensure basis for all
@@ -185,7 +186,8 @@ class calculator:
 
         print("converged:", mf.converged)
         if not mf.converged:
-            raise ValueError("PYSCF Calculation did not converge")
+            # raise ValueError("PYSCF Calculation did not converge")
+            warnings.warn("PYSCF Calculation did not converge")
 
         dm = mf.make_rdm1()
         fock = mf.get_fock()
