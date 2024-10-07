@@ -124,7 +124,7 @@ class calculator:
         self.diis_space = kwargs.get("diis_space", 10)
         self.conv_tol = kwargs.get("conv_tol", 1e-10)
         self.conv_tol_grad = kwargs.get("conv_tol_grad", 1e-10)
-        self.dm = kwargs.get("dm", None)
+        dm = kwargs.get("dm", None)
         # calculation = kwargs.get('calc', 'RHF')
         # if spin!=0:
         #     #Unresticted calculation
@@ -156,10 +156,12 @@ class calculator:
         for frame in self.structures:
             self.single_calc(
                 frame,
+                dm=dm # TODO: handle this when passed for multiple frames 
             )
 
-    def single_calc(self, frame):
+    def single_calc(self, frame, dm=None):
         mol = self.mol
+        print(mol,'1')
         mol.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
         mol.build()
         if self.pbc:
@@ -172,10 +174,10 @@ class calculator:
         mf.conv_tol_grad = self.conv_tol_grad
         mf.max_cycle = self.max_cycle
         mf.diis_space = self.diis_space
-        if self.dm is None:
+        if dm is None:
             mf.kernel()
         else:
-            mf.kernel(self.dm)
+            mf.kernel(dm)
         print(mol.ao_labels())
         for label in mol.ao_labels():
             _, elem, bas = label.split(" ")[:3]
@@ -186,7 +188,7 @@ class calculator:
         if not mf.converged:
             raise ValueError("PYSCF Calculation did not converge")
 
-        self.dm = mf.make_rdm1()
+        dm = mf.make_rdm1()
         fock = mf.get_fock()
         overlap = mf.get_ovlp()
         hcore = mf.get_hcore()
@@ -196,7 +198,7 @@ class calculator:
         if "energy" in self.target:
             self.results["energy"].append(mf.e_tot)
         if "density" in self.target:
-            self.results["density"].append(self.dm)
+            self.results["density"].append(dm)
         if "hcore" in self.target:
             self.results["hcore"].append(hcore)
         if "dipole_moment" in self.target:
