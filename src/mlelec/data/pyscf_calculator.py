@@ -161,7 +161,6 @@ class calculator:
 
     def single_calc(self, frame, dm=None):
         mol = self.mol
-        print(mol,'1')
         mol.atom = pyscf_ase.ase_atoms_to_pyscf(frame)
         mol.build()
         if self.pbc:
