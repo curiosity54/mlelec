@@ -90,10 +90,9 @@ class QMDataset(Dataset):
         #     raise NotImplementedError("You must use precomputed data for now.")
         
         self._ismolecule = ismolecule
-        if self.dimension==0:
+        if self.dimension==0 and ismolecule is None:
             assert not frames[0].pbc.any()
             self._ismolecule = True
-
         # TODO: move to method
         # If the p orbitals' order is px, py, pz, change it to p_{-1}, p_0, p_1
         if fix_p_orbital_order:
@@ -118,12 +117,21 @@ class QMDataset(Dataset):
             else:
                 assert fock_realspace is not None, "For molecules, fock_realspace must be provided."
                 for ifr in range(len(fock_realspace)):
-                    a_ = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
-                    fock_realspace[ifr] = a_
+                    if isinstance(fock_realspace[ifr], dict):
+                        a_ = fix_orbital_order(next(iter(fock_realspace[ifr].values())), frames[ifr], self.basis)
+                        fock_realspace[ifr][0,0,0] = a_
+                    else: 
+                        a_ = fix_orbital_order(fock_realspace[ifr], frames[ifr], self.basis)
+                        fock_realspace[ifr] = a_
+                   
                 if overlap_realspace is not None:
                     assert isinstance(overlap_realspace, list), "For molecules, overlap_realspace must be a list."
                     for ifr in range(len(overlap_realspace)):
-                        overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
+                        if isinstance(overlap_realspace[ifr], dict):
+                            a_ = fix_orbital_order(next(iter(overlap_realspace[ifr].values())), frames[ifr], self.basis)
+                            overlap_realspace[ifr][0,0,0] = a_  
+                        else: 
+                            overlap_realspace[ifr] = fix_orbital_order(overlap_realspace[ifr], frames[ifr], self.basis)
 
         # TODO: Move to method
         # If the Condon-Shortley convention is not applied (e.g., AIMS input), apply it 
@@ -231,6 +239,7 @@ class QMDataset(Dataset):
             _matrices_realspace.append({})
             # _matrices_realspace_neg.append({})
             for k in m:
+                
                 if isinstance(m[k], torch.Tensor):
                     _matrices_realspace[-1][k] = m[k].to(device = self.device)
                     # _matrices_realspace_neg[-1][k] = m[minus_k]

@@ -221,7 +221,8 @@ class calculator:
 
         for k in self.results.keys():
             assert len(self.results[k]) == self.nframes
-            self.results[k] = torch.from_numpy(np.array(self.results[k]))
+            # self.results[k] = torch.from_numpy(np.array(self.results[k]))
+            # self.results[k] = [torch.from_numpy(x).to(torch.float64) for x in self.results[k]]
             hickle.dump(self.results[k], os.path.join(path, k + ".hickle"))
 
         ao_nlm = {i: [] for i in self.ao_labels.keys()}
