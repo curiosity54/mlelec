@@ -135,9 +135,15 @@ def matrix_to_blocks(dataset, device=None, all_pairs = False, cutoff = None, tar
             matrices= {}
             if matrix is None:
                 if target.lower() == "fock":
-                    matrices[0,0,0] = dataset.fock_realspace[A]
+                    if  isinstance(dataset.fock_realspace[A], dict):
+                        matrices[0,0,0] = dataset.fock_realspace[A][0,0,0]
+                    else:
+                        matrices[0,0,0] = dataset.fock_realspace[A]
                 elif target.lower() == "overlap":
-                    matrices[0,0,0] = dataset.overlap_realspace[A]
+                    if  isinstance(dataset.fock_realspace[A], dict):
+                        matrices[0,0,0] = dataset.overlap_realspace[A][0,0,0]
+                    else:
+                        matrices[0,0,0] = dataset.overlap_realspace[A]
                 else:
                     raise ValueError("target must be either 'fock' or 'overlap")
             else: 
@@ -1334,6 +1340,7 @@ def blocks_to_matrix(blocks, dataset, device=None, cg = None, all_pairs = False,
             if T not in reconstructed_matrices[A]:
                 assert mT not in reconstructed_matrices[A], "why is mT present but not T?"
                 norbs = np.sum([orbs_tot[ai] for ai in dataset.structures[A].numbers])
+                matshape = (norbs, norbs) if not high_rank else (norbs, norbs, 2*key["l_3"]+1)
                 reconstructed_matrices[A][T] = torch.zeros(matshape, device = device)
                 reconstructed_matrices[A][mT] = torch.zeros(matshape, device = device)
 

@@ -85,14 +85,24 @@ def unfix_orbital_order(
 
     if isinstance(frames, list):
         if len(frames) == 1:
+            if isinstance(matrix, list):
+                matrix = matrix[0]
             matrix = matrix.reshape(1, *matrix.shape)
-        assert len(matrix.shape) == 3, matrix.shape  # (nframe, nao, nao)
+        if not isinstance(matrix, list):
+            assert len(matrix.shape) == 3, matrix.shape  # (nframe, nao, nao)
+        else: 
+            mat = next(iter(matrix[0].values())) if isinstance(matrix[0], dict) else matrix[0]
+
+            assert len(mat.shape) == 2, mat.shape
         fixed_matrices = []
         for i, f in enumerate(frames):
             fixed_matrices.append(unfix_one_matrix(matrix[i], f, orbital))
         if isinstance(matrix, np.ndarray):
             return np.asarray(fixed_matrices)
-        return torch.stack(fixed_matrices)
+        try: 
+            return torch.stack(fixed_matrices)
+        except:
+            return fixed_matrices
     else:
         return unfix_one_matrix(matrix, frames, orbital)
 

@@ -210,6 +210,7 @@ def xyz_to_spherical(data, axes=()):
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
         axes = tuple(axes.tolist())
+        shifts = -1
     if len(axes)>1:
         shifts = tuple([-1]*len(axes))
     return torch.roll(data, shifts=shifts, dims=axes)
@@ -225,6 +226,7 @@ def spherical_to_xyz(data, axes=()):
     if len(axes) == 0:
         axes = torch.where(torch.tensor(shape) == 3)[0]
         axes = tuple(axes.tolist())
+        shifts = 1
     if len(axes)>1:
         shifts = tuple([1]*len(axes))
     return torch.roll(data, shifts=shifts, dims=axes)

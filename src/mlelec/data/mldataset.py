@@ -395,6 +395,8 @@ class MLDataset():
         out_tensors = []
 
         for ifr, tensor in enumerate(tensors):
+            if isinstance(tensor, dict):
+                tensor = tensor[0,0,0]
 
             shape = tensor.shape
             leading_shape = shape[:-2]
@@ -451,6 +453,9 @@ class MLDataset():
         if self.qmdata._ismolecule:
             As = self.qmdata.fock_realspace
             Ms = self.qmdata.overlap_realspace
+            if isinstance(As[0], dict):
+                As = [next(iter(As[i].values())) for i in range(len(self.qmdata))]
+                Ms = [next(iter(Ms[i].values())) for i in range(len(self.qmdata))]
         else:
             As = self.qmdata.fock_kspace
             Ms = self.qmdata.overlap_kspace
@@ -461,7 +466,7 @@ class MLDataset():
 
         # Iterate through structures
         for ifr, (A, M) in enumerate(zip(As, Ms)):
-        
+            
             shape = A.shape        
             # assert shape[-2] == shape[-1], "Matrices are not square!"
         
