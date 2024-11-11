@@ -180,6 +180,7 @@ def matrix_to_blocks(
 
                 # Loop over the all the atoms in the structure, by atomic number
                 for j, aj in enumerate(frame.numbers):
+
                     # Handle the case only the upper triangle is learnt
                     if not all_pairs:  # not all orbital pairs
                         if i > j and ai == aj:  # skip block type 1 if i>j
@@ -201,12 +202,11 @@ def matrix_to_blocks(
                     orbs_j = orbs_mult[aj]
 
                     # add what kind of blocks we expect in the tensormap
-                    # n1l1n2l2 = list(sum([tuple(k2 + k1 for k1 in orbs_i) for k2 in orbs_j], ()))
                     n1l1n2l2 = list(
                         sum([tuple(k2 + k1 for k1 in orbs_j) for k2 in orbs_i], ())
                     )
 
-                    # print(i,j,slice(i_start, i_start+orbs_tot[ai]), slice(j_start, j_start+orbs_tot[aj]))
+                    # Access the matrix at the relevant positions
                     block_ij = matrixT[
                         i_start : i_start + orbs_tot[ai],
                         j_start : j_start + orbs_tot[aj],
@@ -1444,7 +1444,7 @@ def blocks_to_matrix(
     if "L" in blocks.keys.names:
         from mlelec.utils.twocenter_utils import _to_uncoupled_basis
 
-        blocks = _to_uncoupled_basis(blocks, cg=cg)  # , device = device)
+        blocks = _to_uncoupled_basis(blocks, cg=cg, device=device)
 
     orbs_tot, orbs_offset = _orbs_offsets(basis)
     # TODO: this is a quick hack. Fix in future version
@@ -1968,7 +1968,7 @@ def matrix_to_blocks_OLD(
                 matrixmT = matrixmT.to(device)
             assert np.isclose(
                 torch.norm(matrixT - matrixmT.T).item(), 0.0
-            ), f"Failed to check H({T}) = H({mT})^\dagger"
+            ), rf"Failed to check H({T}) = H({mT})^\dagger"
 
             i_start = 0
             for i, ai in enumerate(frame.numbers):

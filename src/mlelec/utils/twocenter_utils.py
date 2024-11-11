@@ -82,7 +82,10 @@ def unfix_orbital_order(
 
     if isinstance(frames, list):
         if len(frames) == 1:
-            matrix = matrix.reshape(1, *matrix.shape)
+            if isinstance(matrix, list):
+                matrix = matrix[0].reshape(1, *matrix[0].shape)
+            else:
+                matrix = matrix.reshape(1, *matrix.shape)
         for m in matrix:
             assert len(m.shape) == 2  # (nframe, nao, nao)
         fixed_matrices = []
@@ -1000,27 +1003,31 @@ def _to_uncoupled_basis(
     for k in uncoupled_blocks:
         _, _, _, li, _, _, lj = k
         try:
-            _ = components_i[li]
+            _ = components_i[li].to(device=device)
         except:
-            components_i[li] = Labels(["m_i"], torch.arange(-li, li + 1).reshape(-1, 1))
+            components_i[li] = Labels(
+                ["m_i"], torch.arange(-li, li + 1).reshape(-1, 1).to(device=device)
+            )
         try:
-            _ = components_j[lj]
+            _ = components_j[lj].to(device=device)
         except:
-            components_j[lj] = Labels(["m_j"], torch.arange(-lj, lj + 1).reshape(-1, 1))
+            components_j[lj] = Labels(
+                ["m_j"], torch.arange(-lj, lj + 1).reshape(-1, 1).to(device=device)
+            )
 
         new_keys.append(k)
         new_blocks.append(
             TensorBlock(
                 values=uncoupled_blocks[k],
                 samples=samples[k],
-                properties=dummy_property,
+                properties=dummy_property.to(device=device),
                 components=[components_i[li], components_j[lj]],
             )
         )
     return TensorMap(
         Labels(
             ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
-            torch.tensor(new_keys),
+            torch.tensor(new_keys, device=device),
         ),
         new_blocks,
     )

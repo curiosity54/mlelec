@@ -68,6 +68,8 @@ class MLDataset:
         apply_condon_shortley: Optional[bool] = False,
         aux_overlap_realspace: Optional[Union[List, torch.Tensor]] = None,
         aux_overlap_kspace: Optional[torch.Tensor] = None,
+        aux_fock_realspace: Optional[Union[List, torch.Tensor]] = None,
+        aux_fock_kspace: Optional[torch.Tensor] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -93,6 +95,8 @@ class MLDataset:
         self.apply_condon_shortley = apply_condon_shortley
         self.aux_overlap_realspace = aux_overlap_realspace
         self.aux_overlap_kspace = aux_overlap_kspace
+        self.aux_fock_realspace = aux_fock_realspace
+        self.aux_fock_kspace = aux_fock_kspace
 
         self._compute_model_metadata()
 
@@ -511,6 +515,14 @@ class MLDataset:
                 if self.qmdata.fock_realspace is not None
                 else None
             )
+            self.aux_fock_realspace = (
+                [
+                    apply_fixes(T, frames[i], self.model_basis)
+                    for i, T in enumerate(self.aux_fock_realspace)
+                ]
+                if self.aux_fock_realspace is not None
+                else None
+            )
             self.overlap_realspace = (
                 [
                     apply_fixes(T, frames[i], self.qmdata.basis)
@@ -538,6 +550,17 @@ class MLDataset:
                     for i, d in enumerate(self.qmdata.fock_realspace)
                 ]
                 if self.qmdata.fock_realspace is not None
+                else None
+            )
+            self.aux_fock_realspace = (
+                [
+                    dict(
+                        (k, apply_fixes(v, frames[i], self.model_basis))
+                        for k, v in d.items()
+                    )
+                    for i, d in enumerate(self.aux_fock_realspace)
+                ]
+                if self.aux_fock_realspace is not None
                 else None
             )
             self.overlap_realspace = (
@@ -576,6 +599,20 @@ class MLDataset:
                     for i, d in enumerate(self.qmdata.fock_kspace)
                 ]
                 if self.qmdata.fock_kspace is not None
+                else None
+            )
+            self.aux_fock_kspace = (
+                [
+                    torch.stack(
+                        list(
+                            map(
+                                lambda k: apply_fixes(k, frames[i], self.model_basis), d
+                            )
+                        )
+                    )
+                    for i, d in enumerate(self.aux_fock_kspace)
+                ]
+                if self.aux_fock_kspace is not None
                 else None
             )
             self.overlap_kspace = (
@@ -642,7 +679,11 @@ class MLDataset:
         ), f"k-space {name} not available for molecules."
         basis = self.qmdata.basis
         if name == "fockkspace":
-            tensor_list = self.fock_kspace
+            if self.aux_fock_kspace is None:
+                tensor_list = self.fock_kspace
+            else:
+                tensor_list = self.aux_fock_kspace
+                basis = self.model_basis
         elif name == "overlapkspace":
             if self.aux_overlap_kspace is None:
                 tensor_list = self.overlap_kspace
@@ -925,7 +966,10 @@ class MLDataset:
         if return_eigenvectors:
             to_return.append(eigenvectors)
 
-        return tuple(to_return)
+        if len(to_return) == 1:
+            return to_return[0]
+        else:
+            return tuple(to_return)
 
     def group_and_join(
         self,

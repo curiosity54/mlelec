@@ -179,7 +179,7 @@ def parity_plot(target, prediction):
     pass
 
 
-def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
+def plot_bands_frame(HT, idx, qmdata, overlaps=None, fig=None, ax=None, **kwargs):
     from xitorch import LinearOperator
     from xitorch.linalg import symeig
 
@@ -207,7 +207,11 @@ def plot_bands_frame(HT, idx, qmdata, fig=None, ax=None, **kwargs):
     kpts_rel = [kpath["explicit_kpoints_rel"]] * len(qmdata)
 
     Hk = qmdata.bloch_sum([HT], structure_ids=[idx], kpts_rel=kpts_rel)
-    ST = qmdata.overlap_realspace[idx]
+    if overlaps is None:
+        ST = qmdata.overlap_realspace[idx]
+    else:
+        ST = overlaps[idx]
+
     Sk = qmdata.bloch_sum([ST], structure_ids=[idx], kpts_rel=kpts_rel)
 
     Hk_ = torch.stack(Hk).detach()

@@ -1,10 +1,9 @@
 # ACDC style 1,2 centered features from rascaline
 # depending on the target decide what kind of features must be computed
 import warnings
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 
 import ase
-import metatensor  # FIXME: remove once the sort bug is solved
 import metatensor.torch as mts
 import numpy as np
 import rascaline.torch
@@ -13,7 +12,7 @@ from metatensor.torch import Labels, TensorBlock, TensorMap
 from rascaline.torch import SphericalExpansion
 from rascaline.torch import SphericalExpansionByPair as PairExpansion
 
-from mlelec.data.dataset import MLDataset
+# from mlelec.data.mldataset import MLDataset
 from mlelec.features.acdc_utils import (
     _pca,
     acdc_standardize_keys,
@@ -562,7 +561,7 @@ def twocenter_hermitian_features(
     )
 
 
-def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
+def compute_features_for_target(dataset: Any, device=None, **kwargs):
     hypers = kwargs.get("hypers", None)
     # if dataset.molecule_data.pbc:
     if hypers is None:

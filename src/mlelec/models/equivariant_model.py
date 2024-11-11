@@ -1,5 +1,5 @@
 import warnings
-from typing import List, Union
+from typing import List, Union, Optional
 
 import metatensor.torch as mts
 import numpy as np
@@ -74,7 +74,8 @@ class simpleMLP(nn.Module):
         activation: Union[str, callable] = None,
         bias: bool = False,
         device=None,
-        apply_layer_norm=False,
+        apply_layer_norm: Optional[bool] = False,
+        scaling_factor: Optional[float] = None,
     ):
         super().__init__()
         self.device = device or "cpu"
@@ -115,6 +116,14 @@ class simpleMLP(nn.Module):
 
             # Convert list of layers to a Sequential model
             self.mlp = nn.Sequential(*layers).to(self.device)
+
+            if scaling_factor is not None:
+                with torch.no_grad():  # Prevent autograd from tracking this operation
+                    for layer in self.mlp:
+                        if isinstance(layer, nn.Linear):
+                            layer.weight.data *= scaling_factor
+                            if layer.bias is not None:
+                                layer.bias.data *= scaling_factor
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.mlp(x)
@@ -288,6 +297,7 @@ class EquivariantModel(nn.Module):
         activation: Union[str, callable] = "SiLU",
         apply_norm: bool = True,
         set_bias: bool = True,
+        weights_scaling_factor: float = None,
         **kwargs,
     ):
         super().__init__()
@@ -302,6 +312,7 @@ class EquivariantModel(nn.Module):
         self.device = mldata.device
         self.dummy_property = self.target_blocks[0].properties
         self.set_bias = set_bias
+        self.scaling_factor = weights_scaling_factor
         self._initialize_submodels(
             set_bias=self.set_bias,
             nhidden=nhidden,
@@ -339,6 +350,7 @@ class EquivariantModel(nn.Module):
                     bias=bias,
                     activation=activation,
                     apply_layer_norm=self.apply_norm,
+                    scaling_factor=self.scaling_factor,
                 )
             )
 

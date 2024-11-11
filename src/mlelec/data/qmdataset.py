@@ -14,10 +14,15 @@ from mlelec.utils.pbc_utils import inverse_fourier_transform
 
 warnings.simplefilter("always", DeprecationWarning)
 
+# TODO
+# Have separate interfaces for different codes/file formats and abstract away
+# instead of having multiple if statements
+
 
 class QMDataset:
     """
-    Class containing information about the quantum chemistry calculation and its results.
+    Class containing information about the quantum chemistry calculation and its
+    results.
     """
 
     def __init__(
@@ -34,10 +39,14 @@ class QMDataset:
         dimension: int = 3,
         fix_p_orbital_order: bool = False,
         apply_condon_shortley: bool = False,
+        initialize_pyscf: bool = False,
     ):
         if fix_p_orbital_order or apply_condon_shortley:
             warnings.warn(
-                "The `fix_p_orbital_order` and `apply_condon_shortley` options have been moved to MLDataset.",
+                (
+                    "The `fix_p_orbital_order` and `apply_condon_shortley` "
+                    "options have been moved to MLDataset."
+                ),
                 DeprecationWarning,
             )
 
@@ -51,7 +60,8 @@ class QMDataset:
         self._nao = self._set_nao()
         self._ncore = self._set_ncore()
 
-        self._initialize_pyscf_objects()
+        if initialize_pyscf or not self.is_molecule:
+            self._initialize_pyscf_objects()
 
         self._set_matrices(
             fock_realspace=fock_realspace,
@@ -98,16 +108,22 @@ class QMDataset:
 
         Args:
             frames_path (str): Path to the file containing the frames.
-            fock_realspace_path (Optional[str]): Path to the file containing the Fock realspace matrices.
-            fock_kspace_path (Optional[str]): Path to the file containing the Fock kspace matrices.
-            overlap_realspace_path (Optional[str]): Path to the file containing the overlap realspace matrices.
-            overlap_kspace_path (Optional[str]): Path to the file containing the overlap kspace matrices.
-            kmesh_path (Optional[str]): Path to the file containing the kmeshes for periodic calculations.
+            fock_realspace_path (Optional[str]): Path to the file containing the
+            Fock realspace matrices.
+            fock_kspace_path (Optional[str]): Path to the file containing the
+            Fock kspace matrices.
+            overlap_realspace_path (Optional[str]): Path to the file containing the
+            overlap realspace matrices.
+            overlap_kspace_path (Optional[str]): Path to the file containing the
+            overlap kspace matrices.
+            kmesh_path (Optional[str]): Path to the file containing the kmeshes for
+            periodic calculations.
             device (str): Device to use for the dataset.
             orbs_name (str): Basis set name.
             orbs (List): Basis set orbitals.
             dimension (int): Dimension of the system.
-            frame_slice (Optional[Union[slice, str]]): Slice object or string to select a subset of frames and matrices.
+            frame_slice (Optional[Union[slice, str]]): Slice object or string to select
+            a subset of frames and matrices.
 
         Returns:
             QMDataset: An instance of QMDataset with loaded frames and matrices.
@@ -320,45 +336,6 @@ class QMDataset:
         else:
             return matrix.to(device)
 
-    # def load_matrix(file_path: str, device: str) -> Union[Dict, List, torch.Tensor]:
-    #     """
-    #     Load a matrix from a file.
-
-    #     Args:
-    #         file_path (str): Path to the file containing the matrix.
-    #         device (str): Device to use for the matrix.
-
-    #     Returns:
-    #         Union[Dict, List, torch.Tensor]: Loaded matrix.
-    #     """
-    #     if file_path.endswith('.pt'):
-    #         matrix = torch.load(file_path, map_location=device)
-    #     elif file_path.endswith('.npy'):
-    #         matrix = np.load(file_path, allow_pickle=True)
-    #         if isinstance(matrix, np.ndarray) and matrix.dtype == object:
-    #             # Ragged array or list of dictionaries
-    #             try:
-    #                 # Dictionary
-    #                 matrix = matrix.tolist()
-    #             except:
-    #                 raise ValueError(f"Unsupported file type: {file_path}")
-
-    #     elif file_path.endswith('.hkl') or file_path.endswith('.hickle'):
-    #         matrix = hkl.load(file_path)
-    #     else:
-    #         raise ValueError(f"Unsupported file type: {file_path}")
-
-    #     if isinstance(matrix, dict):
-    #         return {k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in matrix.items()}
-    #     elif isinstance(matrix, list) and isinstance(matrix[0], dict):
-    #         return [{k: torch.tensor(v, device=device) if isinstance(v, np.ndarray) else v.to(device) for k, v in sub_matrix.items()} for sub_matrix in matrix]
-    #     elif isinstance(matrix, list):
-    #         return [torch.tensor(m, device=device) if isinstance(m, np.ndarray) else m.to(device) for m in matrix]
-    #     elif isinstance(matrix, np.ndarray):
-    #         return torch.from_numpy(matrix).to(device)
-    #     else:
-    #         return matrix.to(device)
-
     @property
     def device(self) -> str:
         return self._device
@@ -422,7 +399,10 @@ class QMDataset:
         if isinstance(kmesh[0], list):
             if len(kmesh) != self.nstructs:
                 raise ValueError(
-                    "If kmesh is a list of lists, it must have the same length as the number of structures"
+                    (
+                        "If kmesh is a list of lists, it must have the same"
+                        " length as the number of structures"
+                    )
                 )
             return kmesh
         else:
@@ -449,13 +429,13 @@ class QMDataset:
             nmin = np.min(basis[:, 0])
             ncore[s] = 0
             for n in np.arange(nmin):
-                for l in range(n):
-                    ncore[s] += 2 * (2 * l + 1)
+                for l_ in range(n):
+                    ncore[s] += 2 * (2 * l_ + 1)
             llist = set(basis[np.argwhere(basis[:, 0] == nmin)][:, 0, 1])
             llist_nmin = set(range(max(llist) + 1))
             l_diff = llist_nmin - llist
-            for l in l_diff:
-                ncore[s] += 2 * (2 * l + 1)
+            for l_ in l_diff:
+                ncore[s] += 2 * (2 * l_ + 1)
         return ncore
 
     def _initialize_pyscf_objects(self):
@@ -485,8 +465,8 @@ class QMDataset:
   to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
                 * len(self)
             )
-        except:
-            sys.stderr.write(_stderr_capture.getvalue())
+        except Exception as exception:
+            sys.stderr.write(f"{exception}: {_stderr_capture.getvalue()}")
 
         return cells
 
@@ -505,8 +485,8 @@ class QMDataset:
   to remove the diffused Gaussians whose exponents are less than 0.1.\n\n"""
                 * len(self)
             )
-        except:
-            sys.stderr.write(_stderr_capture.getvalue())
+        except Exception as exception:
+            sys.stderr.write(f"{exception}: {_stderr_capture.getvalue()}")
         return mols
 
     @property

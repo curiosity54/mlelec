@@ -18,27 +18,10 @@ def compute_eigenvalues(As, Ms, return_eigenvectors=False):
     eigenvectors_list = []
 
     for ifr, (A, M) in enumerate(zip(As, Ms)):
-        # shape = A.shape
-        # leading_shape = shape[:-2]
-        # indices = itertools.product(*[range(dim) for dim in leading_shape])
-
-        # eigenvalues = torch.empty(leading_shape + (shape[-1],), dtype=torch.float64)
-        # eigenvectors = torch.empty(leading_shape + (shape[-1], shape[-1]),
-        #  dtype=torch.complex128) if return_eigenvectors else None
-
         Ax = xitorch.LinearOperator.m(A)
         Mx = xitorch.LinearOperator.m(M)
 
         eigenvalues, eigenvectors = symeig(Ax, M=Mx)
-
-        # for index in indices:
-        #     print(index)
-        #     Ax = xitorch.LinearOperator.m(A[index])
-        #     Mx = xitorch.LinearOperator.m(M[index]) if M is not None else None
-        #     eigvals, eigvecs = symeig(Ax, M=Mx)
-        #     eigenvalues[index] = eigvals
-        #     if return_eigenvectors:
-        #         eigenvectors[index] = eigvecs
 
         eigenvalues_list.append(eigenvalues)
         if return_eigenvectors:
@@ -51,19 +34,23 @@ def compute_eigenvalues(As, Ms, return_eigenvectors=False):
     )
 
 
-def compute_atom_resolved_density(eigenvectors, frames, basis, ncore, overlaps=None):
+def compute_atom_resolved_density(
+    eigenvectors, frames, basis, ncore, overlaps=None, is_dm1=False
+):
     ard = []
     rhos = []
 
     use_S = overlaps is not None
 
     for i, (C, frame) in enumerate(zip(eigenvectors, frames)):
+
         ncore_val = sum(ncore[s] for s in frame.numbers)
         nelec = sum(frame.numbers) - ncore_val
 
-        split_idx = [len(basis[s]) for s in frame.numbers]
-        needed = len(np.unique(split_idx)) > 1
-        max_dim = np.max(split_idx)
+        if is_dm1:
+            dm1 = torch.einsum("...in,...jn,...jk->ik...", C, overlaps[i], C.conj())
+            fact = nelec / torch.einsum("ij...,...ji", dm1, overlaps[i])
+            dm1 = fact * dm1
 
         occ = torch.tensor([2 if i < nelec // 2 else 0 for i in range(C.shape[-1])]).to(
             dtype=C.dtype
@@ -73,6 +60,10 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore, overlaps=N
             rho = torch.einsum("n,...in,...jn,...jk->ik...", occ, C, C.conj(), S)
         else:
             rho = torch.einsum("n,...in,...jn->ij...", occ, C, C.conj())
+
+        split_idx = [len(basis[s]) for s in frame.numbers]
+        needed = len(np.unique(split_idx)) > 1
+        max_dim = np.max(split_idx)
 
         slices = torch.split(rho, split_idx, dim=0)
         blocks = [torch.split(slice_, split_idx, dim=1) for slice_ in slices]
@@ -86,9 +77,12 @@ def compute_atom_resolved_density(eigenvectors, frames, basis, ncore, overlaps=N
                 squared_blocks.append(squared_block)
             blocks_flat = squared_blocks
 
-        ard.append(
-            torch.einsum("i...->...i", (torch.stack(blocks_flat) ** 2).sum(dim=(1, 2)))
+        ard_frame = torch.einsum(
+            "i...->...i", (torch.stack(blocks_flat) ** 2).sum(dim=(1, 2))
         )
+        a_ = ard_frame.reshape(len(frame), len(frame))
+        ard_frame = (a_ + a_.T).flatten()
+        ard.append(ard_frame)
         # ard.append(torch.einsum('i...->...i',
         # torch.stack(blocks_flat).norm(dim=(1,2))))
         rhos.append(torch.einsum("ij...->...ij", rho))
@@ -105,6 +99,7 @@ def compute_dipoles(
     basis_name=None,
     requires_grad=True,
     unfix=True,
+    is_dm1=False,
 ):
     if mols is not None:
         num = len(mols)
@@ -130,24 +125,25 @@ def compute_dipoles(
         assert basis is not None, "basis is required when unfixing orbital order"
         focks = unfix_orbital_order(focks, frames, basis)
 
-    for H, S, mol in zip(focks, overlaps, mols):
+    for H, S, mol, frame in zip(focks, overlaps, mols, frames):
         mf = hf_ad.SCF(mol)
-        mo_energy, mo_coeff = mf.eig(H, S)
-        # mo_energy, mo_coeff = symeig(xitorch.LinearOperator.m(H),
-        # M=xitorch.LinearOperator.m(S))
-        # print(requires_grad)
-        # print('mo_energy', mo_energy)
-        # print('mo_coeff', mo_coeff)
-        if not requires_grad:
-            mo_energy = mo_energy.detach()
-            mo_coeff = mo_coeff.detach()
 
-        mo_energy = mo_energy.to(device=device)
-        mo_coeff = mo_coeff.to(device=device)
-        mo_occ = mf.get_occ(mo_energy)
-        mo_occ = ops.convert_to_tensor(mo_occ).to(device=device)
+        if is_dm1:
+            dm1 = H @ S @ H.T.conj()
+            nelec = frame.numbers.sum()
+            fact = nelec / torch.trace(dm1 @ S)
+            dm1 = fact * dm1
+        else:
+            mo_energy, mo_coeff = mf.eig(H, S)
+            if not requires_grad:
+                mo_energy = mo_energy.detach()
+                mo_coeff = mo_coeff.detach()
+            mo_energy = mo_energy.to(device=device)
+            mo_coeff = mo_coeff.to(device=device)
+            mo_occ = mf.get_occ(mo_energy)
+            mo_occ = ops.convert_to_tensor(mo_occ).to(device=device)
+            dm1 = mf.make_rdm1(mo_coeff, mo_occ).to(device=device)
 
-        dm1 = mf.make_rdm1(mo_coeff, mo_occ).to(device=device)
         dip = mf.dip_moment(dm=dm1, verbose=0).to(device=device)
 
         if requires_grad:

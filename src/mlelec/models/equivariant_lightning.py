@@ -1,7 +1,7 @@
 # equivariant_nonlinear_lightning.py
 
 from abc import ABC, abstractmethod
-from typing import Union
+from typing import Union, List
 
 import lightning as pl
 import numpy as np
@@ -16,7 +16,7 @@ from mlelec.data.derived_properties import (
 import metatensor.torch as mts
 
 from mlelec.data.mldataset import MLDataset
-from mlelec.models.equivariant_model import EquivariantModel
+from mlelec.models.equivariant_model import EquivariantModel as _EquivariantModel
 from mlelec.utils.pbc_utils import blocks_to_matrix
 
 
@@ -85,9 +85,6 @@ class MSELoss(BaseLoss):
         """L2 loss function"""
         if isinstance(predictions, torch.Tensor):
             assert isinstance(targets, torch.Tensor)
-            # assert (
-            #     predictions.shape == targets.shape
-            # ), "Prediction and targets must have the same shape"
             diff = compute_difference(predictions, targets)
             return torch.norm(diff) ** 2
 
@@ -131,7 +128,7 @@ class RMSE(BaseLoss):
             ), "Prediction and targets must have the same shape"
             # return torch.norm(predictions - targets) ** 2
             diff = compute_difference(predictions, targets)
-            return np.sqrt(torch.mean(diff * diff.conj()).detach())
+            return torch.sqrt(torch.mean(diff * diff.conj()).detach())
 
         elif isinstance(predictions, torch.ScriptObject):
             if predictions._type().name() == "TensorMap":
@@ -172,7 +169,7 @@ class CustomDerivedLoss(BaseLoss):
         return torch.mean(torch.square(derived_diff))
 
 
-class LitEquivariantModel(pl.LightningModule):
+class EquivariantModel(pl.LightningModule):
     def __init__(
         self,
         mldata,
@@ -189,18 +186,23 @@ class LitEquivariantModel(pl.LightningModule):
         loss_fn: BaseLoss = MSELoss(),
         is_indirect: bool = False,
         adaptive_loss_weights: bool = False,
+        weights_scaling_factor: float = None,
         init_from_ridge: bool = False,
+        blocks_for_ridge=None,  # TODO:TensorMap
+        ridge_alphas: Union[np.ndarray, List[float], float] = np.logspace(-10, 0, 10),
+        target_dm1: bool = False,
         **kwargs,
     ):
         super().__init__()
         self.automatic_optimization = False
-        self.model = EquivariantModel(
+        self.model = _EquivariantModel(
             mldata=mldata,
             nhidden=nhidden,
             nlayers=nlayers,
             activation=activation,
             apply_norm=apply_norm,
             set_bias=set_bias,
+            weights_scaling_factor=weights_scaling_factor,
             **kwargs,
         )
         self.model = self.model.double()
@@ -208,10 +210,11 @@ class LitEquivariantModel(pl.LightningModule):
             assert nlayers == 0, (
                 "`nlayers` must be zero to initialize weights " "from Ridge regression"
             )
-            self.model.init_with_ridge_weights(
-                mts.sort(mldata.group_and_join(mldata.train_dataset).fock_blocks),
-                alphas=kwargs.get("alphas", np.logspace(-10, 0, 10)),
-            )
+            if blocks_for_ridge is None:
+                blocks_for_ridge = mts.sort(
+                    mldata.group_and_join(mldata.train_dataset).fock_blocks
+                )
+            self.model.init_with_ridge_weights(blocks_for_ridge, alphas=ridge_alphas)
 
         self.metadata = mldata.model_metadata
         self.learning_rate = learning_rate
@@ -238,25 +241,31 @@ class LitEquivariantModel(pl.LightningModule):
 
         self.is_indirect = is_indirect
         self.optimizer = optimizer
-        self.save_hyperparameters(
-            {
-                "nhidden": nhidden,
-                "nlayers": nlayers,
-                "activation": activation,
-                "apply_norm": apply_norm,
-                "learning_rate": learning_rate,
-                "loss_fn": type(loss_fn).__name__,
-                "is_indirect": is_indirect,
-                **kwargs,  # Add other necessary arguments if they are pickleable
-            }
-        )
+        # self.save_hyperparameters(
+        #     {
+        #         "nhidden": nhidden,
+        #         "nlayers": nlayers,
+        #         "activation": activation,
+        #         "apply_norm": apply_norm,
+        #         "learning_rate": learning_rate,
+        #         "loss_fn": type(loss_fn).__name__,
+        #         "is_indirect": is_indirect,
+        #         **kwargs,  # Add other necessary arguments if they are pickleable
+        #     }
+        # )
+
+        self.target_dm1 = target_dm1
 
     def forward(self, features, target_blocks=None, return_matrix=False):
         return self.model(features, target_blocks, return_matrix)
 
     def configure_optimizers(self):
         if self.optimizer.lower() == "adam":
-            optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+            optimizer = torch.optim.Adam(
+                self.parameters(),
+                lr=self.learning_rate,
+                weight_decay=1e-5,
+            )
             scheduler = {
                 "scheduler": ReduceLROnPlateau(
                     optimizer,
@@ -277,9 +286,18 @@ class LitEquivariantModel(pl.LightningModule):
                 history_size=10,
                 line_search_fn="strong_wolfe",
             )
-            return [
-                optimizer
-            ]  # Return only the optimizer since no scheduler is defined here
+            scheduler = {
+                "scheduler": ReduceLROnPlateau(
+                    optimizer,
+                    patience=self.lr_scheduler_patience,
+                    factor=self.lr_scheduler_factor,
+                    min_lr=self.lr_scheduler_min_lr,
+                ),
+                "monitor": "train_loss",
+                "interval": "epoch",
+                "frequency": 1,
+            }
+            return [optimizer], [scheduler]
 
     def training_step(self, batch, batch_idx):
         optimizer = self.optimizers()  # Retrieve the optimizer object
@@ -289,11 +307,7 @@ class LitEquivariantModel(pl.LightningModule):
             optimizer.zero_grad()
 
             features = batch.features
-            targets = batch.fock_blocks
             predictions = self.forward(features, self.metadata)
-            # print(features[0].samples)
-            # print(predictions[0].samples)
-            # print(batch.sample_id)
 
             if self.is_indirect:
                 target_properties = [
@@ -304,15 +318,29 @@ class LitEquivariantModel(pl.LightningModule):
                     if self.is_molecule
                     else batch.overlap_kspace
                 )
+
+                if self.is_molecule:
+                    try:
+                        baseline = batch.fock_realspace
+                    except AttributeError:
+                        baseline = None
+                else:
+                    try:
+                        baseline = batch.fock_kspace
+                    except AttributeError:
+                        baseline = None
+
                 derived_predictions = self.compute_derived_predictions(
                     predictions,
                     batch_sample_id=batch.sample_id,
                     overlaps=overlaps,
                     target_properties=target_properties,
+                    baseline=baseline,
                 )
 
                 loss = self.compute_weighted_loss(derived_predictions, batch)
             else:
+                targets = batch.fock_blocks
                 loss = self.loss_fn.compute(predictions, targets)
 
             # Perform backward pass
@@ -327,6 +355,8 @@ class LitEquivariantModel(pl.LightningModule):
             # For other optimizers, manually call the closure and perform the step
             loss = closure()
             optimizer.step()
+
+        self.total_train_loss = loss
 
         self.log(
             "train_loss",
@@ -354,12 +384,16 @@ class LitEquivariantModel(pl.LightningModule):
                 self.current_weights = adaptive_weighting_scheme(
                     epoch_losses, self.previous_epoch_losses
                 )
-
             self.previous_epoch_losses = epoch_losses.clone()
+            epoch_losses = epoch_losses.sum()
+        else:
+            epoch_losses = self.total_train_loss
+
+        sch = self.lr_schedulers()
+        sch.step(epoch_losses)
 
     def validation_step(self, batch, batch_idx):
         features = batch.features
-        targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
         # print(features[0].samples)
         # print(predictions[0].samples)
@@ -385,6 +419,7 @@ class LitEquivariantModel(pl.LightningModule):
                 derived_predictions, batch, compute_metrics=True
             )
         else:
+            targets = batch.fock_blocks
             loss = self.loss_fn.compute(predictions, targets)
 
         self.log(
@@ -413,7 +448,6 @@ class LitEquivariantModel(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         features = batch.features
-        targets = batch.fock_blocks
         predictions = self.forward(features, self.metadata)
 
         if self.is_indirect:
@@ -434,6 +468,7 @@ class LitEquivariantModel(pl.LightningModule):
                 derived_predictions, batch, compute_metrics=True
             )
         else:
+            targets = batch.fock_blocks
             loss = self.loss_fn.compute(predictions, targets)
 
         self.log(
@@ -513,6 +548,8 @@ class LitEquivariantModel(pl.LightningModule):
         frames_dict = {A: f for A, f in zip(batch_sample_id, batch_frames)}
         S = kwargs.get("overlaps", None)
 
+        baseline = kwargs.get("baseline", None)
+
         HT = blocks_to_matrix(
             predictions,
             basis,
@@ -524,26 +561,37 @@ class LitEquivariantModel(pl.LightningModule):
         # TODO: The next line needs to be handled inside blocks_to_matrix!
         if self.is_molecule:
             H = [h[0, 0, 0] for h in HT]
-            # S = batch.overlap_realspace
+            if baseline is not None:
+                H = [h0[0, 0, 0] + h for h0, h in zip(baseline, H)]
         else:
             # Bloch sums. TODO: Not very nice to use QMDataset methods here?
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
-            # H = [H[i] for i in batch.sample_id]
-            # S = batch.overlap_kspace
+            if baseline is not None:
+                H = [h0 + h for h0, h in zip(baseline, H)]
 
         to_return = {}
         target_properties = kwargs.get("target_properties", [])
         for property in target_properties:
+
+            # TODO
             eigenvalues, eigenvectors = compute_eigenvalues(
                 H, S, return_eigenvectors=True
             )
+
             if property == "eigenvalues":
+                assert not self.target_dm1, (
+                    "eigenvalues not avaialble for " "density matrix model"
+                )
                 to_return["eigenvalues"] = eigenvalues
             elif (
                 property.lower() == "atom_resolved_density" or property.lower() == "ard"
             ):
                 atom_resolved_density, _ = compute_atom_resolved_density(
-                    eigenvectors, batch_frames, basis, ncore
+                    eigenvectors,
+                    batch_frames,
+                    basis,
+                    ncore,
+                    overlaps=S,
                 )
                 to_return["atom_resolved_density"] = atom_resolved_density
             elif property.lower() == "dipoles":
