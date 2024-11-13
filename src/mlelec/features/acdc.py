@@ -664,7 +664,7 @@ def compute_features(
     hfeat = mts.slice(
         hfeat,
         axis="samples",
-        labels=Labels(
+        selection=Labels(
             ["structure"], torch.arange(len(dataset.structures)).reshape(-1, 1)
         ),
     )
