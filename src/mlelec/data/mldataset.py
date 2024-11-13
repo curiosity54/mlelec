@@ -70,6 +70,7 @@ class MLDataset:
         aux_overlap_kspace: Optional[torch.Tensor] = None,
         aux_fock_realspace: Optional[Union[List, torch.Tensor]] = None,
         aux_fock_kspace: Optional[torch.Tensor] = None,
+        aux_eigval_range: Optional[Tuple[int, int]] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -97,6 +98,7 @@ class MLDataset:
         self.aux_overlap_kspace = aux_overlap_kspace
         self.aux_fock_realspace = aux_fock_realspace
         self.aux_fock_kspace = aux_fock_kspace
+        self.aux_eigval_range = aux_eigval_range
 
         self._compute_model_metadata()
 
@@ -478,6 +480,12 @@ class MLDataset:
                         "properly handled in the loop."
                     )
                 )
+
+        if "eigenvalues" in items_dict and self.aux_eigval_range is not None:
+            items_dict["eigenvalues"] = [
+                torch.hstack([eigs[..., i:f] for i, f in self.aux_eigval_range])
+                for eigs in items_dict["eigenvalues"]
+            ]
 
         self.items = Items(**items_dict)
 
