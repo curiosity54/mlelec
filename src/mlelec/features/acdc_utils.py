@@ -712,7 +712,7 @@ def compute_rhoi_pca(
             block = mts.slice_block(
                 block,
                 axis="samples",
-                labels=Labels(
+                selection=Labels(
                     block.samples.names, block.samples.values[::slice_samples]
                 ),
             )
