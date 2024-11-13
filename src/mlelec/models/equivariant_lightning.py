@@ -196,6 +196,7 @@ class EquivariantModel(pl.LightningModule):
     ):
         super().__init__()
         self.automatic_optimization = False
+        self.is_integrated = is_integrated
         self.model = _EquivariantModel(
             mldata=mldata,
             nhidden=nhidden,
@@ -204,7 +205,7 @@ class EquivariantModel(pl.LightningModule):
             apply_norm=apply_norm,
             set_bias=set_bias,
             weights_scaling_factor=weights_scaling_factor,
-            is_integrated=is_integrated,
+            is_integrated=self.is_integrated,
             **kwargs,
         )
         self.model = self.model.double()
@@ -553,7 +554,11 @@ class EquivariantModel(pl.LightningModule):
         baseline = kwargs.get("baseline", None)
 
         HT = blocks_to_matrix(
-            predictions,
+            (
+                predictions.keys_to_properties(["n_i", "l_i", "n_j", "l_j"])
+                if not self.is_integrated
+                else predictions
+            ),
             basis,
             frames_dict,
             device=self.device,
