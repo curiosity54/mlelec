@@ -317,7 +317,7 @@ class MLDataset:
         return mts.slice(
             y,
             axis="samples",
-            labels=Labels(names=["structure"], values=indices.reshape(-1, 1)),
+            selection=Labels(names=["structure"], values=indices.reshape(-1, 1)),
         )
 
     def _split_indices(self):

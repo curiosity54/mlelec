@@ -171,12 +171,14 @@ def acdc_standardize_keys(descriptor, drop_pair_id=True):
         ]
 
         sample_names = [
-            "center"
-            if b == "first_atom" or b == "atom"
-            else (
-                "neighbor"
-                if b == "second_atom"
-                else ("structure" if b == "system" else b)
+            (
+                "center"
+                if b == "first_atom" or b == "atom"
+                else (
+                    "neighbor"
+                    if b == "second_atom"
+                    else ("structure" if b == "system" else b)
+                )
             )
             for b in block.samples.names
         ]
@@ -712,7 +714,7 @@ def compute_rhoi_pca(
             block = mts.slice_block(
                 block,
                 axis="samples",
-                labels=Labels(
+                selection=Labels(
                     block.samples.names, block.samples.values[::slice_samples]
                 ),
             )

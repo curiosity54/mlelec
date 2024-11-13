@@ -83,7 +83,7 @@ def rotated_matrices(
             b0 = mts.slice_block(
                 b,
                 axis="samples",
-                labels=mts.Labels(["structure"], torch.tensor([idx]).reshape(1, 1)),
+                selection=mts.Labels(["structure"], torch.tensor([idx]).reshape(1, 1)),
             )
             wd = _wigner_d_real(L, *rot)
             block_values = torch.einsum("ab,sbp->sap", wd, b0.values)
