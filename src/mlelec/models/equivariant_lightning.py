@@ -184,6 +184,7 @@ class EquivariantModel(pl.LightningModule):
         lr_scheduler_factor: float = 0.8,
         lr_scheduler_min_lr: float = 1e-6,
         loss_fn: BaseLoss = MSELoss(),
+        is_integrated: bool = False,
         is_indirect: bool = False,
         adaptive_loss_weights: bool = False,
         weights_scaling_factor: float = None,
@@ -203,6 +204,7 @@ class EquivariantModel(pl.LightningModule):
             apply_norm=apply_norm,
             set_bias=set_bias,
             weights_scaling_factor=weights_scaling_factor,
+            is_integrated=is_integrated,
             **kwargs,
         )
         self.model = self.model.double()

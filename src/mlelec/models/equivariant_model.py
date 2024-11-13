@@ -11,7 +11,10 @@ from sklearn.kernel_ridge import KernelRidge
 from sklearn.linear_model import RidgeCV
 from sklearn.model_selection import GridSearchCV
 
-from mlelec.utils.twocenter_utils import map_targetkeys_to_featkeys_integrated
+from mlelec.utils.twocenter_utils import (
+    map_targetkeys_to_featkeys_integrated,
+    map_targetkeys_to_featkeys,
+)
 
 
 class EquivariantNonLinearity(nn.Module):
@@ -298,8 +301,10 @@ class EquivariantModel(nn.Module):
         apply_norm: bool = True,
         set_bias: bool = True,
         weights_scaling_factor: float = None,
+        is_integrated: bool = False,
         **kwargs,
     ):
+
         super().__init__()
         self.feats = mldata.features
         self.target_blocks = mldata.model_metadata
@@ -313,13 +318,16 @@ class EquivariantModel(nn.Module):
         self.dummy_property = self.target_blocks[0].properties
         self.set_bias = set_bias
         self.scaling_factor = weights_scaling_factor
+        self.map_targetkeys_to_featkeys = map_targetkeys_to_featkeys
+        if is_integrated:
+            self.map_targetkeys_to_featkeys = map_targetkeys_to_featkeys_integrated
+
         self._initialize_submodels(
             set_bias=self.set_bias,
             nhidden=nhidden,
             nlayers=nlayers,
             activation=activation,
         )
-        # self.ridges = None
 
     def _initialize_submodels(self, nhidden=16, nlayers=2, activation=None, **kwargs):
         """
@@ -338,7 +346,7 @@ class EquivariantModel(nn.Module):
             nprop = b.values.shape[-1]
             out_properties.append(b.properties)
 
-            feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
+            feat = self.map_targetkeys_to_featkeys(self.feats, k)
             bias = k["L"] == 0 and self.set_bias
 
             modules.append(
@@ -380,7 +388,7 @@ class EquivariantModel(nn.Module):
 
         feat_blocks = []
         for k in keys:
-            feat_blocks.append(map_targetkeys_to_featkeys_integrated(features, k))
+            feat_blocks.append(self.map_targetkeys_to_featkeys(features, k))
         feat_map = mts.TensorMap(keys, feat_blocks)
         pred = self.model.forward(feat_map)
 
@@ -427,7 +435,7 @@ class EquivariantModel(nn.Module):
             if k["L"] == 0 and set_bias:
                 bias = True
 
-            feat = map_targetkeys_to_featkeys_integrated(self.feats, k)
+            feat = self.map_targetkeys_to_featkeys(self.feats, k)
             nsamples, ncomp, nprop = block.values.shape
             feat = _match_feature_and_target_samples(block, feat, return_idx=True)
             assert torch.all(
@@ -540,7 +548,7 @@ class EquivariantModel(nn.Module):
         for imdl, (key, tkey) in enumerate(
             zip(self.ridges.values(), target_blocks.keys)
         ):
-            feat = map_targetkeys_to_featkeys_integrated(hfeat, tkey)
+            feat = self.map_targetkeys_to_featkeys(hfeat, tkey)
             nsamples, ncomp, _ = feat.values.shape
             x = (
                 feat.values.reshape((feat.values.shape[0] * feat.values.shape[1], -1))
