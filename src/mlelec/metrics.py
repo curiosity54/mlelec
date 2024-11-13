@@ -49,9 +49,14 @@ def Eigval_loss(
 def Custom_loss():
     pass
 
-def mse_qm7(frames, pred, target):
+def mse_per_atom(frames, pred, target):
     norm_loss = []
     for i in range(len(pred)):
         norm_loss.append((torch.linalg.norm(pred[i] - target[i]))**2/(frames[i].get_global_number_of_atoms()**2))
     return torch.mean(torch.stack(norm_loss))
 
+def mse_total(frames, pred, target):
+    norm_loss = []
+    for i in range(len(pred)):
+        norm_loss.append((torch.linalg.norm(pred[i] - target[i]))**2)
+    return torch.mean(torch.stack(norm_loss))

@@ -27,7 +27,7 @@ use_native = True  # True for rascaline
 
 
 def single_center_features(
-    frames, hypers, order_nu, lcut=None, cg=None, device="cpu", **kwargs
+    frames, hypers, order_nu, lcut=None, cg=None, device="cpu", npca=None, pca_final=None, **kwargs
 ):
     """
     computes the atom-centred features for all the frames in the dataset
@@ -49,7 +49,7 @@ def single_center_features(
     """
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
-    rhoi = rhoi.keys_to_properties(["neighbor_type"])
+    rhoi = rhoi.keys_to_properties(["species_neighbor"])
     rho1i = acdc_standardize_keys(rhoi)
     if order_nu == 1:
         return drop_blocks_L(rho1i, lcut)
@@ -72,7 +72,7 @@ def single_center_features(
             device=device,
         )
         rho_prev = _pca(
-            rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None)
+            rho_x, npca, kwargs.get("slice_samples", None)
         )
 
     rho_x = cg_increment(
@@ -83,9 +83,9 @@ def single_center_features(
         other_keys_match=["species_center"],
         feature_names=kwargs.get("feature_names", None),
     )
-    if kwargs.get("pca_final", False):
+    if pca_final:
         warnings.warn("PCA final features")
-        rho_x = _pca(rho_x, kwargs.get("npca", None), kwargs.get("slice_samples", None))
+        rho_x = _pca(rho_x, npca, kwargs.get("slice_samples", None))
     return rho_x
 
 
@@ -105,6 +105,8 @@ def pair_features(
     desired_shifts=None,
     mic=False,
     return_rho0ij=False,
+    npca=None,
+    pca_final=None,
     **kwargs,
 ):
     """
@@ -389,7 +391,7 @@ def pair_features(
 
     if rhonu_i is None:
         rhonu_i = single_center_features(
-            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, kwargs=kwargs
+            frames, order_nu=order_nu_i, hypers=hypers, lcut=lcut, cg=cg, npca=npca, pca_final=pca_final, kwargs=kwargs
         )
 
     rhonu_ij = cg_combine(
@@ -400,6 +402,7 @@ def pair_features(
         lcut=lcut,
         feature_names=kwargs.get("feature_names", None),
     )
+    
     if not both_centers:
         return rhonu_ij
 
@@ -876,6 +879,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
         order_nu=kwargs.get("order_nu", 2),
         lcut=hypers["max_angular"],
         device=device,
+        npca = kwargs.get("npca", 50)
     )
     if isinstance(dataset.target, SingleCenter):
         features = single
@@ -887,11 +891,14 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
             dataset.structures,
             hypers,
             hypers_pair = hypers_pair,
+            rhonu_i=None,
+            npca = kwargs.get("npca", 50),
             order_nu=kwargs.get("order_nu_pair", 1),
             lcut=hypers_pair["max_angular"],
             feature_names=single[0].properties.names,
             device=device,
             both_centers=kwargs.get("both_centers", False),
+            pca_final=True,
         )
         features = twocenter_hermitian_features(single, pairs)
     else:
