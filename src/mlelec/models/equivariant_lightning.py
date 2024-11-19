@@ -189,7 +189,8 @@ class EquivariantModel(pl.LightningModule):
         adaptive_loss_weights: bool = False,
         weights_scaling_factor: float = None,
         init_from_ridge: bool = False,
-        blocks_for_ridge=None,  # TODO:TensorMap
+        neigs_to_match: int = None,
+        blocks_for_ridge=None,
         ridge_alphas: Union[np.ndarray, List[float], float] = np.logspace(-10, 0, 10),
         target_dm1: bool = False,
         **kwargs,
@@ -241,6 +242,8 @@ class EquivariantModel(pl.LightningModule):
             if self.is_molecule
             else mldata.items.overlap_kspace
         )
+
+        self.neigs_to_match = neigs_to_match
 
         self.is_indirect = is_indirect
         self.optimizer = optimizer
@@ -516,7 +519,14 @@ class EquivariantModel(pl.LightningModule):
 
         for k, p in derived_predictions.items():
             t = batch._asdict()[k]
-            loss_contributions.append(self.loss_fn.compute(p, t))
+            if k == "eigenvalues":
+                loss_term = self.loss_fn.compute(
+                    [pp[..., : self.neigs_to_match] for pp in p],
+                    [tt[..., : self.neigs_to_match] for tt in t],
+                )
+            else:
+                loss_term = self.loss_fn.compute(p, t)
+            loss_contributions.append(loss_term)
             if compute_metrics:
                 derived_metrics[f"rmse_{k}"] = RMSE().compute(p, t)
 
