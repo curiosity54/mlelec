@@ -548,7 +548,19 @@ class EquivariantModel(pl.LightningModule):
                 loss_term = self.loss_fn.compute(p, t)
             loss_contributions.append(loss_term)
             if compute_metrics:
-                derived_metrics[f"rmse_{k}"] = RMSE().compute(p, t)
+                if k == "eigenvalues":
+                    derived_metrics[f"rmse_{k}"] = RMSE().compute(
+                        [
+                            pp[..., : min(n, pp.shape[-1], tt.shape[-1])]
+                            for pp, tt in zip(p, t)
+                        ],
+                        [
+                            tt[..., : min(n, pp.shape[-1], tt.shape[-1])]
+                            for pp, tt in zip(p, t)
+                        ],
+                    )
+                else:
+                    derived_metrics[f"rmse_{k}"] = RMSE().compute(p, t)
 
         # Convert loss contributions to a tensor
 
@@ -595,14 +607,18 @@ class EquivariantModel(pl.LightningModule):
             detach=False,
             check_hermiticity=False,
         )
+
         # TODO: The next line needs to be handled inside blocks_to_matrix!
         if self.is_molecule:
             H = [h[0, 0, 0] for h in HT]
             if baseline is not None:
                 H = [h0[0, 0, 0] + h for h0, h in zip(baseline, H)]
         else:
-            # Bloch sums. TODO: Not very nice to use QMDataset methods here?
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
+
+            for h, h0, frame in zip(H, baseline, batch_frames):
+                print(h.shape, h0.shape, frame)
+
             if baseline is not None:
                 H = [h0 + h for h0, h in zip(baseline, H)]
 
