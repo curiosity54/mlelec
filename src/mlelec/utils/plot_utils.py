@@ -229,9 +229,10 @@ def plot_bands_frame(HT, idx, qmdata, overlaps=None, fig=None, ax=None, **kwargs
     lw = kwargs.get("lw", None)
 
     pl = []
+    neigs = kwargs.get("neigs", None)
     for x0, x1 in kpath["explicit_segments"]:
         for bs in bands:
-            for b in bs.T:
+            for b in bs.T[:neigs]:
                 (pl_,) = ax.plot(
                     x[x0:x1], b[x0:x1] * Hartree, color=color, ls=ls, lw=lw
                 )

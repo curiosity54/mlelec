@@ -70,7 +70,7 @@ class MLDataset:
         aux_overlap_kspace: Optional[torch.Tensor] = None,
         aux_fock_realspace: Optional[Union[List, torch.Tensor]] = None,
         aux_fock_kspace: Optional[torch.Tensor] = None,
-        aux_eigval_range: Optional[Tuple[int, int]] = None,
+        aux_eigval_range: Optional[Union[Tuple[int, int], str]] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -482,10 +482,32 @@ class MLDataset:
                 )
 
         if "eigenvalues" in items_dict and self.aux_eigval_range is not None:
-            items_dict["eigenvalues"] = [
-                torch.hstack([eigs[..., i:f] for i, f in self.aux_eigval_range])
-                for eigs in items_dict["eigenvalues"]
-            ]
+            if isinstance(self.aux_eigval_range, str):
+                if self.aux_eigval_range == "minimal":
+                    # Keep the occupied orbitals plus (up to) one orbital per atom
+
+                    items_dict["eigenvalues"] = [
+                        eigs[
+                            ...,
+                            : np.sum([Z - self.qmdata.ncore[Z] for Z in system.numbers])
+                            // 2
+                            + len(system),
+                        ]
+                        for eigs, system in zip(
+                            items_dict["eigenvalues"],
+                            self.qmdata.structures,
+                        )
+                    ]
+                else:
+                    raise ValueError(
+                        f"Invalid value for aux_eigval_range: {self.aux_eigval_range}"
+                    )
+
+            else:
+                items_dict["eigenvalues"] = [
+                    torch.hstack([eigs[..., i:f] for i, f in self.aux_eigval_range])
+                    for eigs in items_dict["eigenvalues"]
+                ]
 
         self.items = Items(**items_dict)
 

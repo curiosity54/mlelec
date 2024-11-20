@@ -517,12 +517,22 @@ class EquivariantModel(pl.LightningModule):
         if compute_metrics:
             derived_metrics = {}
 
+        n = 10000000
+        if self.neigs_to_match is not None:
+            n = self.neigs_to_match
+
         for k, p in derived_predictions.items():
             t = batch._asdict()[k]
             if k == "eigenvalues":
                 loss_term = self.loss_fn.compute(
-                    [pp[..., : self.neigs_to_match] for pp in p],
-                    [tt[..., : self.neigs_to_match] for tt in t],
+                    [
+                        pp[..., : min(n, pp.shape[-1], tt.shape[-1])]
+                        for pp, tt in zip(p, t)
+                    ],
+                    [
+                        tt[..., : min(n, pp.shape[-1], tt.shape[-1])]
+                        for pp, tt in zip(p, t)
+                    ],
                 )
             else:
                 loss_term = self.loss_fn.compute(p, t)
