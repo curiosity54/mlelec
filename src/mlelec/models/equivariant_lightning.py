@@ -401,9 +401,6 @@ class EquivariantModel(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         features = batch.features
         predictions = self.forward(features, self.metadata)
-        # print(features[0].samples)
-        # print(predictions[0].samples)
-        # print(batch.sample_id)
 
         if self.is_indirect:
             target_properties = [
@@ -412,11 +409,24 @@ class EquivariantModel(pl.LightningModule):
             overlaps = (
                 batch.overlap_realspace if self.is_molecule else batch.overlap_kspace
             )
+
+            if self.is_molecule:
+                try:
+                    baseline = batch.fock_realspace
+                except AttributeError:
+                    baseline = None
+            else:
+                try:
+                    baseline = batch.fock_kspace
+                except AttributeError:
+                    baseline = None
+
             derived_predictions = self.compute_derived_predictions(
                 predictions,
                 batch_sample_id=batch.sample_id,
                 overlaps=overlaps,
                 target_properties=target_properties,
+                baseline=baseline,
             )
 
             derived_metrics = {}
