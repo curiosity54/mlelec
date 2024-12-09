@@ -616,8 +616,8 @@ class EquivariantModel(pl.LightningModule):
         else:
             H = self.qmdata.bloch_sum(HT, is_tensor=True)
 
-            for h, h0, frame in zip(H, baseline, batch_frames):
-                print(h.shape, h0.shape, frame)
+            # for h, h0, frame in zip(H, baseline, batch_frames):
+            #     print(h.shape, h0.shape, frame)
 
             if baseline is not None:
                 H = [h0 + h for h0, h in zip(baseline, H)]

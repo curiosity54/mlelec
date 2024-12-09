@@ -71,6 +71,7 @@ class MLDataset:
         aux_fock_realspace: Optional[Union[List, torch.Tensor]] = None,
         aux_fock_kspace: Optional[torch.Tensor] = None,
         aux_eigval_range: Optional[Union[Tuple[int, int], str]] = None,
+        aux_eigval_baseline: Optional[float] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -99,6 +100,7 @@ class MLDataset:
         self.aux_fock_realspace = aux_fock_realspace
         self.aux_fock_kspace = aux_fock_kspace
         self.aux_eigval_range = aux_eigval_range
+        self.aux_eigval_baseline = aux_eigval_baseline
 
         self._compute_model_metadata()
 
@@ -498,6 +500,19 @@ class MLDataset:
                             self.qmdata.structures,
                         )
                     ]
+                elif self.aux_eigval_range == "occupied":
+
+                    items_dict["eigenvalues"] = [
+                        eigs[
+                            ...,
+                            : np.sum([Z - self.qmdata.ncore[Z] for Z in system.numbers])
+                            // 2,
+                        ]
+                        for eigs, system in zip(
+                            items_dict["eigenvalues"],
+                            self.qmdata.structures,
+                        )
+                    ]
                 else:
                     raise ValueError(
                         f"Invalid value for aux_eigval_range: {self.aux_eigval_range}"
@@ -508,6 +523,10 @@ class MLDataset:
                     torch.hstack([eigs[..., i:f] for i, f in self.aux_eigval_range])
                     for eigs in items_dict["eigenvalues"]
                 ]
+        if "eigenvalues" in items_dict and self.aux_eigval_baseline is not None:
+            items_dict["eigenvalues"] = [
+                eigs - self.aux_eigval_baseline for eigs in items_dict["eigenvalues"]
+            ]
 
         self.items = Items(**items_dict)
 
