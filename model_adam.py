@@ -25,22 +25,22 @@ torch.set_default_dtype(torch.float64)
 # ------------------ CHANGE THE PARAMETERS -------------
 NUM_FRAMES = 1000
 BATCH_SIZE = 100
-NUM_EPOCHS = 1000
-SHUFFLE_SEED = 1234
+NUM_EPOCHS = 600
+SHUFFLE_SEED = 0
 TRAIN_FRAC = 0.7
 TEST_FRAC = 0.1
 VALIDATION_FRAC = 0.2
 
-LR = 1e-4
+LR = 5e-4
 VAL_INTERVAL = 1
 W_EVA = 1e4
-W_DIP = 1e3
-W_POL = 1e2
+W_DIP = 0
+W_POL = 0
 DEVICE = "cpu"
 
-ORTHOGONAL = False  # set to 'FALSE' if working in the non-orthogonal basis
-FOLDER_NAME = "multitask_learn_adam_with_noise"
-NOISE = True
+ORTHOGONAL = True  # set to 'FALSE' if working in the non-orthogonal basis
+FOLDER_NAME = "FPS_new/ML_orthogonal_eva"
+NOISE = False
 # ---------------------------------------------------------
 
 os.makedirs(FOLDER_NAME, exist_ok=True)
@@ -174,25 +174,23 @@ hypers = {
     "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
 }
 hypers_pair = {
-    "cutoff": 4.0,
+    "cutoff": 5.0,
     "max_radial": 6,
     "max_angular": 4,
     "atomic_gaussian_width": 0.3,
     "center_atom_weight": 1,
     "radial_basis": {"Gto": {}},
     "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
+    #"radial_scaling": {"Willatt2018": {"scale": 2.0, "rate": 1.0, "exponent": 4}},
 }
 
-ml_data._set_features(
-    compute_features_for_target(
-        ml_data, device=DEVICE, hypers=hypers, hypers_pair=hypers_pair
-    )
-)
+features = metatensor.load("/work/cosmo/saade/qm7_1000_feats_cutoff.npz")
+features = features.to(arrays="torch")
+ml_data._set_features(features)
 
 train_dl, val_dl, test_dl = get_dataloader(
     ml_data, model_return="blocks", batch_size=BATCH_SIZE
 )
-
 
 ml_data.target_train, ml_data.target_val, ml_data.target_test = drop_zero_blocks(
     ml_data.target_train, ml_data.target_val, ml_data.target_test
@@ -205,6 +203,7 @@ ml_data.feat_train, ml_data.feat_val, ml_data.feat_test = drop_zero_blocks(
 model = LinearTargetModel(
     dataset=ml_data, nlayers=1, nhidden=16, bias=False, device=DEVICE
 )
+#model.load_state_dict(torch.load(f'{FOLDER_NAME}/model_output/model_epoch_350.pt'))
 
 pred_ridges, ridges = model.fit_ridge_analytical(
     alpha=np.logspace(-8, 3, 12),
@@ -245,8 +244,6 @@ var_polar = torch.cat(
     [ref_polar_lb[i].flatten() for i in range(len(ref_polar_lb))]
 ).var()
 
-loss_fn = getattr(mlmetrics, "mse_qm7")
-
 with io.capture_output() as captured:
     all_mfs, fockvars = instantiate_mf(
         ml_data,
@@ -256,7 +253,7 @@ with io.capture_output() as captured:
 
 best = float("inf")
 early_stop_criteria = 10
-loss_fn = getattr(mlmetrics, "mse_qm7")
+loss_fn = getattr(mlmetrics, "mse_per_atom")
 
 optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
@@ -485,12 +482,12 @@ with io.capture_output() as captured:
         orthogonal=ORTHOGONAL,
     )
 
-train_error_pol = mlmetrics.mse_qm7(
+train_error_pol = mlmetrics.mse_per_atom(
     ml_data.train_frames,
     train_polar_pred,
     ref_polar_lb[[i.item() for i in batch_indices]],
 )
-train_error_dip = mlmetrics.mse_qm7(
+train_error_dip = mlmetrics.mse_per_atom(
     ml_data.train_frames,
     train_dipole_pred,
     ref_dip_lb[[i.item() for i in batch_indices]],
@@ -498,22 +495,7 @@ train_error_dip = mlmetrics.mse_qm7(
 train_eva_ref = [
     ref_eva_lb[i][: ml_data.target.tensor[i].shape[0]] for i in batch_indices
 ]
-train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
-
-train_error_pol = mlmetrics.mse_qm7(
-    ml_data.train_frames,
-    train_polar_pred,
-    ref_polar_lb[[i.item() for i in batch_indices]],
-)
-train_error_dip = mlmetrics.mse_qm7(
-    ml_data.train_frames,
-    train_dipole_pred,
-    ref_dip_lb[[i.item() for i in batch_indices]],
-)
-train_eva_ref = [
-    ref_eva_lb[i][: ml_data.target.tensor[i].shape[0]] for i in batch_indices
-]
-train_error_eva = mlmetrics.mse_qm7(ml_data.train_frames, train_eva_pred, train_eva_ref)
+train_error_eva = mlmetrics.mse_per_atom(ml_data.train_frames, train_eva_pred, train_eva_ref)
 
 
 print(
@@ -547,10 +529,10 @@ with io.capture_output() as captured:
         orthogonal=ORTHOGONAL,
     )
 
-error_dip = mlmetrics.mse_qm7(
+error_dip = mlmetrics.mse_per_atom(
     ml_data.test_frames, test_dip_pred, ref_dip_lb[[i.item() for i in batch_indices]]
 )
-error_pol = mlmetrics.mse_qm7(
+error_pol = mlmetrics.mse_per_atom(
     ml_data.test_frames,
     test_polar_pred,
     ref_polar_lb[[i.item() for i in batch_indices]],
@@ -558,7 +540,7 @@ error_pol = mlmetrics.mse_qm7(
 test_eva_ref = [
     ref_eva_lb[i][: ml_data.target.tensor[i].shape[0]] for i in batch_indices
 ]
-error_eva = mlmetrics.mse_qm7(ml_data.test_frames, test_eva_pred, test_eva_ref)
+error_eva = mlmetrics.mse_per_atom(ml_data.test_frames, test_eva_pred, test_eva_ref)
 
 print(
     "Test RMSE on dipole from indirect learning {:.5f} A.U.".format(
@@ -575,153 +557,75 @@ print(
         torch.sqrt(error_eva).item() * Hartree
     )
 )
-error_eva_STO3G = mlmetrics.mse_qm7(
-    ml_data.test_frames, [ref_eva[i] for i in ml_data.test_idx], test_eva_ref
-)
-error_dip_STO3G = mlmetrics.mse_qm7(
-    ml_data.test_frames, ref_dip[ml_data.test_idx], ref_dip_lb[ml_data.test_idx]
-)
-error_polar_STO3G = mlmetrics.mse_qm7(
-    ml_data.test_frames, ref_polar[ml_data.test_idx], ref_polar_lb[ml_data.test_idx]
-)
 
-plt.figure()
-for predicted, target in zip(
-    test_dip_pred.detach().numpy(), ref_dip_lb[ml_data.test_idx]
-):
-    x = target
-    y = predicted
-    plt.scatter(
-        x,
-        y,
-        color="royalblue",
-        label="ML" if "ML" not in plt.gca().get_legend_handles_labels()[1] else "",
-    )
-
-# Second scatter plot
-for predicted, target in zip(ref_dip[ml_data.test_idx], ref_dip_lb[ml_data.test_idx]):
-    x = target
-    y = predicted
-    plt.scatter(
-        x,
-        y,
-        color="chocolate",
-        marker="^",
-        label=(
-            "STO-3G" if "STO-3G" not in plt.gca().get_legend_handles_labels()[1] else ""
-        ),
-    )
-
-# Line plot
-plt.plot([-2, 2], [-2, 2], linestyle="--", color="black", linewidth=1)
-
-# Labels
-plt.xlabel("Target dipoles (A.U.)")
-plt.ylabel("Predicted dipoles (A.U.)")
-
-# Text box
-rmse_ml = torch.sqrt(error_dip).item()
-rmse_sto3g = torch.sqrt(error_dip_STO3G).item()
-plt.text(
-    0.4,
-    -1.8,
-    f"$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.",
-    fontsize=10,
-    bbox=dict(facecolor="white", alpha=0.5),
+molecule_data_qm9 = MoleculeDataset(
+    mol_name = "qm9",
+    use_precomputed=True,
+    path= "examples/data/qm9",
+    aux_path="examples/data/qm9/sto-3g",
+    frame_slice=slice(0, 200), # Loads 100 frames 
+    device=DEVICE,
+    aux=["overlap", "orbitals"],
+    lb_aux=["overlap", "orbitals"],
+    target=["fock", "dipole_moment", "polarisability"],
+    lb_target=["fock", "dipole_moment", "polarisability"],
 )
 
-# Legend
-plt.legend()
-plt.savefig(f"{FOLDER_NAME}/mse_dipole_indirect.pdf", bbox_inches="tight")
-
-
-plt.figure()
-for target, predicted in zip(test_eva_ref, test_eva_pred):
-    x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
-
-    x = x[x > -100]
-    y = y[y > -100]
-    plt.scatter(
-        x,
-        y,
-        color="royalblue",
-        label="ML" if "ML" not in plt.gca().get_legend_handles_labels()[1] else "",
-    )
-
-for target, predicted in zip(test_eva_ref, [ref_eva[i] for i in ml_data.test_idx]):
-    x = target * Hartree
-    y = predicted.detach().numpy() * Hartree
-
-    x = x[x > -100]
-    y = y[y > -100]
-    plt.scatter(
-        x,
-        y,
-        color="chocolate",
-        marker="^",
-        label=(
-            "STO-3G" if "STO-3G" not in plt.gca().get_legend_handles_labels()[1] else ""
-        ),
-    )
-
-plt.plot([-35, 20], [-35, 20], linestyle="--", color="black", linewidth=1)
-plt.xlabel("Target MO Energies (eV)")
-plt.ylabel("Predicted MO Energies (eV)")
-
-rmse_ml = torch.sqrt(error_eva).item() * Hartree
-rmse_sto3g = torch.sqrt(error_eva_STO3G).item() * Hartree
-plt.text(
-    5,
-    -35,
-    f"$RMSE_{{ML}}$ = {rmse_ml:.4f} eV\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} eV.",
-    fontsize=10,
-    bbox=dict(facecolor="white", alpha=0.5),
+ml_data_qm9 = MLDataset(
+    molecule_data=molecule_data_qm9,
+    device=DEVICE,
+    model_strategy="coupled",
+    shuffle=True, 
+    shuffle_seed=SHUFFLE_SEED,
+    orthogonal=True
 )
-plt.legend()
-plt.savefig(f"{FOLDER_NAME}/mse_eva_indirect.pdf", bbox_inches="tight")
 
+ml_data_qm9._split_indices(train_frac=1, val_frac=0, test_frac=0)
 
-plt.figure()
-for predicted, target in zip(
-    test_polar_pred.detach().numpy(), ref_polar_lb[ml_data.test_idx]
-):
-    x = target
-    y = predicted
-    plt.scatter(
-        x,
-        y,
-        color="royalblue",
-        label="ML" if "ML" not in plt.gca().get_legend_handles_labels()[1] else "",
+features_qm9 = metatensor.load("/work/cosmo/saade/qm9_test_features_cutoff.npz")
+features_qm9 = features.to(arrays="torch")
+ml_data_qm9._set_features(features_qm9)
+
+with io.capture_output() as captured:
+    all_mfs_qm9, _ = instantiate_mf(
+        ml_data_qm9,
+        fock_predictions=None,
+        batch_indices=list(range(len(ml_data_qm9.structures))),
     )
+    
 
-for predicted, target in zip(
-    ref_polar[ml_data.test_idx], ref_polar_lb[ml_data.test_idx]
-):
-    x = target
-    y = predicted
-    plt.scatter(
-        x,
-        y,
-        color="chocolate",
-        marker="^",
-        label=(
-            "STO-3G" if "STO-3G" not in plt.gca().get_legend_handles_labels()[1] else ""
-        ),
-    )
-
-plt.plot([-50, 175], [-50, 175], linestyle="--", color="black", linewidth=1)
-plt.xlabel("Target polarisability (A.U.)")
-plt.ylabel("Predicted polarisability (A.U.)")
-
-rmse_ml = torch.sqrt(error_pol).item()
-rmse_sto3g = torch.sqrt(error_polar_STO3G).item()
-plt.text(
-    100,
-    -50,
-    f"$RMSE_{{ML}}$ = {rmse_ml:.4f} A.U.\n$RMSE_{{STO-3G}}$ = {rmse_sto3g:.4f} A.U.",
-    fontsize=10,
-    bbox=dict(facecolor="white", alpha=0.5),
+qm9_fock_pred_uc = model.forward(
+    ml_data_qm9.feat_train, return_type="uncoupled_blocks", batch_indices=ml_data_qm9.train_idx,
 )
-plt.legend()
-plt.savefig(f"{FOLDER_NAME}/mse_polar_indirect.pdf", bbox_inches="tight")
+qm9_fock_predictions = _to_matrix(qm9_fock_pred_uc, ml_data_qm9.train_frames, 
+                                   ml_data_qm9.train_idx, ml_data_qm9.molecule_data.aux_data["orbitals"])
+
+qm9_ref_polar = molecule_data_qm9.target["polarisability"]
+qm9_ref_dip = molecule_data_qm9.target["dipole_moment"]
+qm9_ref_eva = []
+for i in range(len(molecule_data_qm9.target["fock"])):
+    f = molecule_data_qm9.target["fock"][i]
+    s = molecule_data_qm9.aux_data["overlap"][i]
+    eig = scipy.linalg.eigvalsh(f, s)
+    qm9_ref_eva.append(torch.from_numpy(eig))
+    
+   
+with io.capture_output() as captured:
+    batch_indices = ml_data_qm9.train_idx
+   
+    qm9_dipole_pred, qm9_polar_pred, qm9_eva_pred = compute_batch_polarisability(
+        ml_data_qm9, qm9_fock_predictions, batch_indices=batch_indices, mfs=all_mfs_qm9, orthogonal=ORTHOGONAL
+    )
+
+qm9_error_pol = mlmetrics.mse_per_atom(ml_data_qm9.train_frames,
+                          qm9_polar_pred,
+                          qm9_ref_polar[[i.item() for i in batch_indices]])
+qm9_error_dip = mlmetrics.mse_per_atom(ml_data_qm9.train_frames,
+                          qm9_dipole_pred,
+                          qm9_ref_dip[[i.item() for i in batch_indices]])
+qm9_eva_ref = [qm9_ref_eva[i][:ml_data_qm9.target.tensor[i].shape[0]] for i in batch_indices]
+qm9_error_eva = mlmetrics.mse_per_atom(ml_data.train_frames, qm9_eva_pred, qm9_eva_ref)
+
+print("Test RMSE on dipole from indirect learning {:.5f} A.U.".format(torch.sqrt(qm9_error_dip).item()))
+print("Test RMSE on polar from indirect learning {:.5f} A.U.".format(torch.sqrt(qm9_error_pol).item()))
+print("Test RMSE on MO energies from indirect learning {:.5f} eV.".format(torch.sqrt(qm9_error_eva).item() * Hartree))
