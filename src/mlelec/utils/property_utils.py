@@ -226,7 +226,9 @@ def compute_polarisability_from_mf(mfs, fock_vars, overlaps, orthogonal):
                                 fock, isqrtp(ovlp))
         else:
             ovlp = overlaps[i]
+            ovlp = torch.from_numpy(mf.mol.intor("int1e_ovlp"))
 
+            
         def apply_perturb(E):
             p_fock = fock + pynp.einsum("x,xij->ij", E, ao_dip)
             mo_energy, mo_coeff = mf.eig(p_fock, ovlp)
@@ -270,11 +272,11 @@ def compute_batch_polarisability(ml_data, batch_fockvars, batch_indices, mfs, or
     if orthogonal:
         batch_overlap = None
     else:
-        batch_overlap = [apply_cutoff(ml_data.molecule_data.aux_data["overlap"][i], ml_data.structures[i], ml_data.aux_data['orbitals'], 4)
-                            for i in batch_indices]
-        #batch_overlap = [
-        #    ml_data.molecule_data.aux_data["overlap"][i]
-        #    for i in batch_indices]
+        # batch_overlap = [apply_cutoff(ml_data.molecule_data.aux_data["overlap"][i], ml_data.structures[i], ml_data.aux_data['orbitals'], 4)
+        #                     for i in batch_indices]
+        batch_overlap = [
+           ml_data.molecule_data.aux_data["overlap"][i]
+           for i in batch_indices]
         
     batch_mfs = [mfs[i] for i in batch_indices]
     dipoles, polars, eigenvalues = compute_polarisability_from_mf(batch_mfs, batch_fock, batch_overlap, orthogonal)

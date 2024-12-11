@@ -1,172 +1,244 @@
-import argparse
-import torch 
-import hickle 
-import sys
 import os
-import warnings
 
-from mlelec.train_setup import ModelTrainer
-from mlelec.data.dataset import MLDataset, MoleculeDataset, precomputed_molecules, get_dataloader
-from mlelec.features.acdc import compute_features_for_target
-from mlelec.models.linear import LinearTargetModel
-parser = argparse.ArgumentParser()
-# parser.add_argument("--device", type=str, default='cuda')
-#----data related-----
-parser.add_argument(
-    "--molecule",
-    type=str,
-    default="water",
-    help="name of molecule/dataset to train ",
-)
-parser.add_argument("--frame_begin", type=int, default=0)
-parser.add_argument("--frame_end", type=int, default=-1)
-
-parser.add_argument("--use_precomputed_data", type=bool, default=True)
-parser.add_argument("--basis", type=str, default="sto-3g", help="basis set")
-parser.add_argument(
-    "--data_folder",
-    type=str,
-    default="./data",
-    help="path to data",
-)
-parser.add_argument("--target", type=str, nargs='+', default="fock")
-parser.add_argument("--aux_data", type=str, nargs='+')
-#----- model related-------
-parser.add_argument(
-    "--model_type",
-    type=str,
-    default="acdc",
-    help="acdc, se3-transformer",
-)
-parser.add_argument("--model_strategy", type=str, default="coupled", help="coupled, uncoupled")
-
-# ---- ACDC related -------
-parser.add_argument("--feature_path", type=str, default=None)
-parser.add_argument("--nlayers", type=int, default=1)
-parser.add_argument("--nhidden", type=int, default=16)
-parser.add_argument("--nmax", type=int, default=6)
-parser.add_argument("--lmax", type=int, default=4)
-parser.add_argument("--cutoff", type=float, default=4.0)
-#---- training -------
-parser.add_argument("--train_fraction", type=float, default=0.7)
-parser.add_argument("--val_fraction", type=float, default=0.1)
-parser.add_argument("--test_fraction", type=float, default=0.2)
-parser.add_argument(
-    "--batch_size",
-    type=int,
-    default=256,
-    help="batch sized used in trianing and validation",
-)
-parser.add_argument(
-    "--learning_rate", type=float, default=2e-4, help="learning rate for Adam"
-)
-parser.add_argument("--nonlinearity", type=str, default=None, help="SiLU")
-parser.add_argument("--optimizer", type=str, default="Adam")
-parser.add_argument(
-    "--max_epochs",
-    type=int,
-    default=2500,
-    help="Max number of iterations to train the model",
-)
-#----checkpoint and logging -----
-parser.add_argument(
-    "--save_path",
-    type=str,
-    default="./logdir",
-    help=" path to save model checkpoints and predictions",
-)
-parser.add_argument(
-    "--log_interval",
-    type=int,
-    default=1000,
-    help="interval at which to calculate and log evaluation metrics",
-)
-parser.add_argument(
-    "--start_from_checkpoint",
-    type=bool,
-    default=False,
-    help="Whether to load saved checkpoint and start from there, specify checkpoint by --starting_checkpoint",
-)
-parser.add_argument("--starting_checkpoint", 
-                    type=str, default='last', help='last, best, or checkpoint number to begin')
-parser.add_argument(
-    "--save_all_checkpoints",
-    type=eval,
-    default=False,
-    help="set True to do save all checkpoints not only the best crossvalidated one",
-)
-#---- end of arguments ----
-args = parser.parse_args()
-device = "cuda" if torch.cuda.is_available() else "cpu"
-precomp_datasets = [mol.name.lower() for mol in precomputed_molecules]
-frame_slice = slice(args.frame_begin, args.frame_end)
-mol_dataset =  MoleculeDataset(mol_name= args.molecule, 
-                               frame_slice=args.frame_slice, 
-                               aux = args.aux_data, 
-                               target=args.target,
-                               use_precomputed=args.use_precomputed_data)
-
-ml_data = MLDataset(
-    molecule_data=mol_dataset,
-    model_strategy=args.model_strategy,
-    device= args.device,
-    shuffle=True,
-    shuffle_seed=5380,
-    train_frac = args.train_frac, 
-    val_frac = args.val_frac
-) 
-
-# instantiate model based on args['model_type'] -'linear', 'se3-transformer'..
-def instantiate_model(args, dataset: MLDataset, device):
-    if args.model_type == "acdc":
-        # check if features are provided
-        model = LinearTargetModel(dataset, features=features, device=device)
-
-    elif args.model_type == "se3-transformer":
-        raise NotImplementedError
-        # model = SE3TransformerTargetModel(dataset, device)
-    else:
-        raise NotImplementedError
-    return model
+import torch
+from tqdm import tqdm
+from mlelec.metrics import loss_fn_combined
 
 
-if __name__ == "__main__":
+class Trainer:
+    def __init__(self, model, optimizer, scheduler, device):
+        """
+        Initialize the trainer class.
 
-    if args.model_type == "acdc":
-    # try to load saved features by default but
-    # check if hypers provided to generate features if not
-    # else compute default features
-        if args.feature_path is not None:
-            features = hickle.load(args.feature_path)
-        else:
-            acdc_hypers = {"cutoff":args.cutoff,
-                        "max_radial": args.nmax,
-                        "max_angular": args.lmax, 
-                        }
+        Args:
+            model: PyTorch model to train and validate.
+            optimizer: Optimizer for training.
+            loss_fn: Loss function to use.
+            device: Device to use ('cuda' or 'cpu').
+        """
+        self.model = model
+        self.optimizer = optimizer
+        self.device = device
+        self.scheduler = scheduler
 
-            features=compute_features_for_target(dataset=ml_data, hypers=acdc_hypers, device=args.device)
+    def train_step(
+        self,
+        dataloader,
+        ml_data,
+        all_mfs,
+        loss_fn,
+        ref_eva,
+        ref_dipole,
+        ref_polar,
+        var_eva,
+        var_dipole,
+        var_polar,
+        weight_eva,
+        weight_dipole,
+        weight_polar,
+        ORTHOGONAL,
+    ):
 
-    train_dl, val_dl, test_dl = get_dataloader(ml_data, model_return="tensor")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model.train()  # Set model to training mode
+        train_loss = 0
+        train_loss_eva = 0
+        train_loss_polar = 0
+        train_loss_dipole = 0
 
-    model = instantiate_model(args, ml_data, device)
-    print(model)
+        for data in dataloader:
+            self.optimizer.zero_grad()
+            idx = data["idx"]
 
-    # Trainer
-    trainer = ModelTrainer(
-        model=model.to(device),
-        dataset_split=(train_dl, val_dl, test_dl),
-        mol_name=args.mol,
-        train_batch_size=args.batch_size,
-        learning_rate=args.learning_rate,
-        max_epochs=args.max_epochs,
-        log_interval=args.eval_interval,
-        save_path=args.save_path,
-        start_from_checkpoint=args.start_from_checkpoint,
-        checkpoint=args.starting_checkpoint,
-        save_all_checkpoints=args.save_all_checkpoints,
-        device = args.device
-    )
+            # Forward pass
+            pred = self.model(
+                data["input"],
+                return_type="tensor",
+                batch_indices=[i.item() for i in idx],
+            )
+            train_polar_ref = ref_polar[[i.item() for i in idx]]
+            train_dip_ref = ref_dipole[[i.item() for i in idx]]
+            train_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
 
-    # Training
-    trainer.train()
+            loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(
+                ml_data,
+                pred,
+                ORTHOGONAL,
+                all_mfs,
+                idx,
+                loss_fn,
+                data["frames"],
+                train_eva_ref,
+                train_dip_ref,
+                train_polar_ref,
+                var_eva,
+                var_dipole,
+                var_polar,
+                weight_eva,
+                weight_dipole,
+                weight_polar,
+            )
+
+            train_loss += loss.item()
+            train_loss_eva += loss_eva.item()
+            train_loss_polar += loss_polar.item()
+            train_loss_dipole += loss_dipole.item()
+
+            # Backward pass and optimization
+            loss.backward()
+            self.optimizer.step()
+
+        avg_train_loss = train_loss / len(dataloader)
+        avg_train_loss_eva = train_loss_eva / len(dataloader)
+        avg_train_loss_polar = train_loss_polar / len(dataloader)
+        avg_train_loss_dipole = train_loss_dipole / len(dataloader)
+
+        # losses.append(avg_train_loss)
+        # losses_eva.append(avg_train_loss_eva)
+        # losses_polar.append(avg_train_loss_polar)
+        # losses_dipole.append(avg_train_loss_dipole)
+
+        lr = self.optimizer.param_groups[0]["lr"]
+
+        return {
+            "lr": lr,
+            "train_loss": avg_train_loss,
+            "train_loss_eva": avg_train_loss_eva,
+            "train_loss_polar": avg_train_loss_polar,
+            "train_loss_dipole": avg_train_loss_dipole,
+        }
+
+    def validation_step(
+        self,
+        dataloader,
+        ml_data,
+        all_mfs,
+        loss_fn,
+        ref_eva,
+        ref_dipole,
+        ref_polar,
+        var_eva,
+        var_dipole,
+        var_polar,
+        weight_eva,
+        weight_dipole,
+        weight_polar,
+        ORTHOGONAL,
+    ):
+
+        self.model.eval()  # Set model to training mode
+        val_loss = 0
+        val_loss_eva = 0
+        val_loss_polar = 0
+        val_loss_dipole = 0
+
+        for data in dataloader:
+            self.optimizer.zero_grad()
+            idx = data["idx"]
+
+            # Forward pass
+            pred = self.model(
+                data["input"],
+                return_type="tensor",
+                batch_indices=[i.item() for i in idx],
+            )
+            val_polar_ref = ref_polar[[i.item() for i in idx]]
+            val_dip_ref = ref_dipole[[i.item() for i in idx]]
+            val_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
+
+            vloss, vloss_eva, vloss_dipole, vloss_polar = loss_fn_combined(
+                ml_data,
+                pred,
+                ORTHOGONAL,
+                all_mfs,
+                idx,
+                loss_fn,
+                data["frames"],
+                val_eva_ref,
+                val_dip_ref,
+                val_polar_ref,
+                var_eva,
+                var_dipole,
+                var_polar,
+                weight_eva,
+                weight_dipole,
+                weight_polar,
+            )
+
+            val_loss += vloss.item()
+            val_loss_eva += vloss_eva.item()
+            val_loss_polar += vloss_polar.item()
+            val_loss_dipole += vloss_dipole.item()
+
+        avg_val_loss = val_loss / len(dataloader)
+        avg_val_loss_eva = val_loss_eva / len(dataloader)
+        avg_val_loss_polar = val_loss_polar / len(dataloader)
+        avg_val_loss_dipole = val_loss_dipole / len(dataloader)
+
+        # losses.append(avg_train_loss)
+        # losses_eva.append(avg_train_loss_eva)
+        # losses_polar.append(avg_train_loss_polar)
+        # losses_dipole.append(avg_train_loss_dipole)
+
+        return {
+            "val_loss": avg_val_loss,
+            "val_loss_eva": avg_val_loss_eva,
+            "val_loss_polar": avg_val_loss_polar,
+            "val_loss_dipole": avg_val_loss_dipole,
+        }
+
+    def fit(
+        self,
+        train_loader,
+        val_loader,
+        epochs,
+        patience,
+        save_path,
+        verbose,
+        dump,
+        **kwargs,
+    ):
+
+        history = []
+        best_val_loss = float("inf")
+        epochs_no_improve = 0
+
+        iterator = tqdm(range(epochs), ncols=120)
+        for epoch in iterator:
+
+            train_metrics = self.train_step(train_loader, **kwargs)
+
+            val_metrics = self.validation_step(val_loader, **kwargs)
+
+            epoch_metrics = {"epoch": epoch, **train_metrics, **val_metrics}
+
+            history.append(epoch_metrics)
+
+            if val_metrics["val_loss"] < best_val_loss:
+                best_val_loss = val_metrics["val_loss"]
+                epochs_no_improve = 0
+
+            else:
+                epochs_no_improve += 1
+                print(f"No improvement for {epochs_no_improve} epochs.")
+
+            # Early stopping
+            if epochs_no_improve >= patience:
+                print(f"Early stopping triggered after {epoch} epochs.")
+                break
+
+            if epoch % verbose == 0:
+                iterator.set_postfix(
+                    {
+                        "train_loss": train_metrics["train_loss"],
+                        "Val_loss": val_metrics["val_loss"],
+                        "lr": train_metrics["lr"],
+                    }
+                )
+
+            # Save the model every n epochs
+            if epoch % dump == 0:
+                checkpoint_path = os.path.join(save_path, f"model_epoch{epoch}.pt")
+                torch.save(self.model.state_dict(), checkpoint_path)
+                print(f"Checkpoint saved to {checkpoint_path}")
+
+        return history

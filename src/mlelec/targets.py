@@ -2,10 +2,34 @@ import warnings
 from typing import Dict, List, Optional
 
 import ase
+import metatensor
 import numpy as np
 import torch
+from metatensor import Labels
 
 import mlelec.utils.twocenter_utils as twocenter_utils
+
+
+def drop_zero_blocks(train_tensor, val_tensor, test_tensor):
+    for i1, b1 in train_tensor.items():
+        if b1.values.shape[0] == 0:
+            train_tensor = metatensor.drop_blocks(
+                train_tensor, Labels(i1.names, i1.values.reshape(1, -1))
+            )
+
+    for i2, b2 in val_tensor.items():
+        if b2.values.shape[0] == 0:
+            val_tensor = metatensor.drop_blocks(
+                val_tensor, Labels(i2.names, i2.values.reshape(1, -1))
+            )
+
+    for i3, b3 in test_tensor.items():
+        if b3.values.shape[0] == 0:
+            test_tensor = metatensor.drop_blocks(
+                test_tensor, Labels(i3.names, i3.values.reshape(1, -1))
+            )
+
+    return train_tensor, val_tensor, test_tensor
 
 
 class ModelTargets:  # generic class for different targets
@@ -17,7 +41,7 @@ class ModelTargets:  # generic class for different targets
         self.target_class = globals()[name]  # find target class from string
         # print(self.target_class)
 
-    def instantiate(self, tensor: torch.tensor, overlap: torch.Tensor,  **kwargs):
+    def instantiate(self, tensor: torch.tensor, overlap: torch.Tensor, **kwargs):
         self.target = self.target_class(
             tensor, overlap, **kwargs
         )  # instantiate target class with required arguments
@@ -56,7 +80,9 @@ class TwoCenter:
             self.tensor = [torch.from_numpy(tensor[i]) for i in range(tensor.shape[0])]
 
         if isinstance(overlap, np.ndarray):
-            self.overlap = [torch.from_numpy(overlap[i]) for i in range(overlap.shape[0])]
+            self.overlap = [
+                torch.from_numpy(overlap[i]) for i in range(overlap.shape[0])
+            ]
 
         # self.tensor = self.tensor.to(device)
         self.orbitals = orbitals
@@ -151,10 +177,12 @@ class Hamiltonian(TwoCenter):  # if there are special cases for hamiltonian
 
     def _set_blocks(self, blocks):
         from metatensor import TensorMap
+
         assert isinstance(blocks, TensorMap)
         self.blocks = blocks
         self.block_keys = blocks.keys
-        
+
+
 # class Eigenvalues:  # eigval of a second rank tensor
 #    def __init__(self, tensor: torch.tensor, overlap: Optional[torch.tensor] = None):
 #        self.tensor = tensor
