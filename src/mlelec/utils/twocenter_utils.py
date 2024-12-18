@@ -75,7 +75,7 @@ def fix_orbital_order(
                         idx += range(iorb, iorb + 2 * l + 1)
                     iorb += 2 * l + 1
                     cur = (n, l)
-        return matrix[idx][:, idx]
+        return torch.tensor(matrix)[idx][:, idx]
 
     if isinstance(frames, list):
         # assert len(matrix.shape) == 3  # (nframe, nao, nao)

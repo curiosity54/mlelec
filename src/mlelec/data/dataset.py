@@ -194,7 +194,7 @@ class MoleculeDataset(Dataset):
                 
                 if isinstance(data, np.ndarray) and data.dtype == object:
                     # If data is a numpy array with dtype object, convert each element
-                    self.target[t] = [torch.from_numpy(item).to(device=self.device) 
+                    self.target[t] = [torch.from_numpy(item.astype(np.float64)).to(device=self.device) 
                                       if isinstance(item, np.ndarray) else item.to(device=self.device) for item in data]
                 elif isinstance(data, np.ndarray):
                     # If data is a regular numpy array, convert the entire array
@@ -226,7 +226,7 @@ class MoleculeDataset(Dataset):
 
             if isinstance(data, np.ndarray) and data.dtype == object:
                 # If data is a numpy array with dtype object, convert each element
-                self.lb_target[t] = [torch.from_numpy(item).to(device=self.device) 
+                self.lb_target[t] = [torch.from_numpy(item.astype(np.float64)).to(device=self.device) 
                                      if isinstance(item, np.ndarray) else item.to(device=self.device) for item in data]
             elif isinstance(data, np.ndarray):
                 # If data is a regular numpy array, convert the entire array

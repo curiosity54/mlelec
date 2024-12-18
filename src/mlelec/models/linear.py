@@ -173,7 +173,7 @@ class LinearTargetModel(nn.Module):
                 # print(feat.values.device, self.device)
                 if k["L"] == 0 and set_bias:
                     bias = True
-                self.submodels[str(tuple(k))] = MLP(
+                self.submodels[str(tuple([int(i) for i in k]))] = MLP(
                     nin=feat.values.shape[-1],
                     nout=1,
                     nhidden=kwargs.get("nhidden", 10),
