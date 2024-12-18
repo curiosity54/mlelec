@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 
 
-def plot_losses(history):
+def plot_losses(history, save=False, savename='loss.pdf'):
     """
     Plots training and validation losses for total, eva, polar, and dipole on separate plots.
 
@@ -52,4 +52,6 @@ def plot_losses(history):
 
     # Adjust layout and display
     plt.tight_layout()
+    if save!=False:
+        plt.savefig(savename, bbox_inches="tight")
     plt.show()
