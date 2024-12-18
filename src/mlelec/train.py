@@ -55,9 +55,11 @@ class Trainer:
                 return_type="tensor",
                 batch_indices=[i.item() for i in idx],
             )
-            train_polar_ref = ref_polar[[i.item() for i in idx]]
-            train_dip_ref = ref_dipole[[i.item() for i in idx]]
             train_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
+            train_dip_ref = ref_dipole[[i.item() for i in idx]]
+            train_polar_ref = ref_polar[[i.item() for i in idx]]
+
+
 
             loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(
                 ml_data,
@@ -220,6 +222,8 @@ class Trainer:
             else:
                 epochs_no_improve += 1
                 print(f"No improvement for {epochs_no_improve} epochs.")
+
+            self.scheduler.step(train_metrics['train_loss'])
 
             # Early stopping
             if epochs_no_improve >= patience:
