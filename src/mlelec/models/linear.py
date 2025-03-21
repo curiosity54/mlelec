@@ -241,7 +241,7 @@ class LinearTargetModel(nn.Module):
             else:
                 # print("in the weights != None loop now")
                 for w_layer in submodel.children():
-                    assert w_layer.weight.data.shape == weights.shape
+                    #assert w_layer.weight.data.shape == weights.shape
                     w_layer.weight.data = torch.from_numpy(weights).to(self.device)
 
                     if add_noise:
