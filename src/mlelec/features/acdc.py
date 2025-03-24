@@ -7,8 +7,8 @@ import numpy as np
 import torch
 import tqdm
 from metatensor import Labels, TensorBlock, TensorMap
-from rascaline import SphericalExpansion
-from rascaline import SphericalExpansionByPair as PairExpansion
+from featomic import SphericalExpansion
+from featomic import SphericalExpansionByPair as PairExpansion
 
 from mlelec.features.acdc_utils import (
     _pca,
@@ -23,7 +23,7 @@ from mlelec.features.acdc_utils import (
 )
 from mlelec.utils.metatensor_utils import labels_where
 
-use_native = True  # True for rascaline
+use_native = True  # True for featomic
 
 
 def single_center_features(
@@ -31,7 +31,7 @@ def single_center_features(
 ):
     """
     computes the atom-centred features for all the frames in the dataset
-    using the `SphericalExpansion` calculator from rascaline. The spherical
+    using the `SphericalExpansion` calculator from featomic. The spherical
     expansion coefficients are calculated based on the given hyperparameters.
     Clebsch-Gordan iterations are then performed to get the desired body-order
     expansion `order_nu`, using the `cg_increment` function.
@@ -112,7 +112,7 @@ def pair_features(
     """
     computes the two-centred features for all the frames in the dataset.
     The two-centred features are computed using the `PairExpansion` calculator
-    from rascaline. One can either use the same hyperparameters as that of the
+    from featomic. One can either use the same hyperparameters as that of the
     spherical expansion or specify new hyperparameters in `hypers_pair` to
     compute the pair expansion coefficients. Like `single_centre_features`
     here too Clebsch-Gordan iterations are performed to get the desired body

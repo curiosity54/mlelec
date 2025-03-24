@@ -1,6 +1,6 @@
 import numpy as np
 from metatensor import Labels, TensorBlock, TensorMap
-from rascaline import SphericalExpansion, SphericalExpansionByPair
+from featomic import SphericalExpansion, SphericalExpansionByPair
 from itertools import product
 import re
 import torch
