@@ -5,7 +5,7 @@ import numpy as np
 import torch
 from metatensor import TensorMap
 
-from mlelec.utils.property_utils import compute_batch_polarisability
+from mlelec.utils.property_utils import compute_batch_polarisability, compute_eigvals
 
 
 def L2_loss(
@@ -68,6 +68,18 @@ def mse_total(frames, pred, target):
         norm_loss.append((torch.linalg.norm(pred[i] - target[i])) ** 2)
     return torch.mean(torch.stack(norm_loss))
 
+def loss_fn_eva(
+    ml_data,
+    pred_focks,
+    orthogonal,
+    indices,
+    ref_eva,
+    var_eigval,
+    weight_eigval=1.0,
+):
+    pred_eva = compute_eigvals(ml_data, pred_focks, indices, orthogonal)
+    loss_eigval = torch.mean((torch.cat(pred_eva) - torch.cat(ref_eva)) ** 2)
+    return weight_eigval*(loss_eigval/var_eigval)
 
 def loss_fn_combined(
     ml_data,

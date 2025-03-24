@@ -2,7 +2,7 @@ import os
 
 import torch
 from tqdm import tqdm
-from mlelec.metrics import loss_fn_combined
+from mlelec.metrics import loss_fn_combined, loss_fn_eva
 
 
 class Trainer:
@@ -28,15 +28,15 @@ class Trainer:
         all_mfs,
         loss_fn,
         ref_eva,
-        ref_dipole,
-        ref_polar,
-        var_eva,
-        var_dipole,
-        var_polar,
-        weight_eva,
-        weight_dipole,
-        weight_polar,
-        ORTHOGONAL,
+        ref_dipole = None, # optional
+        ref_polar = None, # optional
+        var_eva = None,
+        var_dipole = None,
+        var_polar = None,
+        weight_eva = 1,
+        weight_dipole = 0,
+        weight_polar =  0,
+        ORTHOGONAL = True,
     ):
 
         self.model.train()  # Set model to training mode
@@ -56,34 +56,41 @@ class Trainer:
                 batch_indices=[i.item() for i in idx],
             )
             train_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
-            train_dip_ref = ref_dipole[[i.item() for i in idx]]
-            train_polar_ref = ref_polar[[i.item() for i in idx]]
+            train_dip_ref = None if ref_dipole is None else ref_dipole[[i.item() for i in idx]]
+            train_polar_ref = None if ref_polar is None else ref_polar[[i.item() for i in idx]]
 
+            if weight_dipole == 0 and weight_polar == 0 or (train_dip_ref is None and train_polar_ref is None):
+                loss = loss_fn_eva(
+                    ml_data, pred, ORTHOGONAL, idx, train_eva_ref, var_eva, weight_eva
+                )
+                train_loss += loss.item()
+                train_loss_eva += loss.item()
+                train_loss_polar += 0
+                train_loss_dipole += 0
+            else: 
+                loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(
+                    ml_data,
+                    pred,
+                    ORTHOGONAL,
+                    all_mfs,
+                    idx,
+                    loss_fn,
+                    data["frames"],
+                    train_eva_ref,
+                    train_dip_ref,
+                    train_polar_ref,
+                    var_eva,
+                    var_dipole,
+                    var_polar,
+                    weight_eva,
+                    weight_dipole,
+                    weight_polar,
+                )
 
-
-            loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(
-                ml_data,
-                pred,
-                ORTHOGONAL,
-                all_mfs,
-                idx,
-                loss_fn,
-                data["frames"],
-                train_eva_ref,
-                train_dip_ref,
-                train_polar_ref,
-                var_eva,
-                var_dipole,
-                var_polar,
-                weight_eva,
-                weight_dipole,
-                weight_polar,
-            )
-
-            train_loss += loss.item()
-            train_loss_eva += loss_eva.item()
-            train_loss_polar += loss_polar.item()
-            train_loss_dipole += loss_dipole.item()
+                train_loss += loss.item()
+                train_loss_eva += loss_eva.item()
+                train_loss_polar += loss_polar.item()
+                train_loss_dipole += loss_dipole.item()
 
             # Backward pass and optimization
             loss.backward()
@@ -93,11 +100,6 @@ class Trainer:
         avg_train_loss_eva = train_loss_eva / len(dataloader)
         avg_train_loss_polar = train_loss_polar / len(dataloader)
         avg_train_loss_dipole = train_loss_dipole / len(dataloader)
-
-        # losses.append(avg_train_loss)
-        # losses_eva.append(avg_train_loss_eva)
-        # losses_polar.append(avg_train_loss_polar)
-        # losses_dipole.append(avg_train_loss_dipole)
 
         lr = self.optimizer.param_groups[0]["lr"]
 
@@ -116,15 +118,15 @@ class Trainer:
         all_mfs,
         loss_fn,
         ref_eva,
-        ref_dipole,
-        ref_polar,
-        var_eva,
-        var_dipole,
-        var_polar,
-        weight_eva,
-        weight_dipole,
-        weight_polar,
-        ORTHOGONAL,
+        ref_dipole = None,
+        ref_polar = None,
+        var_eva = None,
+        var_dipole = None,
+        var_polar = None,
+        weight_eva = 1,
+        weight_dipole = 0,
+        weight_polar = 0,
+        ORTHOGONAL = True,
     ):
 
         self.model.eval()  # Set model to training mode
@@ -143,33 +145,42 @@ class Trainer:
                 return_type="tensor",
                 batch_indices=[i.item() for i in idx],
             )
-            val_polar_ref = ref_polar[[i.item() for i in idx]]
-            val_dip_ref = ref_dipole[[i.item() for i in idx]]
             val_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
+            val_dip_ref = None if ref_dipole is None else ref_dipole[[i.item() for i in idx]]
+            val_polar_ref = None if ref_polar is None else ref_polar[[i.item() for i in idx]]
+            
+            if weight_dipole == 0 and weight_polar == 0 or (val_dip_ref is None and val_polar_ref is None):
+                vloss = loss_fn_eva(
+                    ml_data, pred, ORTHOGONAL, idx, val_eva_ref, var_eva, weight_eva
+                )
+                val_loss += vloss.item()
+                val_loss_eva += vloss.item()
+                val_loss_polar += 0
+                val_loss_dipole += 0
+            else:
+                vloss, vloss_eva, vloss_dipole, vloss_polar = loss_fn_combined(
+                    ml_data,
+                    pred,
+                    ORTHOGONAL,
+                    all_mfs,
+                    idx,
+                    loss_fn,
+                    data["frames"],
+                    val_eva_ref,
+                    val_dip_ref,
+                    val_polar_ref,
+                    var_eva,
+                    var_dipole,
+                    var_polar,
+                    weight_eva,
+                    weight_dipole,
+                    weight_polar,
+                )
 
-            vloss, vloss_eva, vloss_dipole, vloss_polar = loss_fn_combined(
-                ml_data,
-                pred,
-                ORTHOGONAL,
-                all_mfs,
-                idx,
-                loss_fn,
-                data["frames"],
-                val_eva_ref,
-                val_dip_ref,
-                val_polar_ref,
-                var_eva,
-                var_dipole,
-                var_polar,
-                weight_eva,
-                weight_dipole,
-                weight_polar,
-            )
-
-            val_loss += vloss.item()
-            val_loss_eva += vloss_eva.item()
-            val_loss_polar += vloss_polar.item()
-            val_loss_dipole += vloss_dipole.item()
+                val_loss += vloss.item()
+                val_loss_eva += vloss_eva.item()
+                val_loss_polar += vloss_polar.item()
+                val_loss_dipole += vloss_dipole.item()
 
         avg_val_loss = val_loss / len(dataloader)
         avg_val_loss_eva = val_loss_eva / len(dataloader)
@@ -223,7 +234,7 @@ class Trainer:
                 epochs_no_improve += 1
                 print(f"No improvement for {epochs_no_improve} epochs.")
 
-            self.scheduler.step(train_metrics['train_loss'])
+            self.scheduler.step(train_metrics["train_loss"])
 
             # Early stopping
             if epochs_no_improve >= patience:
