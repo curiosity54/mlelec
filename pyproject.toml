@@ -12,7 +12,7 @@ requires-python = ">=3.7"
 dependencies = [
     "pyscf >= 2.3.0",
     "metatensor", 
-    "featomic@git+https://github.com/metatensor/featomic.git@5879eb24524fadde52c04da626689c2e79edbbcb"
+    "featomic@git+https://github.com/metatensor/featomic.git@5879eb24524fadde52c04da626689c2e79edbbcb",
     "wigners",
     "torch",
     "scikit-learn",
