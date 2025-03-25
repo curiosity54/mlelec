@@ -49,7 +49,7 @@ def single_center_features(
     """
     calculator = SphericalExpansion(**hypers)
     rhoi = calculator.compute(frames, use_native_system=use_native)
-    rhoi = rhoi.keys_to_properties(["species_neighbor"])
+    rhoi = rhoi.keys_to_properties(["neighbor_type"])
     rho1i = acdc_standardize_keys(rhoi)
     if order_nu == 1:
         return drop_blocks_L(rho1i, lcut)
@@ -58,7 +58,7 @@ def single_center_features(
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
 
-        L = max(lcut, hypers["max_angular"])
+        L = max(lcut, hypers["basis"]["max_angular"])
         cg = ClebschGordanReal(lmax=L, device=device)
     rho_prev = rho1i
 
@@ -68,7 +68,7 @@ def single_center_features(
             rho1i,
             clebsch_gordan=cg,
             lcut=lcut,
-            other_keys_match=["species_center"],
+            other_keys_match=["center_type"],
             device=device,
         )
         rho_prev = _pca(
@@ -80,7 +80,7 @@ def single_center_features(
         rho1i,
         clebsch_gordan=cg,
         lcut=lcut,
-        other_keys_match=["species_center"],
+        other_keys_match=["center_type"],
         feature_names=kwargs.get("feature_names", None),
     )
     if pca_final:
@@ -149,7 +149,7 @@ def pair_features(
     if cg is None:
         from mlelec.utils.symmetry import ClebschGordanReal
 
-        L = max(lcut, hypers["max_angular"])
+        L = max(lcut, hypers["basis"]["max_angular"])
         cg = ClebschGordanReal(lmax=L, device=device)
         # cg = ClebschGordanReal(lmax=lcut)
     if hypers_pair is None:
@@ -199,7 +199,7 @@ def pair_features(
         blocks = []
 
         for key, block in rho0_ij.items():
-            if key["spherical_harmonics_l"] % 2 == 1:
+            if key["o3_lambda"] % 2 == 1:
                 mic_phase = -1
             else:
                 mic_phase = 1
@@ -249,7 +249,7 @@ def pair_features(
                 )
                 mic_label = Labels(
                     [
-                        "structure",
+                        "system",
                         "center",
                         "neighbor",
                         "cell_shift_a",
@@ -289,7 +289,7 @@ def pair_features(
                 if [x, y, z] != [0, 0, 0]:
                     mic_label = Labels(
                         [
-                            "structure",
+                            "system",
                             "center",
                             "neighbor",
                             "cell_shift_a",
@@ -398,7 +398,7 @@ def pair_features(
         rhonu_i,
         rho0_ij,
         clebsch_gordan=cg,
-        other_keys_match=["species_center"],
+        other_keys_match=["center_type"],
         lcut=lcut,
         feature_names=kwargs.get("feature_names", None),
     )
@@ -422,7 +422,7 @@ def pair_features(
         else:
             rhonup_j = rhonu_i.copy()
 
-        rhoj = relabel_keys(rhonup_j, "species_neighbor")
+        rhoj = relabel_keys(rhonup_j, "neighbor_type")
 
         # build rhoj x gij
         rhonu_nupij = cg_combine(
@@ -430,7 +430,7 @@ def pair_features(
             rhonu_ij,
             # rhoj,
             lcut=lcut,
-            other_keys_match=["species_neighbor"],
+            other_keys_match=["neighbor_type"],
             clebsch_gordan=cg,
             mp=True,  # for combining with neighbor
             feature_names=kwargs.get("feature_names", None),
@@ -466,7 +466,7 @@ def twocenter_hermitian_features(
             keys.append(
                 tuple(k)
                 + (
-                    k["species_center"],
+                    k["center_type"],
                     0,
                 )
             )
@@ -489,7 +489,7 @@ def twocenter_hermitian_features(
             )
 
     for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:
+        if k["center_type"] == k["neighbor_type"]:
             # off-site, same species
             idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
             if len(idx_up) == 0:
@@ -497,7 +497,7 @@ def twocenter_hermitian_features(
             idx_lo = np.where(b.samples["center"] > b.samples["neighbor"])[0]
 
             # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+            # we exploit the fact that the samples are sorted by system to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
@@ -508,8 +508,8 @@ def twocenter_hermitian_features(
                     ]
                     # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
                     if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
+                        b.samples["system"][idx_up[smp_up]]
+                        != b.samples["system"][idx_lo[smp_lo]]
                     ):
                         raise ValueError(
                             f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
@@ -543,7 +543,7 @@ def twocenter_hermitian_features(
                     values=(b.values[idx_up] - b.values[idx_lo]) / np.sqrt(2),
                 )
             )
-        elif k["species_center"] < k["species_neighbor"]:
+        elif k["center_type"] < k["neighbor_type"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
@@ -574,7 +574,7 @@ def twocenter_features_periodic_NH(
         keys.append(
             tuple(k)
             + (
-                k["species_center"],
+                k["center_type"],
                 0,
             )
         )
@@ -607,7 +607,7 @@ def twocenter_features_periodic_NH(
 
     # PAIRS SHOULD NOT CONTRIBUTE to BLOCK TYPE 0
     for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
+        if k["center_type"] == k["neighbor_type"]:  # self translared pairs
             # idx = []
             idx = np.where(
                 (b.samples["center"] == b.samples["neighbor"])
@@ -623,7 +623,7 @@ def twocenter_features_periodic_NH(
 
     for k, b in pair.items():
         positive_shifts_idx = []
-        if k["species_center"] == k["species_neighbor"]:
+        if k["center_type"] == k["neighbor_type"]:
             # off-site, same species
             idx_up = np.where(
                 (b.samples["center"] <= b.samples["neighbor"])
@@ -646,7 +646,7 @@ def twocenter_features_periodic_NH(
             # else:
             # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
             # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+            # we exploit the fact that the samples are sorted by system to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             idx_ji = []
             samplecopy = np.array(b.samples.values[:, :6])
@@ -654,12 +654,12 @@ def twocenter_features_periodic_NH(
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
 
-                structure, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
+                system, i, j, Tx, Ty, Tz, Mx, My, Mz = b.samples.values[
                     idx_up[smp_up]
                 ]
 
                 ji_entry = np.array(
-                    [structure, j, i, -Tx, -Ty, -Tz]
+                    [system, j, i, -Tx, -Ty, -Tz]
                 )  # , -Mx, -My, -Mz])
                 where_ji = np.argwhere(np.all(samplecopy == ji_entry, axis=1))
                 assert where_ji.shape == (1, 1), where_ji.shape
@@ -699,7 +699,7 @@ def twocenter_features_periodic_NH(
                 )
             )
 
-        elif k["species_center"] < k["species_neighbor"]:
+        elif k["center_type"] < k["neighbor_type"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
@@ -729,7 +729,7 @@ def twocenter_hermitian_features_periodic(
     blocks = []
 
     for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:  # self translared pairs
+        if k["center_type"] == k["neighbor_type"]:  # self translared pairs
             idx = np.where(b.samples["center"] == b.samples["neighbor"])[0]
             if len(idx) == 0:
                 continue
@@ -749,7 +749,7 @@ def twocenter_hermitian_features_periodic(
             raise NotImplementedError  # Handle periodic case for different species
 
     for k, b in pair.items():
-        if k["species_center"] == k["species_neighbor"]:
+        if k["center_type"] == k["neighbor_type"]:
             # off-site, same species
             idx_up = np.where(b.samples["center"] < b.samples["neighbor"])[0]
             if len(idx_up) == 0:
@@ -763,7 +763,7 @@ def twocenter_hermitian_features_periodic(
             # else:
             # print(np.array(b.samples.values)[idx_up], "corresponf to", np.array(b.samples.values)[idx_lo])
             # we need to find the "ji" position that matches each "ij" sample.
-            # we exploit the fact that the samples are sorted by structure to do a "local" rearrangement
+            # we exploit the fact that the samples are sorted by system to do a "local" rearrangement
             smp_up, smp_lo = 0, 0
             for smp_up in range(len(idx_up)):
                 # ij = b.samples[idx_up[smp_up]][["center", "neighbor"]]
@@ -774,8 +774,8 @@ def twocenter_hermitian_features_periodic(
                     ]
                     # ij_lo = b.samples[idx_lo[smp_lo]][["neighbor", "center"]]
                     if (
-                        b.samples["structure"][idx_up[smp_up]]
-                        != b.samples["structure"][idx_lo[smp_lo]]
+                        b.samples["system"][idx_up[smp_up]]
+                        != b.samples["system"][idx_lo[smp_lo]]
                     ):
                         raise ValueError(
                             f"Could not find matching ji term for sample {b.samples[idx_up[smp_up]]}"
@@ -833,7 +833,7 @@ def twocenter_hermitian_features_periodic(
                         values=(b.values[idx_up] + b.values[idx_lo]) / np.sqrt(2),
                     )
                 )
-        elif k["species_center"] < k["species_neighbor"]:
+        elif k["center_type"] < k["neighbor_type"]:
             # off-site, different species
             keys.append(tuple(k) + (2,))
             blocks.append(b.copy())
@@ -864,20 +864,32 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
     # if dataset.molecule_data.pbc:
     if hypers is None:
         print("Computing features with default hypers")
-        hypers = {
-            "cutoff": 4.0,
-            "max_radial": 6,
-            "max_angular": 3,
-            "atomic_gaussian_width": 0.3,
-            "center_atom_weight": 1,
-            "radial_basis": {"Gto": {}},
-            "cutoff_function": {"ShiftedCosine": {"width": 0.1}},
+        hypers ={
+            "cutoff": {
+                "radius": 4.0,
+                "smoothing": {
+                    "type": "ShiftedCosine",
+                    "width": 0.1
+                }
+            },
+            "density": {
+                "type": "Gaussian",
+                "width": 0.3
+            },
+            "basis": {
+                "type": "TensorProduct",
+                "max_angular": 6,
+                "radial": {
+                    "type": "Gto",
+                    "max_radial": 5
+                }
+            }
         }
     single = single_center_features(
         dataset.structures,
         hypers,
         order_nu=kwargs.get("order_nu", 2),
-        lcut=hypers["max_angular"],
+        lcut=hypers["basis"]["max_angular"],
         device=device,
         npca = kwargs.get("npca", 50)
     )
@@ -894,7 +906,7 @@ def compute_features_for_target(dataset: MLDataset, device=None, **kwargs):
             rhonu_i=None,
             npca = kwargs.get("npca", 50),
             order_nu=kwargs.get("order_nu_pair", 1),
-            lcut=hypers_pair["max_angular"],
+            lcut=hypers_pair["basis"]["max_angular"],
             feature_names=single[0].properties.names,
             device=device,
             both_centers=kwargs.get("both_centers", False),

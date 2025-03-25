@@ -234,7 +234,7 @@ def _matrix_to_blocks(
 
     block_builder = TensorBuilder(
         ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j"],
-        ["structure", "center", "neighbor"],
+        ["system", "center", "neighbor"],
         [["m1"], ["m2"]],
         ["value"],
     )
@@ -423,7 +423,7 @@ def _blocks_to_matrix(
         same_koff = ki_offset == kj_offset
         # loops over samples (structure, i, j)
         for sample, block_data in zip(block.samples, block.values):
-            A = sample["structure"]
+            A = sample["system"]
             i = sample["center"]
             j = sample["neighbor"]            
             
@@ -540,7 +540,7 @@ def _to_coupled_basis(
     if not translations:
         block_builder = TensorBuilder(
             ["block_type", "species_i", "n_i", "l_i", "species_j", "n_j", "l_j", "L"],
-            ["structure", "center", "neighbor"],
+            ["system", "center", "neighbor"],
             [["M"]],
             ["value"],
         )
@@ -559,7 +559,7 @@ def _to_coupled_basis(
                 "cell_shift_c",
                 "L",
             ],
-            ["structure", "center", "neighbor"],
+            ["system", "center", "neighbor"],
             [["M"]],
             ["value"],
         )
@@ -692,8 +692,8 @@ from .metatensor_utils import labels_where
 def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False):
     try:
         block_type = key["block_type"]
-        species_center = key["species_i"]
-        species_neighbor = key["species_j"]
+        center_type = key["species_i"]
+        neighbor_type = key["species_j"]
         L = key["L"]
         li = key["l_i"]
         lj = key["l_j"]
@@ -702,7 +702,7 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
     except Exception as e:
         print(e)
         # block_type, ai, ni, li, aj, nj, lj = key
-    inversion_sigma = (-1) ** (li + lj + L)
+    o3_sigma = (-1) ** (li + lj + L)
     if cell_shift is None:
         if return_key:
             return labels_where(
@@ -710,28 +710,28 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
                 Labels(
                     [
                         "block_type",
-                        "spherical_harmonics_l",
-                        "inversion_sigma",
-                        "species_center",
-                        "species_neighbor",
+                        "o3_lambda",
+                        "o3_sigma",
+                        "center_type",
+                        "neighbor_type",
                     ],
                     values=np.asarray(
                         [
                             block_type,
                             L,
-                            inversion_sigma,
-                            species_center,
-                            species_neighbor,
+                            o3_sigma,
+                            center_type,
+                            neighbor_type,
                         ]
                     ).reshape(1, -1),
                 ),
             )
         block = features.block(
             block_type=block_type,
-            spherical_harmonics_l=L,
-            inversion_sigma=inversion_sigma,
-            species_center=species_center,
-            species_neighbor=species_neighbor,
+            o3_lambda=L,
+            o3_sigma=o3_sigma,
+            center_type=center_type,
+            neighbor_type=neighbor_type,
         )
         return block
     else:
@@ -744,10 +744,10 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
                 Labels(
                     [
                         "block_type",
-                        "spherical_harmonics_l",
-                        "inversion_sigma",
-                        "species_center",
-                        "species_neighbor",
+                        "o3_lambda",
+                        "o3_sigma",
+                        "center_type",
+                        "neighbor_type",
                         "cell_shift_a",
                         "cell_shift_b",
                         "cell_shift_c",
@@ -756,9 +756,9 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
                         [
                             block_type,
                             L,
-                            inversion_sigma,
-                            species_center,
-                            species_neighbor,
+                            o3_sigma,
+                            center_type,
+                            neighbor_type,
                             cell_shift_a,
                             cell_shift_b,
                             cell_shift_c,
@@ -768,10 +768,10 @@ def map_targetkeys_to_featkeys(features, key, cell_shift=None, return_key=False)
             )
         block = features.block(
             block_type=block_type,
-            spherical_harmonics_l=L,
-            inversion_sigma=inversion_sigma,
-            species_center=species_center,
-            species_neighbor=species_neighbor,
+            o3_lambda=L,
+            o3_sigma=o3_sigma,
+            center_type=center_type,
+            neighbor_type=neighbor_type,
             cell_shift_a=cell_shift_a,
             cell_shift_b=cell_shift_b,
             cell_shift_c=cell_shift_c,

@@ -419,8 +419,8 @@ class MLDataset(Dataset):
         return operations.slice(
             y,
             axis="samples",
-            labels=Labels(
-                names=["structure"], values=np.asarray(indices).reshape(-1, 1)
+            selection=Labels(
+                names=["system"], values=np.asarray(indices).reshape(-1, 1)
             ),
         )
 
@@ -535,16 +535,16 @@ class MLDataset(Dataset):
             x = operations.slice(
                 self.features,
                 axis="samples",
-                labels=Labels(
-                    names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                selection=Labels(
+                    names=["system"], values=np.asarray([idx]).reshape(-1, 1)
                 ),
             )
             if self.model_return == "blocks":
                 y = operations.slice(
                     self.target.blocks,
                     axis="samples",
-                    labels=Labels(
-                        names=["structure"], values=np.asarray([idx]).reshape(-1, 1)
+                    selection=Labels(
+                        names=["system"], values=np.asarray([idx]).reshape(-1, 1)
                     ),
                 )
             else:
