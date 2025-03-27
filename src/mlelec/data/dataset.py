@@ -409,6 +409,23 @@ class MLDataset(Dataset):
         self.structures = self.molecule_data.structures
         self.target = self.molecule_data.target
 
+        self.var = {}
+        for property in self.molecule_data.target:
+            if property != "fock":
+                values = self.molecule_data.target[property]
+                self.var[property] = torch.cat(
+                    [values[i].flatten() for i in range(len(values))]
+                ).var()
+
+        if self.molecule_data.lb_target is not None:
+            self.lb_var = {}
+            for property in self.molecule_data.lb_target:
+                if property != "fock":
+                    values = self.molecule_data.lb_target[property]
+                    self.lb_var[property] = torch.cat(
+                        [values[i].flatten() for i in range(len(values))]
+                    ).var()
+
         self.target_class = ModelTargets(self.molecule_data.target_names[0])
         self.target = self.target_class.instantiate(
             tensor=next(iter(self.molecule_data.target.values())),
@@ -560,6 +577,7 @@ class MLDataset(Dataset):
     def __getitem__(self, idx):
         if torch.is_tensor(idx):
             idx = idx.tolist()
+        idx = [i.item() for i in idx]
         frames = [self.structures[i] for i in idx]
         if not self.model_type == "acdc":
             return self.structures[idx], self.target.tensor[idx]
@@ -583,20 +601,23 @@ class MLDataset(Dataset):
                     ),
                 )
             else:
-                idx = [i.item() for i in idx]
                 y = [self.target.tensor[i] for i in idx]
 
             indirect_targets = {}
-            for property in self.molecule_data.target:
+            ind_target = (
+                self.molecule_data.target
+                if self.molecule_data.lb_target is None
+                else self.molecule_data.lb_target
+            )
+            for property in ind_target:
                 if property != "fock":
-                    if type(self.molecule_data.target[property]) == torch.Tensor:
-                        indirect_targets[property] = self.molecule_data.target[
-                            property
-                        ][idx]
-                    elif type(self.molecule_data.target[property]) == list:
+                    if type(ind_target[property]) == torch.Tensor:
+                        indirect_targets[property] = ind_target[property][idx]
+                    elif type(ind_target[property]) == list:
                         indirect_targets[property] = [
-                            self.molecule_data.target[property][i] for i in idx
+                            ind_target[property][i] for i in idx
                         ]
+
             if len(indirect_targets.keys()) != 0:
                 return x, y, idx, frames, indirect_targets
             else:
@@ -609,7 +630,13 @@ class MLDataset(Dataset):
         frames = batch[0][3]
         if len(batch[0]) > 4:
             indirect_targets = batch[0][4]
-            return {"input": x, "output": y, "idx": idx, "frames": frames, "indirect_targets": indirect_targets}
+            return {
+                "input": x,
+                "output": y,
+                "idx": idx,
+                "frames": frames,
+                "indirect_targets": indirect_targets,
+            }
         else:
             return {"input": x, "output": y, "idx": idx, "frames": frames}
 

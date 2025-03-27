@@ -27,16 +27,11 @@ class Trainer:
         ml_data,
         all_mfs,
         loss_fn,
-        ref_eva,
-        ref_dipole = None, # optional
-        ref_polar = None, # optional
-        var_eva = None,
-        var_dipole = None,
-        var_polar = None,
-        weight_eva = 1,
-        weight_dipole = 0,
-        weight_polar =  0,
-        ORTHOGONAL = True,
+        weight_eva=1,
+        weight_dipole=0,
+        weight_polar=0,
+        ORTHOGONAL=True,
+        upscale=True,
     ):
 
         self.model.train()  # Set model to training mode
@@ -53,13 +48,38 @@ class Trainer:
             pred = self.model(
                 data["input"],
                 return_type="tensor",
-                batch_indices=[i.item() for i in idx],
+                batch_indices=idx,
             )
-            train_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
-            train_dip_ref = None if ref_dipole is None else ref_dipole[[i.item() for i in idx]]
-            train_polar_ref = None if ref_polar is None else ref_polar[[i.item() for i in idx]]
+            train_eva_ref = [
+                data['indirect_targets']["eigenvalues"][i][: pred[i].shape[0]]
+                for i in range(len(pred))
+            ]
+            train_dip_ref = (
+                None if weight_dipole == 0 else data['indirect_targets']["dipole_moment"]
+            )
+            train_polar_ref = (
+                None if weight_polar == 0 else data['indirect_targets']["polarisability"]
+            )
 
-            if weight_dipole == 0 and weight_polar == 0 or (train_dip_ref is None and train_polar_ref is None):
+            var_eva = (
+                ml_data.lb_var["eigenvalues"] if upscale else ml_data.var["eigenvalues"]
+            )
+            var_dipole = None if weight_dipole == 0 else (
+                ml_data.lb_var["dipole_moment"]
+                if upscale
+                else ml_data.var["dipole_moment"]
+            )
+            var_polar = None if weight_dipole == 0 else (
+                ml_data.lb_var["polarisability"]
+                if upscale
+                else ml_data.var["polarisability"]
+            )
+
+            if (
+                weight_dipole == 0
+                and weight_polar == 0
+                or (train_dip_ref is None and train_polar_ref is None)
+            ):
                 loss = loss_fn_eva(
                     ml_data, pred, ORTHOGONAL, idx, train_eva_ref, var_eva, weight_eva
                 )
@@ -67,7 +87,7 @@ class Trainer:
                 train_loss_eva += loss.item()
                 train_loss_polar += 0
                 train_loss_dipole += 0
-            else: 
+            else:
                 loss, loss_eva, loss_dipole, loss_polar = loss_fn_combined(
                     ml_data,
                     pred,
@@ -117,16 +137,11 @@ class Trainer:
         ml_data,
         all_mfs,
         loss_fn,
-        ref_eva,
-        ref_dipole = None,
-        ref_polar = None,
-        var_eva = None,
-        var_dipole = None,
-        var_polar = None,
-        weight_eva = 1,
-        weight_dipole = 0,
-        weight_polar = 0,
-        ORTHOGONAL = True,
+        weight_eva=1,
+        weight_dipole=0,
+        weight_polar=0,
+        ORTHOGONAL=True,
+        upscale=True
     ):
 
         self.model.eval()  # Set model to training mode
@@ -143,13 +158,39 @@ class Trainer:
             pred = self.model(
                 data["input"],
                 return_type="tensor",
-                batch_indices=[i.item() for i in idx],
+                batch_indices=idx,
             )
-            val_eva_ref = [ref_eva[j][: pred[i].shape[0]] for i, j in enumerate(idx)]
-            val_dip_ref = None if ref_dipole is None else ref_dipole[[i.item() for i in idx]]
-            val_polar_ref = None if ref_polar is None else ref_polar[[i.item() for i in idx]]
+            val_eva_ref = [
+                data['indirect_targets']["eigenvalues"][i][: pred[i].shape[0]]
+                for i in range(len(pred))
+            ]
+            val_dip_ref = (
+                None if weight_dipole == 0 else data['indirect_targets']["dipole_moment"]
+            )
+            val_polar_ref = (
+                None if weight_polar == 0 else data['indirect_targets']["polarisability"]
+            )
+
+            var_eva =  (
+                ml_data.lb_var["eigenvalues"] if upscale else ml_data.var["eigenvalues"]
+            )
+            var_dipole = None if weight_dipole == 0 else (
+                ml_data.lb_var["dipole_moment"]
+                if upscale
+                else ml_data.var["dipole_moment"]
+            )
+            var_polar = None if weight_dipole == 0 else (
+                ml_data.lb_var["polarisability"]
+                if upscale
+                else ml_data.var["polarisability"]
+            )
             
-            if weight_dipole == 0 and weight_polar == 0 or (val_dip_ref is None and val_polar_ref is None):
+
+            if (
+                weight_dipole == 0
+                and weight_polar == 0
+                or (val_dip_ref is None and val_polar_ref is None)
+            ):
                 vloss = loss_fn_eva(
                     ml_data, pred, ORTHOGONAL, idx, val_eva_ref, var_eva, weight_eva
                 )
