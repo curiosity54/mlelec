@@ -48,7 +48,7 @@ def compute_eigvals(ml_data, focks, batch_indices, orthogonal=True):
         batch_fock = unfix_orbital_order(
             focks, batch_frames, ml_data.molecule_data.aux_data["orbitals"]
         )
-        batch_overlap = ml_data.molecule_data.aux_data["overlap"][batch_indices]
+        batch_overlap = np.array([ml_data.molecule_data.aux_data["overlap"][i] for i in batch_indices]) 
         ortho_focks = [_lowdin_orthogonalize(f, torch.from_numpy(o))
                        for f, o in zip(batch_fock, batch_overlap)]
         for i in range(len(ortho_focks)):
