@@ -4,11 +4,11 @@ scipy
 jupyter
 ase==3.22.1
 seekpath
-metatensor
-metatensor-core
-metatensor-learn
-metatensor-operations
-metatensor-torch
+metatensor==0.2.0
+metatensor-core==0.1.11
+metatensor-learn==0.3.0
+metatensor-operations==0.3.0
+metatensor-torch==0.7.0
 --extra-index-url https://download.pytorch.org/whl/cpu 
 git+https://github.com/luthaf/rascaline#subdirectory=python/rascaline-torch
 pyscf==2.3.0 
