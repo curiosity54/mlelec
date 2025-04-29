@@ -13,6 +13,8 @@ dependencies = [
     "pyscf >= 2.3.0",
     #"metatensor-torch", 
     "rascaline-torch @ git+https://github.com/Luthaf/rascaline.git@e72dafaa6a82e9e46e14bc14e13fa2c1ccd7668c#subdirectory=python/rascaline-torch", # Rascaline torch
+    "metatensor-learn == 0.3.0",
+    "metatensor-operations == 0.3.0",
     "wigners",
     "torch",
     "scikit-learn",
