@@ -11,7 +11,7 @@ description = "TODO"
 requires-python = ">=3.11"
 dependencies = [
     "pyscf >= 2.3.0",
-    "metatensor-torch", 
+    #"metatensor-torch", 
     "rascaline[torch] @ git+https://github.com/Luthaf/rascaline.git@e72dafaa6a82e9e46e14bc14e13fa2c1ccd7668c", # Rascaline torch
     "wigners",
     "torch",
