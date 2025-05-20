@@ -1,10 +1,11 @@
+import numpy as np
+import torch
+
 import itertools
 import warnings
 from collections import defaultdict, namedtuple
 from typing import Dict, List, NamedTuple, Optional, Tuple, Union
 
-import numpy as np
-import torch
 import metatensor.torch as mts
 from metatensor.learn import IndexedDataset
 from metatensor.torch import Labels, TensorBlock, TensorMap
@@ -72,6 +73,7 @@ class MLDataset:
         aux_fock_kspace: Optional[torch.Tensor] = None,
         aux_eigval_range: Optional[Union[Tuple[int, int], str]] = None,
         aux_eigval_baseline: Optional[float] = None,
+        eigenvalues: Optional[List[torch.Tensor]] = None,
         **kwargs,
     ):
         self._qmdata = qmdata
@@ -101,6 +103,7 @@ class MLDataset:
         self.aux_fock_kspace = aux_fock_kspace
         self.aux_eigval_range = aux_eigval_range
         self.aux_eigval_baseline = aux_eigval_baseline
+        self.eigenvalues = eigenvalues
 
         self._compute_model_metadata()
 
@@ -442,10 +445,13 @@ class MLDataset:
                 items_dict[name] = self._compute_k_space_tensors(flat_name)
 
             elif flat_name == "eigenvalues":
-                if "atomresolveddensity" not in _item_names:
-                    _eval, _evec = self.compute_eigenvalues(return_eigenvectors=True)
-                    items_dict[name] = _eval
-                    items_dict["eigenvectors"] = _evec
+                if self.eigenvalues is None:
+                    if "atomresolveddensity" not in _item_names:
+                        _eval, _evec = self.compute_eigenvalues(return_eigenvectors=True)
+                        items_dict[name] = _eval
+                        items_dict["eigenvectors"] = _evec
+                else:
+                    items_dict[name] = self.eigenvalues
 
             elif flat_name == "atomresolveddensity":
                 if "eigenvalues" in _item_names:
@@ -476,11 +482,11 @@ class MLDataset:
 
             else:
                 raise ValueError(
-                    (
+                    
                         f"This looks like a bug! {flat_name} is in "
                         "MLDataset.implemented_items but it is not "
                         "properly handled in the loop."
-                    )
+                    
                 )
 
         if "eigenvalues" in items_dict and self.aux_eigval_range is not None:

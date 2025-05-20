@@ -1,20 +1,20 @@
 # equivariant_nonlinear_lightning.py
 
-from abc import ABC, abstractmethod
-from typing import Union, List
-
-import lightning as pl
 import numpy as np
 import torch
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+
+from abc import ABC, abstractmethod
+from typing import List, Union
+
+import lightning as pl
+import metatensor.torch as mts
 
 from mlelec.data.derived_properties import (
     compute_atom_resolved_density,
     compute_dipoles,
     compute_eigenvalues,
 )
-import metatensor.torch as mts
-
 from mlelec.data.mldataset import MLDataset
 from mlelec.models.equivariant_model import EquivariantModel as _EquivariantModel
 from mlelec.utils.pbc_utils import blocks_to_matrix
