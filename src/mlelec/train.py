@@ -43,7 +43,6 @@ class Trainer:
         for data in dataloader:
             self.optimizer.zero_grad()
             idx = data["idx"]
-
             # Forward pass
             pred = self.model(
                 data["input"],
@@ -51,28 +50,28 @@ class Trainer:
                 batch_indices=idx,
             )
             train_eva_ref = [
-                data['indirect_targets']["eigenvalues"][i][: pred[i].shape[0]]
+                data['indirect_targets']["eva"][i][: pred[i].shape[0]]
                 for i in range(len(pred))
             ]
             train_dip_ref = (
-                None if weight_dipole == 0 else data['indirect_targets']["dipole_moment"]
+                None if weight_dipole == 0 else data['indirect_targets']["dip"]
             )
             train_polar_ref = (
-                None if weight_polar == 0 else data['indirect_targets']["polarisability"]
+                None if weight_polar == 0 else data['indirect_targets']["pol"]
             )
 
             var_eva = (
-                ml_data.lb_var["eigenvalues"] if upscale else ml_data.var["eigenvalues"]
+                ml_data.lb_var["eva"] if upscale else ml_data.var["eva"]
             )
             var_dipole = None if weight_dipole == 0 else (
-                ml_data.lb_var["dipole_moment"]
+                ml_data.lb_var["dip"]
                 if upscale
-                else ml_data.var["dipole_moment"]
+                else ml_data.var["dip"]
             )
             var_polar = None if weight_dipole == 0 else (
-                ml_data.lb_var["polarisability"]
+                ml_data.lb_var["pol"]
                 if upscale
-                else ml_data.var["polarisability"]
+                else ml_data.var["pol"]
             )
 
             if (
@@ -161,28 +160,28 @@ class Trainer:
                 batch_indices=idx,
             )
             val_eva_ref = [
-                data['indirect_targets']["eigenvalues"][i][: pred[i].shape[0]]
+                data['indirect_targets']["eva"][i][: pred[i].shape[0]]
                 for i in range(len(pred))
             ]
             val_dip_ref = (
-                None if weight_dipole == 0 else data['indirect_targets']["dipole_moment"]
+                None if weight_dipole == 0 else data['indirect_targets']["dip"]
             )
             val_polar_ref = (
-                None if weight_polar == 0 else data['indirect_targets']["polarisability"]
+                None if weight_polar == 0 else data['indirect_targets']["pol"]
             )
 
             var_eva =  (
-                ml_data.lb_var["eigenvalues"] if upscale else ml_data.var["eigenvalues"]
+                ml_data.lb_var["eva"] if upscale else ml_data.var["eva"]
             )
             var_dipole = None if weight_dipole == 0 else (
-                ml_data.lb_var["dipole_moment"]
+                ml_data.lb_var["dip"]
                 if upscale
-                else ml_data.var["dipole_moment"]
+                else ml_data.var["dip"]
             )
             var_polar = None if weight_dipole == 0 else (
-                ml_data.lb_var["polarisability"]
+                ml_data.lb_var["pol"]
                 if upscale
-                else ml_data.var["polarisability"]
+                else ml_data.var["pol"]
             )
             
 
@@ -270,10 +269,10 @@ class Trainer:
             if val_metrics["val_loss"] < best_val_loss:
                 best_val_loss = val_metrics["val_loss"]
                 epochs_no_improve = 0
-
+                torch.save(self.model.state_dict(), os.path.join(save_path, "model_output/best_model.pt"))
             else:
                 epochs_no_improve += 1
-                print(f"No improvement for {epochs_no_improve} epochs.")
+                # print(f"No improvement for {epochs_no_improve} epochs.")
 
             self.scheduler.step(train_metrics["train_loss"])
 
@@ -293,7 +292,7 @@ class Trainer:
 
             # Save the model every n epochs
             if epoch % dump == 0:
-                checkpoint_path = os.path.join(save_path, f"model_epoch{epoch}.pt")
+                checkpoint_path = os.path.join(save_path, f"model_output/model_epoch{epoch}.pt")
                 torch.save(self.model.state_dict(), checkpoint_path)
                 print(f"Checkpoint saved to {checkpoint_path}")
 

@@ -206,6 +206,9 @@ class MoleculeDataset(Dataset):
                 elif isinstance(data, np.ndarray):
                     # If data is a regular numpy array, convert the entire array
                     self.target[t] = torch.from_numpy(data).to(device=self.device)
+                elif isinstance(data, torch.Tensor):
+                    # If data is a tensor, move it to the specified device
+                    self.target[t] = data.to(device=self.device)
                 elif isinstance(data, list):
                     # If data is a list, ensure it contains numpy arrays or tensors
                     for i, item in enumerate(data):
@@ -248,6 +251,9 @@ class MoleculeDataset(Dataset):
             elif isinstance(data, np.ndarray):
                 # If data is a regular numpy array, convert the entire array
                 self.lb_target[t] = torch.from_numpy(data).to(device=self.device)
+            elif isinstance(data, torch.Tensor):
+                # If data is a tensor, move it to the specified device
+                self.lb_target[t] = data.to(device=self.device)
             elif isinstance(data, list):
                 # If data is a list, ensure it contains numpy arrays or tensors
                 for i, item in enumerate(data):
