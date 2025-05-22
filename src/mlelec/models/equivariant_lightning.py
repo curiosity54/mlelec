@@ -336,8 +336,6 @@ class EquivariantModel(pl.LightningModule):
                     except AttributeError:
                         baseline = None
 
-                baseline = None
-
                 derived_predictions = self.compute_derived_predictions(
                     predictions,
                     batch_sample_id=batch.sample_id,
