@@ -12,7 +12,7 @@ requires-python = ">=3.11"
 dependencies = [
     "pyscf >= 2.3.0",
     #"metatensor-torch", 
-    "rascaline-torch @ git+https://github.com/Luthaf/rascaline.git@db7d57a7cd42a2f60ff2292887b2c56c356fa0b1#subdirectory=python/rascaline-torch", # Rascaline torch
+    "rascaline-torch @ git+https://github.com/Luthaf/rascaline.git@bf83f8397f177e8612535f1c06cb5177b924b647#subdirectory=python/rascaline-torch", # Rascaline torch
     "metatensor-learn == 0.3.0",
     "metatensor-operations == 0.3.0",
     "wigners",
